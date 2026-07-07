@@ -47,16 +47,17 @@
             <p>{{ job.error }}</p>
           </div>
           {% endif %}
-          {% if job.params.items %}
+          {% set job_items = job.params.get("items", []) %}
+          {% if job_items %}
           <div class="section-head">
             <div>
               <p class="eyebrow">Batch</p>
               <h2>批量视频</h2>
             </div>
-            <span class="soft-badge">{{ job.params.items|length }} 个视频</span>
+            <span class="soft-badge">{{ job_items|length }} 个视频</span>
           </div>
           <div class="job-list">
-            {% for item in job.params.items %}
+            {% for item in job_items %}
             <div class="job-item">
               <span>
                 <strong>{{ item.title }}</strong>
