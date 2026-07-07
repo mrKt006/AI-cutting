@@ -31,7 +31,7 @@
         <div>
           <p class="eyebrow">Job {{ job.id }}</p>
           <h1>{{ job.params.title }}</h1>
-          <p class="hero-copy">??????????????????? ZIP????????????????????????</p>
+          <p class="hero-copy">任务完成后可下载成片、封面和可选导出文件；批量任务会提供 ZIP 汇总包。</p>
         </div>
         <div class="status-card">
           <span class="status {{ job.status }}">{{ stage_label }}</span>
@@ -51,9 +51,9 @@
           <div class="section-head">
             <div>
               <p class="eyebrow">Batch</p>
-              <h2>????</h2>
+              <h2>批量视频</h2>
             </div>
-            <span class="soft-badge">{{ job.params.items|length }} ???</span>
+            <span class="soft-badge">{{ job.params.items|length }} 个视频</span>
           </div>
           <div class="job-list">
             {% for item in job.params.items %}
@@ -67,7 +67,6 @@
             {% endfor %}
           </div>
           {% endif %}
-
 
           <div class="section-head">
             <div>
@@ -96,7 +95,7 @@
           {% else %}
           <div class="empty-state">
             <strong>还没有输出文件</strong>
-            <p>处理中会保持在这个页面，任务完成后这里会出现下载入口。</p>
+            <p>处理过程中保持在这个页面，任务完成后这里会出现下载入口。</p>
           </div>
           {% endif %}
 

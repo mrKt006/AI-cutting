@@ -160,7 +160,7 @@ def _find_font(size: int, family: str = "", bold: bool = True):
 
 
 def _wrap_title(title: str, font, draw, max_width: int) -> list[str]:
-    text = title.strip() or "?????"
+    text = title.strip() or "未命名视频"
     tokens = re.findall(r"[A-Za-z0-9_-]+|\s+|.", text)
     lines: list[str] = []
     current = ""
