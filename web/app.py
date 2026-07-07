@@ -324,6 +324,7 @@ async def api_render_preview(request: Request) -> JSONResponse:
 async def create_job(
     video: list[UploadFile] = File(...),
     title: str = Form(""),
+    item_titles: list[str] = Form([]),
     preset: str = Form("standard"),
     style_preset_id: str = Form("default-white"),
     export_subtitles: str | None = Form(None),
@@ -353,6 +354,7 @@ async def create_job(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     base_title = title.strip()
+    per_item_titles = [item.strip() for item in item_titles]
     today = datetime.now().strftime("%Y%m%d")
     items = []
     for index, upload in enumerate(videos, start=1):
@@ -361,8 +363,9 @@ async def create_job(
         item_output_dir = output_dir / item_id
         item_input_dir.mkdir(parents=True, exist_ok=True)
         item_output_dir.mkdir(parents=True, exist_ok=True)
-        video_title = base_title or Path(upload.filename or f"video-{index}").stem
-        if base_title and len(videos) > 1:
+        item_title = per_item_titles[index - 1] if index - 1 < len(per_item_titles) else ""
+        video_title = item_title or base_title or Path(upload.filename or f"video-{index}").stem
+        if not item_title and base_title and len(videos) > 1:
             video_title = f"{base_title}-{index:02d}"
         output_basename = _safe_output_basename(f"{video_title}-{today}")
         video_path = item_input_dir / _safe_video_name(upload.filename or f"video-{index}.mp4", index=index)

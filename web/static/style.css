@@ -477,6 +477,42 @@ legend {
   line-height: 1.55;
 }
 
+.per-video-titles {
+  background: #fbfefd;
+}
+
+.title-list {
+  display: grid;
+  gap: 10px;
+}
+
+.title-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.75fr) minmax(0, 1.25fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  background: var(--color-surface-soft);
+  border: 1px solid #d8ebe8;
+  border-radius: var(--radius-sm);
+}
+
+.title-row-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.title-row-meta strong {
+  color: #244a46;
+}
+
+.title-row-meta small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .credential-box {
   background: linear-gradient(180deg, #fbfefd, #f3fbf9);
 }
@@ -1394,6 +1430,7 @@ legend {
   .choice-grid.three,
   .choice-grid.two,
   .preset-grid,
+  .title-row,
   .credential-grid,
   .advanced-grid {
     grid-template-columns: 1fr;

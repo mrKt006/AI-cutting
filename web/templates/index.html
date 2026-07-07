@@ -17,7 +17,7 @@
         </span>
         <span>
           <strong>AI-cutting</strong>
-          <small>口播视频自动剪辑台</small>
+          <small>口播视频自动剪辑</small>
         </span>
       </a>
 
@@ -66,10 +66,16 @@
               <span class="file-name" aria-live="polite">未选择文件</span>
             </label>
 
-            <label class="field">
+            <label class="field" id="single-title-field">
               <span>封面标题</span>
               <input type="text" name="title" placeholder="例如：普通人怎么学会用 AI 工具" autocomplete="off">
             </label>
+
+            <fieldset class="per-video-titles" id="per-video-titles" hidden>
+              <legend>每条视频的封面标题</legend>
+              <p class="field-hint">检测到多个视频时，可以分别填写封面标题。留空的视频会使用上面的标题加序号，或使用文件名。</p>
+              <div class="title-list" id="title-list"></div>
+            </fieldset>
 
             <fieldset>
               <legend>剪辑强度</legend>
@@ -95,22 +101,20 @@
               </select>
             </label>
 
-
-
             <fieldset>
-              <legend>&#39069;&#22806;&#23548;&#20986;</legend>
+              <legend>额外导出</legend>
               <div class="choice-grid">
                 <label class="check">
                   <input type="checkbox" name="export_subtitles" value="1">
-                  <span>&#23383;&#24149;&#25991;&#20214;&#65288;ASS / SRT&#65289;</span>
+                  <span>字幕文件（ASS / SRT）</span>
                 </label>
                 <label class="check">
                   <input type="checkbox" name="export_asr_json" value="1">
-                  <span>&#28779;&#23665;&#35782;&#21035;&#20998;&#21477; JSON</span>
+                  <span>火山识别分句 JSON</span>
                 </label>
                 <label class="check">
                   <input type="checkbox" name="export_report" value="1">
-                  <span>&#21098;&#36753;&#25253;&#21578; JSON</span>
+                  <span>剪辑报告 JSON</span>
                 </label>
               </div>
             </fieldset>
@@ -130,7 +134,7 @@
               </div>
             </div>
             <ol class="guide-list">
-              <li><strong>优先用火山引擎</strong><span>字幕时间轴会比 tiny 更稳定。</span></li>
+              <li><strong>优先用火山引擎</strong><span>字幕时间轴会比本地 tiny 更稳定。</span></li>
               <li><strong>先选标准强度</strong><span>如果气口多，再切到紧凑或激进。</span></li>
               <li><strong>先调样式预设</strong><span>常用字幕样式可以保存后反复套用。</span></li>
             </ol>
@@ -172,13 +176,56 @@
     const dropBox = document.querySelector(".upload-box");
     const fileInput = document.querySelector(".drop-input");
     const fileName = document.querySelector(".file-name");
+    const perVideoTitles = document.querySelector("#per-video-titles");
+    const titleList = document.querySelector("#title-list");
+
+    function fileStem(name) {
+      return (name || "")
+        .replace(/\.[^.]+$/, "")
+        .replace(/[_-]+/g, " ")
+        .trim();
+    }
 
     function showFileName(files) {
       if (!fileName || !files || !files.length) return;
       fileName.textContent = files.length === 1 ? files[0].name : `已选择 ${files.length} 个视频`;
     }
 
-    fileInput?.addEventListener("change", () => showFileName(fileInput.files));
+    function renderPerVideoTitles(files) {
+      if (!perVideoTitles || !titleList) return;
+      titleList.replaceChildren();
+      if (!files || files.length <= 1) {
+        perVideoTitles.hidden = true;
+        return;
+      }
+
+      Array.from(files).forEach((file, index) => {
+        const row = document.createElement("label");
+        row.className = "title-row";
+
+        const meta = document.createElement("span");
+        meta.className = "title-row-meta";
+        meta.innerHTML = `<strong>视频 ${index + 1}</strong><small></small>`;
+        meta.querySelector("small").textContent = file.name;
+
+        const input = document.createElement("input");
+        input.type = "text";
+        input.name = "item_titles";
+        input.placeholder = `默认：${fileStem(file.name) || `视频 ${index + 1}`}`;
+        input.autocomplete = "off";
+
+        row.append(meta, input);
+        titleList.append(row);
+      });
+      perVideoTitles.hidden = false;
+    }
+
+    function syncFiles(files) {
+      showFileName(files);
+      renderPerVideoTitles(files);
+    }
+
+    fileInput?.addEventListener("change", () => syncFiles(fileInput.files));
 
     ["dragenter", "dragover"].forEach((eventName) => {
       dropBox?.addEventListener(eventName, (event) => {
@@ -202,7 +249,7 @@
         if (file.type.startsWith("video/")) transfer.items.add(file);
       });
       fileInput.files = transfer.files;
-      showFileName(fileInput.files);
+      syncFiles(fileInput.files);
     });
 
     form?.addEventListener("submit", () => {
