@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>样式预设 - AI-cutting</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="返回 AI-cutting 首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M4 7.5h7.5M4 16.5h7.5M15.5 4l4 8-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span><strong>AI-cutting</strong><small>样式预设</small></span>
+      </a>
+      <div class="env">
+        <a class="top-link" href="/">首页</a>
+        <a class="top-link" href="/settings">设置</a>
+      </div>
+    </header>
+
+    <main class="workspace style-workspace">
+      <div class="style-layout">
+        <aside class="panel style-list">
+          <div class="section-head">
+            <div><p class="eyebrow">Presets</p><h2>预设列表</h2></div>
+          </div>
+          <div class="job-list">
+            {% for preset in presets %}
+            <a class="job-item {{ 'selected' if preset.id == selected.id else '' }}" href="/style-presets?preset={{ preset.id }}{% if preview %}&preview={{ preview }}{% endif %}&active={{ active_style }}&text={{ preview_text | urlencode }}&aspect={{ preview_aspect | urlencode }}">
+              <span><strong>{{ preset.name }}</strong><small>{{ preset.subtitle.font_family }} / {{ preset.subtitle.font_size }}px</small></span>
+            </a>
+            {% endfor %}
+          </div>
+          <form action="/style-presets" method="post" class="inline-actions">
+            <input type="hidden" name="action" value="create">
+            <input type="hidden" name="preview_path" value="{{ preview }}">
+            <input type="hidden" name="active_text_style" value="{{ active_style }}">
+            <input type="hidden" name="preview_text" value="{{ preview_text }}">
+            <input type="hidden" name="preview_aspect" value="{{ preview_aspect }}">
+            <button class="primary-button" type="submit">&#26032;&#24314;&#39044;&#35774;</button>
+          </form>
+          <form action="/style-presets" method="post" class="inline-actions">
+            <input type="hidden" name="action" value="duplicate">
+            <input type="hidden" name="preset_id" value="{{ selected.id }}">
+            <input type="hidden" name="preview_path" value="{{ preview }}">
+            <input type="hidden" name="active_text_style" value="{{ active_style }}">
+            <input type="hidden" name="preview_text" value="{{ preview_text }}">
+            <input type="hidden" name="preview_aspect" value="{{ preview_aspect }}">
+            <button class="secondary-button" type="submit">&#22797;&#21046;&#24403;&#21069;&#39044;&#35774;</button>
+          </form>
+        </aside>
+
+        <section class="panel task-panel style-editor-panel">
+          {% if saved %}
+          <div class="success-banner"><strong>样式已保存</strong><p>新任务会使用更新后的预设。</p></div>
+          {% endif %}
+
+          <form action="/style-presets" method="post" class="job-form" id="style-form">
+            <input type="hidden" name="preview_path" value="{{ preview }}">
+            <input type="hidden" name="active_text_style" id="active-text-style" value="{{ active_style }}">
+            <input type="hidden" name="preview_text" id="preview-text-hidden" value="{{ preview_text }}">
+            <input type="hidden" name="preview_aspect" id="preview-aspect-hidden" value="{{ preview_aspect }}">
+            <input type="hidden" name="subtitle_style_json" id="subtitle-style-json">
+            <input type="hidden" name="cover_style_json" id="cover-style-json">
+            <div class="style-form-scroll">
+            <label class="field"><span>预设 ID</span><input type="text" name="preset_id" value="{{ selected.id }}" autocomplete="off"></label>
+            <label class="field"><span>预设名称</span><input type="text" name="name" value="{{ selected.name }}" autocomplete="off"></label>
+            <div class="style-mode-tabs" role="group" aria-label="文本样式类型">
+              <button class="style-mode-button is-active" type="button" data-style-mode="subtitle">字幕设置</button>
+              <button class="style-mode-button" type="button" data-style-mode="cover">封面设置</button>
+            </div>
+
+            <details class="capcut-section" open>
+              <summary>基础</summary>
+              <div class="capcut-row">
+                <label>字体</label>
+                <select name="font_family">
+                  {% for font in ["Microsoft YaHei", "SimHei", "SimSun", "Arial"] %}
+                  <option value="{{ font }}" {{ 'selected' if selected.subtitle.font_family == font else '' }}>{{ font }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="capcut-row">
+                <label>字号</label>
+                <input type="range" name="font_size" min="36" max="110" value="{{ selected.subtitle.font_size }}">
+                <input type="number" name="font_size" value="{{ selected.subtitle.font_size }}">
+              </div>
+              <div class="capcut-row">
+                <label>样式</label>
+                <div class="icon-toggle-row">
+                  <label><input type="checkbox" name="bold" value="1" {{ 'checked' if selected.subtitle.bold else '' }}><span>B</span></label>
+                  <label><input type="checkbox" name="underline" value="1" {{ 'checked' if selected.subtitle.underline else '' }}><span>U</span></label>
+                  <label><input type="checkbox" name="italic" value="1" {{ 'checked' if selected.subtitle.italic else '' }}><span>I</span></label>
+                </div>
+              </div>
+              <div class="capcut-row">
+                <label>颜色</label>
+                <input type="color" name="primary_color" value="{{ selected.subtitle.primary_color }}">
+              </div>
+              <div class="capcut-row two">
+                <label>字间距</label><input type="number" name="letter_spacing" value="{{ selected.subtitle.letter_spacing }}">
+                <label>行间距</label><input type="number" name="line_spacing" value="{{ selected.subtitle.line_spacing }}">
+              </div>
+              <div class="capcut-row">
+                <label>对齐方式</label>
+                <div class="segmented">
+                  {% for item, label in [("left","左"),("center","中"),("right","右")] %}
+                  <label><input type="radio" name="text_align" value="{{ item }}" {{ 'checked' if selected.subtitle.text_align == item else '' }}><span>{{ label }}</span></label>
+                  {% endfor %}
+                </div>
+              </div>
+            </details>
+
+            <details class="capcut-section" open>
+              <summary>位置大小</summary>
+              <div class="capcut-row">
+                <label>缩放</label>
+                <input type="range" name="scale" min="20" max="200" value="{{ selected.subtitle.scale }}">
+                <input type="number" name="scale" value="{{ selected.subtitle.scale }}">
+              </div>
+              <label class="capcut-switch"><span>等比缩放</span><input type="checkbox" name="uniform_scale" value="1" {{ 'checked' if selected.subtitle.uniform_scale else '' }}></label>
+              <div class="capcut-row two">
+                <label>Scale X</label><input type="number" name="scale_x" value="{{ selected.subtitle.scale_x }}">
+                <label>Scale Y</label><input type="number" name="scale_y" value="{{ selected.subtitle.scale_y }}">
+              </div>
+              <div class="capcut-row two">
+                <label>X</label><input type="number" name="position_x" value="{{ selected.subtitle.position_x }}">
+                <label>Y</label><input type="number" name="position_y" value="{{ selected.subtitle.position_y }}">
+              </div>
+              <div class="capcut-row">
+                <label>平面旋转</label>
+                <input type="number" name="rotation" step="0.1" value="{{ selected.subtitle.rotation }}">
+              </div>
+            </details>
+
+            <details class="capcut-section" open>
+              <summary>混合</summary>
+              <div class="capcut-row">
+                <label>不透明度</label>
+                <input type="range" name="opacity" min="0" max="100" value="{{ selected.subtitle.opacity }}">
+                <input type="number" name="opacity" value="{{ selected.subtitle.opacity }}">
+              </div>
+            </details>
+
+            <details class="capcut-section" open>
+              <summary><label><input type="checkbox" name="outline_enabled" value="1" {{ 'checked' if selected.subtitle.outline_enabled else '' }}> 描边</label></summary>
+              <div class="capcut-row"><label>描边颜色</label><input type="color" name="outline_color" value="{{ selected.subtitle.outline_color }}"></div>
+              <div class="capcut-row"><label>描边宽度</label><input type="range" name="outline_width" min="0" max="12" value="{{ selected.subtitle.outline_width }}"><input type="number" name="outline_width" value="{{ selected.subtitle.outline_width }}"></div>
+            </details>
+
+            <details class="capcut-section">
+              <summary><label><input type="checkbox" name="background_enabled" value="1" {{ 'checked' if selected.subtitle.background_enabled else '' }}> 背景</label></summary>
+              <div class="capcut-row"><label>背景颜色</label><input type="color" name="background_color" value="{{ selected.subtitle.background_color }}"></div>
+              <div class="capcut-row"><label>背景不透明度</label><input type="range" name="background_opacity" min="0" max="100" value="{{ selected.subtitle.background_opacity }}"><input type="number" name="background_opacity" value="{{ selected.subtitle.background_opacity }}"></div>
+              <div class="capcut-row"><label>背景内边距</label><input type="number" name="background_padding" value="{{ selected.subtitle.background_padding }}"></div>
+            </details>
+
+            <details class="capcut-section">
+              <summary><label><input type="checkbox" name="glow_enabled" value="1" {{ 'checked' if selected.subtitle.glow_enabled else '' }}> 发光</label></summary>
+              <div class="capcut-row"><label>发光颜色</label><input type="color" name="glow_color" value="{{ selected.subtitle.glow_color }}"></div>
+              <div class="capcut-row"><label>发光强度</label><input type="range" name="glow_strength" min="0" max="10" value="{{ selected.subtitle.glow_strength }}"><input type="number" name="glow_strength" value="{{ selected.subtitle.glow_strength }}"></div>
+            </details>
+
+            <details class="capcut-section">
+              <summary><label><input type="checkbox" name="shadow_enabled" value="1" {{ 'checked' if selected.subtitle.shadow_enabled else '' }}> 阴影</label></summary>
+              <div class="capcut-row"><label>阴影颜色</label><input type="color" name="shadow_color" value="{{ selected.subtitle.shadow_color }}"></div>
+              <div class="capcut-row"><label>阴影距离</label><input type="range" name="shadow_offset" min="0" max="18" value="{{ selected.subtitle.shadow_offset }}"><input type="number" name="shadow_offset" value="{{ selected.subtitle.shadow_offset }}"></div>
+            </details>
+
+            <details class="advanced">
+              <summary>动画、断句和封面标题</summary>
+              <div class="credential-grid">
+                <label class="field"><span>出现动画</span><select name="animation_in">{% for item in ["none","fade","slide_up","pop"] %}<option value="{{ item }}" {{ 'selected' if selected.subtitle.animation_in == item else '' }}>{{ item }}</option>{% endfor %}</select></label>
+                <label class="field"><span>消失动画</span><select name="animation_out">{% for item in ["none","fade","slide_up","pop"] %}<option value="{{ item }}" {{ 'selected' if selected.subtitle.animation_out == item else '' }}>{{ item }}</option>{% endfor %}</select></label>
+                <label class="field"><span>建议每行字数</span><input type="number" name="target_len" value="{{ selected.subtitle.target_len }}"></label>
+                <label class="field"><span>每行最多字数</span><input type="number" name="max_len" value="{{ selected.subtitle.max_len }}"></label>
+              </div>
+            </details>
+
+            </div>
+
+            <div class="form-actions sticky-actions">
+              <button class="primary-button" type="submit" name="action" value="save">保存预设</button>
+              <button class="danger-button" type="submit" name="action" value="delete">删除预设</button>
+            </div>
+          </form>
+        </section>
+
+        <aside class="panel preview-panel">
+          <div class="section-head"><div><p class="eyebrow">Preview</p><h2>&#39044;&#35272;</h2></div></div>
+          <form action="/style-presets/preview-frame" method="post" enctype="multipart/form-data" class="preview-upload">
+            <input type="hidden" name="preset" value="{{ selected.id }}">
+            <input type="hidden" name="active" value="{{ active_style }}">
+            <input type="hidden" name="text" value="{{ preview_text }}">
+            <input type="hidden" name="aspect" value="{{ preview_aspect }}">
+            <label class="field"><span>&#39044;&#35272;&#32972;&#26223;&#35270;&#39057;&#24103;</span><input type="file" name="video" accept="video/*" required></label>
+            <button class="secondary-button" type="submit">&#19978;&#20256;&#24182;&#25277;&#21462;&#39044;&#35272;&#24103;</button>
+          </form>
+          <div class="field">
+            <span>画幅比例</span>
+            <div class="segmented aspect-control" role="group" aria-label="画幅比例">
+              {% for item in ["9:16", "16:9", "1:1", "4:5"] %}
+              <label><input type="radio" name="preview_aspect_choice" value="{{ item }}" {{ 'checked' if preview_aspect == item else '' }}><span>{{ item }}</span></label>
+              {% endfor %}
+            </div>
+          </div>
+          <label class="field"><span>&#39044;&#35272;&#25991;&#26696;</span><input id="preview-text" type="text" value="{{ preview_text }}"></label>
+          <div class="video-preview precise-preview-surface" id="preview-surface" data-aspect="{{ preview_aspect }}">
+            {% if preview %}<img src="{{ preview }}" alt="&#35270;&#39057;&#39044;&#35272;&#24103;">{% endif %}
+            <div id="subtitle-preview" class="subtitle-preview">{{ preview_text }}</div>
+            <img id="accurate-preview" class="accurate-preview-image" alt="&#31934;&#30830;&#39044;&#35272;&#22270;">
+          </div>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const form = document.querySelector("#style-form");
+    const preview = document.querySelector("#subtitle-preview");
+    const textInput = document.querySelector("#preview-text");
+    const accurateImage = document.querySelector("#accurate-preview");
+    const previewSurface = document.querySelector("#preview-surface");
+    const activeStyleInput = document.querySelector("#active-text-style");
+    const previewTextHidden = document.querySelector("#preview-text-hidden");
+    const previewAspectHidden = document.querySelector("#preview-aspect-hidden");
+    const aspectInputs = document.querySelectorAll('input[name="preview_aspect_choice"]');
+    const subtitleStyleInput = document.querySelector("#subtitle-style-json");
+    const coverStyleInput = document.querySelector("#cover-style-json");
+    const modeButtons = document.querySelectorAll("[data-style-mode]");
+    const initialSubtitleStyle = {{ selected.subtitle | tojson }};
+    const initialCoverStyle = {{ selected.cover_title | tojson }};
+    const subtitleDefaults = {
+      font_family: "Microsoft YaHei",
+      font_size: 64,
+      bold: true,
+      italic: false,
+      underline: false,
+      primary_color: "#ffffff",
+      opacity: 100,
+      outline_enabled: true,
+      outline_color: "#000000",
+      shadow_enabled: false,
+      shadow_color: "#000000",
+      outline_width: 4,
+      shadow_offset: 0,
+      blur: 0,
+      letter_spacing: 0,
+      line_spacing: 0,
+      scale: 100,
+      uniform_scale: true,
+      scale_x: 100,
+      scale_y: 100,
+      position_x: 0,
+      position_y: 650,
+      rotation: 0,
+      text_align: "center",
+      background_enabled: false,
+      background_color: "#000000",
+      background_opacity: 52,
+      background_padding: 18,
+      glow_enabled: false,
+      glow_color: "#ffffff",
+      glow_strength: 0,
+      target_len: 12,
+      max_len: 18,
+      animation_in: "none",
+      animation_out: "none"
+    };
+    const coverDefaults = {
+      ...subtitleDefaults,
+      font_size: 76,
+      primary_color: "#fff446",
+      background_enabled: true,
+      background_opacity: 52,
+      background_padding: 26,
+      position_x: 0,
+      position_y: -520,
+      target_len: 10,
+      max_len: 16
+    };
+    const styleKeys = Object.keys(subtitleDefaults);
+    const checkboxKeys = new Set(["bold", "italic", "underline", "outline_enabled", "shadow_enabled", "uniform_scale", "background_enabled", "glow_enabled"]);
+    let activeStyleMode = {{ active_style | tojson }};
+    let previewAspect = {{ preview_aspect | tojson }};
+    const styleStates = {
+      subtitle: { ...subtitleDefaults, ...initialSubtitleStyle },
+      cover: { ...coverDefaults, ...initialCoverStyle }
+    };
+    let previewTimer = null;
+    let previewSerial = 0;
+
+    form?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
+        event.preventDefault();
+        event.target.blur();
+      }
+    });
+
+    form?.querySelectorAll('input[type="range"][name], input[type="number"][name]').forEach((input) => {
+      input.addEventListener("input", () => {
+        form.querySelectorAll(`input[name="${CSS.escape(input.name)}"]`).forEach((peer) => {
+          if (peer !== input && (peer.type === "range" || peer.type === "number")) {
+            peer.value = input.value;
+          }
+        });
+      });
+    });
+
+    function rgbaFromHex(hex, opacity) {
+      const value = String(hex || "#000000").replace("#", "");
+      const r = parseInt(value.slice(0, 2), 16);
+      const g = parseInt(value.slice(2, 4), 16);
+      const b = parseInt(value.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+    }
+
+    function firstValue(data, key, fallback) {
+      const values = data.getAll(key).filter((value) => value !== "");
+      return values.length ? values[values.length - 1] : fallback;
+    }
+
+    function readControlStyle() {
+      const data = new FormData(form);
+      const style = {};
+      styleKeys.forEach((key) => {
+        if (checkboxKeys.has(key)) {
+          style[key] = data.get(key) != null;
+        } else {
+          const fallback = activeStyleMode === "cover" ? coverDefaults[key] : subtitleDefaults[key];
+          const value = firstValue(data, key, fallback);
+          style[key] = typeof fallback === "number" ? Number(value || fallback) : value;
+        }
+      });
+      return style;
+    }
+
+    function writeControlValue(key, value) {
+      const fields = form?.querySelectorAll(`[name="${CSS.escape(key)}"]`) || [];
+      fields.forEach((field) => {
+        if (field.type === "checkbox") {
+          field.checked = Boolean(value);
+        } else if (field.type === "radio") {
+          field.checked = field.value === String(value);
+        } else {
+          field.value = value ?? "";
+        }
+      });
+    }
+
+    function applyControlStyle(style) {
+      styleKeys.forEach((key) => writeControlValue(key, style[key]));
+    }
+
+    function syncActiveStyle() {
+      if (!form) return;
+      styleStates[activeStyleMode] = { ...styleStates[activeStyleMode], ...readControlStyle() };
+    }
+
+    function syncStateInputs() {
+      syncActiveStyle();
+      if (activeStyleInput) activeStyleInput.value = activeStyleMode;
+      if (previewTextHidden) previewTextHidden.value = textInput?.value || "默认文本";
+      if (previewAspectHidden) previewAspectHidden.value = previewAspect;
+      if (subtitleStyleInput) subtitleStyleInput.value = JSON.stringify(styleStates.subtitle);
+      if (coverStyleInput) coverStyleInput.value = JSON.stringify(styleStates.cover);
+      document.querySelectorAll('input[name="active"], input[name="active_text_style"]').forEach((input) => {
+        if (input !== activeStyleInput) input.value = activeStyleMode;
+      });
+      document.querySelectorAll('input[name="text"], input[name="preview_text"]').forEach((input) => {
+        if (input !== previewTextHidden) input.value = textInput?.value || "默认文本";
+      });
+      document.querySelectorAll('input[name="aspect"], input[name="preview_aspect"]').forEach((input) => {
+        if (input !== previewAspectHidden) input.value = previewAspect;
+      });
+    }
+
+    function applyPreviewAspect() {
+      if (!previewSurface) return;
+      const ratios = {
+        "9:16": "9 / 16",
+        "16:9": "16 / 9",
+        "1:1": "1 / 1",
+        "4:5": "4 / 5"
+      };
+      previewSurface.style.aspectRatio = ratios[previewAspect] || ratios["9:16"];
+      previewSurface.dataset.aspect = previewAspect;
+    }
+
+    function setStyleMode(mode) {
+      if (!styleStates[mode] || mode === activeStyleMode) return;
+      syncActiveStyle();
+      activeStyleMode = mode;
+      applyControlStyle(styleStates[activeStyleMode]);
+      modeButtons.forEach((button) => {
+        button.classList.toggle("is-active", button.dataset.styleMode === activeStyleMode);
+      });
+      syncStateInputs();
+      updatePreview();
+      scheduleAccuratePreview();
+    }
+
+    function updatePreview() {
+      if (!form || !preview) return;
+      const data = new FormData(form);
+      const scale = Number(firstValue(data, "scale", 100)) / 100;
+      const scaleX = data.get("uniform_scale") ? scale : Number(firstValue(data, "scale_x", 100)) / 100;
+      const scaleY = data.get("uniform_scale") ? scale : Number(firstValue(data, "scale_y", 100)) / 100;
+      const x = Number(firstValue(data, "position_x", 0)) * 0.15;
+      const y = Number(firstValue(data, "position_y", 650)) * 0.15;
+      const opacity = Number(firstValue(data, "opacity", 100)) / 100;
+      preview.textContent = textInput?.value || "默认文本";
+      preview.style.fontFamily = firstValue(data, "font_family", "Microsoft YaHei");
+      preview.style.fontSize = `${Math.max(10, Number(firstValue(data, "font_size", 64)) * 0.34)}px`;
+      preview.style.fontWeight = data.get("bold") ? "800" : "500";
+      preview.style.fontStyle = data.get("italic") ? "italic" : "normal";
+      preview.style.textDecoration = data.get("underline") ? "underline" : "none";
+      preview.style.color = firstValue(data, "primary_color", "#ffffff");
+      preview.style.opacity = opacity;
+      preview.style.letterSpacing = `${Number(firstValue(data, "letter_spacing", 0)) * 0.25}px`;
+      preview.style.lineHeight = `${1.2 + Number(firstValue(data, "line_spacing", 0)) / 80}`;
+      preview.style.textAlign = firstValue(data, "text_align", "center");
+      preview.style.webkitTextStroke = data.get("outline_enabled") ? `${Math.max(0, Number(firstValue(data, "outline_width", 4)) * 0.35)}px ${firstValue(data, "outline_color", "#000000")}` : "0 transparent";
+      const shadow = data.get("shadow_enabled") ? Number(firstValue(data, "shadow_offset", 0)) : 0;
+      const glow = data.get("glow_enabled") ? Number(firstValue(data, "glow_strength", 0)) : 0;
+      const shadowCss = shadow ? `0 ${shadow}px ${Math.max(2, shadow * 2)}px ${firstValue(data, "shadow_color", "#000000")}` : "";
+      const glowCss = glow ? `0 0 ${Math.max(4, glow * 2)}px ${firstValue(data, "glow_color", "#ffffff")}` : "";
+      preview.style.textShadow = [shadowCss, glowCss].filter(Boolean).join(", ") || "none";
+      preview.style.background = data.get("background_enabled") ? rgbaFromHex(firstValue(data, "background_color", "#000000"), Number(firstValue(data, "background_opacity", 52))) : "transparent";
+      preview.style.padding = data.get("background_enabled") ? `${Math.max(4, Number(firstValue(data, "background_padding", 18)) * 0.32)}px` : "0";
+      preview.style.borderRadius = data.get("background_enabled") ? "8px" : "0";
+      preview.style.left = `calc(50% + ${x}px)`;
+      preview.style.top = `calc(50% + ${y}px)`;
+      preview.style.bottom = "auto";
+      preview.style.transform = `translate(-50%, -50%) rotate(${Number(firstValue(data, "rotation", 0))}deg) scale(${scaleX}, ${scaleY})`;
+    }
+
+    modeButtons.forEach((button) => {
+      button.addEventListener("click", () => setStyleMode(button.dataset.styleMode));
+    });
+    form?.addEventListener("submit", syncStateInputs);
+    form?.addEventListener("input", () => {
+      syncActiveStyle();
+      updatePreview();
+    });
+    textInput?.addEventListener("input", updatePreview);
+    aspectInputs.forEach((input) => {
+      input.addEventListener("change", () => {
+        if (!input.checked) return;
+        previewAspect = input.value;
+        applyPreviewAspect();
+        syncStateInputs();
+        scheduleAccuratePreview();
+      });
+    });
+    applyControlStyle(styleStates[activeStyleMode] || styleStates.subtitle);
+    modeButtons.forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.styleMode === activeStyleMode);
+    });
+    syncStateInputs();
+    applyPreviewAspect();
+    updatePreview();
+
+    function scheduleAccuratePreview() {
+      window.clearTimeout(previewTimer);
+      previewTimer = window.setTimeout(renderAccuratePreview, 650);
+    }
+
+    async function renderAccuratePreview() {
+      if (!form || !accurateImage) return;
+      syncStateInputs();
+      const data = new FormData(form);
+      data.set("preview_text", textInput?.value || "");
+      const serial = ++previewSerial;
+      try {
+        const response = await fetch("/api/style-presets/render-preview", { method: "POST", body: data });
+        if (!response.ok) throw new Error(await response.text());
+        const result = await response.json();
+        if (serial !== previewSerial) return;
+        accurateImage.src = `${result.image}?t=${Date.now()}`;
+        accurateImage.style.display = "block";
+        preview.style.display = "none";
+      } catch (error) {
+        if (serial !== previewSerial) return;
+        accurateImage.style.display = "none";
+        preview.style.display = "block";
+      }
+    }
+
+    form?.addEventListener("input", () => {
+      syncActiveStyle();
+      scheduleAccuratePreview();
+    });
+    textInput?.addEventListener("input", scheduleAccuratePreview);
+    renderAccuratePreview();
+  </script>
+</body>
+</html>

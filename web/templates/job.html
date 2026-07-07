@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>任务 {{ job.id }}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% if job.status in ["queued", "running"] %}
+  <meta http-equiv="refresh" content="5">
+  {% endif %}
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="返回 AI-cutting 首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M4 7.5h7.5M4 16.5h7.5M15.5 4l4 8-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span>
+          <strong>AI-cutting</strong>
+          <small>任务详情</small>
+        </span>
+      </a>
+      <a class="secondary-button" href="/">新建任务</a>
+    </header>
+
+    <main class="workspace">
+      <section class="hero-panel job-hero">
+        <div>
+          <p class="eyebrow">Job {{ job.id }}</p>
+          <h1>{{ job.params.title }}</h1>
+          <p class="hero-copy">??????????????????? ZIP????????????????????????</p>
+        </div>
+        <div class="status-card">
+          <span class="status {{ job.status }}">{{ stage_label }}</span>
+          <small>更新时间 {{ job.updated_at }}</small>
+        </div>
+      </section>
+
+      <div class="layout single">
+        <section class="panel">
+          {% if job.error %}
+          <div class="error-banner">
+            <strong>处理失败</strong>
+            <p>{{ job.error }}</p>
+          </div>
+          {% endif %}
+          {% if job.params.items %}
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Batch</p>
+              <h2>????</h2>
+            </div>
+            <span class="soft-badge">{{ job.params.items|length }} ???</span>
+          </div>
+          <div class="job-list">
+            {% for item in job.params.items %}
+            <div class="job-item">
+              <span>
+                <strong>{{ item.title }}</strong>
+                <small>{{ item.source_name or item.id }}</small>
+              </span>
+              <em class="{{ item.status }}">{{ item.status }}</em>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Outputs</p>
+              <h2>输出文件</h2>
+            </div>
+            {% if files %}
+            <span class="soft-badge">{{ files|length }} 个文件</span>
+            {% endif %}
+          </div>
+
+          {% if files %}
+          <div class="downloads">
+            {% for file in files %}
+            <a href="/jobs/{{ job.id }}/download/{{ file.name }}" class="download-card">
+              <span>
+                <strong>{{ file.display_name }}</strong>
+                <small>{{ file.description }} · {{ file.size }}</small>
+              </span>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </a>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="empty-state">
+            <strong>还没有输出文件</strong>
+            <p>处理中会保持在这个页面，任务完成后这里会出现下载入口。</p>
+          </div>
+          {% endif %}
+
+          <div class="section-head log-head">
+            <div>
+              <p class="eyebrow">Runtime</p>
+              <h2>处理日志</h2>
+            </div>
+          </div>
+          <div class="log" aria-live="polite">
+            {% for item in job.log %}
+            <p><time>{{ item.time }}</time>{{ item.message }}</p>
+            {% endfor %}
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

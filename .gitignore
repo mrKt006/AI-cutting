@@ -1,0 +1,46 @@
+# Local secrets and user settings
+.env
+.env.*
+web/settings.local.json
+web/external_asr.json
+
+# Runtime data
+jobs/
+input/
+output/
+models/
+web/static/style_previews/
+
+# Uploaded/generated media
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+*.wav
+*.mp3
+*.m4a
+*.aac
+*.zip
+
+# Python/cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

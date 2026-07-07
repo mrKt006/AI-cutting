@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI-cutting</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="AI-cutting 首页">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M4 7.5h7.5M4 16.5h7.5M15.5 4l4 8-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span>
+          <strong>AI-cutting</strong>
+          <small>口播视频自动剪辑台</small>
+        </span>
+      </a>
+
+      <div class="env" aria-label="运行环境状态">
+        <span class="env-pill {{ 'ok' if env.volc_ready else 'warn' }}">
+          <span class="dot"></span>火山 {{ '已配置' if env.volc_ready else '未配置' }}
+        </span>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="hero-panel">
+        <div>
+          <p class="eyebrow">MVP 工作流</p>
+          <h1>上传原片，自动剪气口、生成字幕和封面。</h1>
+          <p class="hero-copy">当前版本适合竖屏口播视频：先完成可用流程，再逐步加入更智能的卡壳识别和人工复核。</p>
+        </div>
+        <div class="steps" aria-label="处理流程">
+          <span>上传</span>
+          <span>剪辑</span>
+          <span>识别字幕</span>
+          <span>导出</span>
+        </div>
+      </section>
+
+      <div class="layout">
+        <section class="panel task-panel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">New Task</p>
+              <h2>新建任务</h2>
+            </div>
+            <span class="soft-badge">本地处理</span>
+          </div>
+
+          <form action="/jobs" method="post" enctype="multipart/form-data" class="job-form" id="job-form">
+            <label class="upload-box">
+              <span class="upload-icon" aria-hidden="true">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 15V4m0 0 4 4m-4-4-4 4M4 15.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <strong>拖拽视频到这里</strong>
+              <small>也可以点击选择文件。支持 mp4、mov、mkv、avi，建议先用一条短视频试跑。</small>
+              <input class="drop-input" type="file" name="video" accept="video/*" multiple required>
+              <span class="file-name" aria-live="polite">未选择文件</span>
+            </label>
+
+            <label class="field">
+              <span>封面标题</span>
+              <input type="text" name="title" placeholder="例如：普通人怎么学会用 AI 工具" autocomplete="off">
+            </label>
+
+            <fieldset>
+              <legend>剪辑强度</legend>
+              <div class="preset-grid">
+                {% for key, preset in presets.items() %}
+                <label class="preset">
+                  <input type="radio" name="preset" value="{{ key }}" {{ 'checked' if key == 'standard' else '' }}>
+                  <span>
+                    <strong>{{ preset.label }}</strong>
+                    <small>{{ preset.noise }} · 停顿 {{ preset.min_silence }}s · 留白 {{ preset.padding }}s</small>
+                  </span>
+                </label>
+                {% endfor %}
+              </div>
+            </fieldset>
+
+            <label class="field">
+              <span>样式预设</span>
+              <select name="style_preset_id">
+                {% for item in style_presets %}
+                <option value="{{ item.id }}">{{ item.name }}</option>
+                {% endfor %}
+              </select>
+            </label>
+
+
+
+            <fieldset>
+              <legend>&#39069;&#22806;&#23548;&#20986;</legend>
+              <div class="choice-grid">
+                <label class="check">
+                  <input type="checkbox" name="export_subtitles" value="1">
+                  <span>&#23383;&#24149;&#25991;&#20214;&#65288;ASS / SRT&#65289;</span>
+                </label>
+                <label class="check">
+                  <input type="checkbox" name="export_asr_json" value="1">
+                  <span>&#28779;&#23665;&#35782;&#21035;&#20998;&#21477; JSON</span>
+                </label>
+                <label class="check">
+                  <input type="checkbox" name="export_report" value="1">
+                  <span>&#21098;&#36753;&#25253;&#21578; JSON</span>
+                </label>
+              </div>
+            </fieldset>
+            <button class="primary-button" type="submit">
+              <span class="button-idle">开始处理</span>
+              <span class="button-busy">任务创建中...</span>
+            </button>
+          </form>
+        </section>
+
+        <aside class="side-stack">
+          <section class="panel helper-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Run Guide</p>
+                <h2>建议用法</h2>
+              </div>
+            </div>
+            <ol class="guide-list">
+              <li><strong>优先用火山引擎</strong><span>字幕时间轴会比 tiny 更稳定。</span></li>
+              <li><strong>先选标准强度</strong><span>如果气口多，再切到紧凑或激进。</span></li>
+              <li><strong>先调样式预设</strong><span>常用字幕样式可以保存后反复套用。</span></li>
+            </ol>
+          </section>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">History</p>
+                <h2>最近任务</h2>
+              </div>
+            </div>
+            {% if jobs %}
+            <div class="job-list">
+              {% for job in jobs %}
+              <a href="/jobs/{{ job.id }}" class="job-item">
+                <span>
+                  <strong>{{ job.params.title }}</strong>
+                  <small>{{ job.created_at }}</small>
+                </span>
+                <em class="{{ job.status }}">{{ job.status }}</em>
+              </a>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+              <strong>还没有任务</strong>
+              <p>生成过的视频会出现在这里，方便回来下载。</p>
+            </div>
+            {% endif %}
+          </section>
+        </aside>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const form = document.querySelector("#job-form");
+    const dropBox = document.querySelector(".upload-box");
+    const fileInput = document.querySelector(".drop-input");
+    const fileName = document.querySelector(".file-name");
+
+    function showFileName(files) {
+      if (!fileName || !files || !files.length) return;
+      fileName.textContent = files.length === 1 ? files[0].name : `已选择 ${files.length} 个视频`;
+    }
+
+    fileInput?.addEventListener("change", () => showFileName(fileInput.files));
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+      dropBox?.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropBox.classList.add("is-dragging");
+      });
+    });
+
+    ["dragleave", "drop"].forEach((eventName) => {
+      dropBox?.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropBox.classList.remove("is-dragging");
+      });
+    });
+
+    dropBox?.addEventListener("drop", (event) => {
+      const files = event.dataTransfer?.files;
+      if (!files?.length || !fileInput) return;
+      const transfer = new DataTransfer();
+      Array.from(files).forEach((file) => {
+        if (file.type.startsWith("video/")) transfer.items.add(file);
+      });
+      fileInput.files = transfer.files;
+      showFileName(fileInput.files);
+    });
+
+    form?.addEventListener("submit", () => {
+      form.classList.add("is-submitting");
+      form.querySelector("button[type='submit']")?.setAttribute("disabled", "disabled");
+    });
+  </script>
+</body>
+</html>
