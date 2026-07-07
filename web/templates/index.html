@@ -68,7 +68,7 @@
 
             <label class="field" id="single-title-field">
               <span>封面标题</span>
-              <input type="text" name="title" placeholder="例如：普通人怎么学会用 AI 工具" autocomplete="off">
+              <textarea name="title" rows="3" placeholder="例如：普通人怎么学会用 AI 工具&#10;从零开始提高效率" autocomplete="off"></textarea>
             </label>
 
             <fieldset class="per-video-titles" id="per-video-titles" hidden>
@@ -208,9 +208,9 @@
         meta.innerHTML = `<strong>视频 ${index + 1}</strong><small></small>`;
         meta.querySelector("small").textContent = file.name;
 
-        const input = document.createElement("input");
-        input.type = "text";
+        const input = document.createElement("textarea");
         input.name = "item_titles";
+        input.rows = 3;
         input.placeholder = `默认：${fileStem(file.name) || `视频 ${index + 1}`}`;
         input.autocomplete = "off";
 

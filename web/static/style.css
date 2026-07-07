@@ -436,7 +436,8 @@ input[type="text"],
 input[type="password"],
 input[type="number"],
 input[type="file"],
-select {
+select,
+textarea {
   width: 100%;
   min-height: 46px;
   padding: 11px 12px;
@@ -446,11 +447,18 @@ select {
   border-radius: var(--radius-sm);
 }
 
+textarea {
+  min-height: 86px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
 input[type="text"]:focus,
 input[type="password"]:focus,
 input[type="number"]:focus,
 input[type="file"]:focus,
 select:focus,
+textarea:focus,
 button:focus-visible,
 a:focus-visible,
 summary:focus-visible {

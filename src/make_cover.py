@@ -161,18 +161,22 @@ def _find_font(size: int, family: str = "", bold: bool = True):
 
 def _wrap_title(title: str, font, draw, max_width: int) -> list[str]:
     text = title.strip() or "未命名视频"
-    tokens = re.findall(r"[A-Za-z0-9_-]+|\s+|.", text)
     lines: list[str] = []
-    current = ""
-    for token in tokens:
-        candidate = current + token
-        if current and (_visual_len(candidate) > 10 or draw.textlength(candidate, font=font) > max_width):
+    for raw_line in re.split(r"\r?\n+", text):
+        raw_line = raw_line.strip()
+        if not raw_line:
+            continue
+        tokens = re.findall(r"[A-Za-z0-9_-]+|[^\S\r\n]+|.", raw_line)
+        current = ""
+        for token in tokens:
+            candidate = current + token
+            if current and (_visual_len(candidate) > 10 or draw.textlength(candidate, font=font) > max_width):
+                lines.append(current.strip())
+                current = token.lstrip()
+            else:
+                current = candidate
+        if current:
             lines.append(current.strip())
-            current = token.lstrip()
-        else:
-            current = candidate
-    if current:
-        lines.append(current.strip())
     return lines[:3]
 
 
