@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>任务 {{ job.id }}</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/style.css">
   {% if job.status in ["queued", "running"] %}
   <meta http-equiv="refresh" content="5">
@@ -29,7 +30,7 @@
     <main class="workspace">
       <section class="hero-panel job-hero">
         <div>
-          <p class="eyebrow">Job {{ job.id }}</p>
+          <p class="eyebrow">任务 {{ job.id }}</p>
           <h1>{{ job.params.title }}</h1>
           <p class="hero-copy">任务完成后可下载成片、封面和可选导出文件；批量任务会提供 ZIP 汇总包。</p>
         </div>
@@ -40,18 +41,19 @@
       </section>
 
       <div class="layout single">
-        <section class="panel">
+        <section class="panel task-panel">
           {% if job.error %}
           <div class="error-banner">
             <strong>处理失败</strong>
             <p>{{ job.error }}</p>
           </div>
           {% endif %}
+
           {% set job_items = job.params.get("items", []) %}
           {% if job_items %}
           <div class="section-head">
             <div>
-              <p class="eyebrow">Batch</p>
+              <p class="eyebrow">批量</p>
               <h2>批量视频</h2>
             </div>
             <span class="soft-badge">{{ job_items|length }} 个视频</span>
@@ -71,7 +73,7 @@
 
           <div class="section-head">
             <div>
-              <p class="eyebrow">Outputs</p>
+              <p class="eyebrow">输出</p>
               <h2>输出文件</h2>
             </div>
             {% if files %}
@@ -102,7 +104,7 @@
 
           <div class="section-head log-head">
             <div>
-              <p class="eyebrow">Runtime</p>
+              <p class="eyebrow">日志</p>
               <h2>处理日志</h2>
             </div>
           </div>

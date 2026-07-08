@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI-cutting 设置</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -20,18 +21,18 @@
           <small>设置</small>
         </span>
       </a>
-      <div class="env">
+      <nav class="env" aria-label="主要导航">
         <a class="top-link" href="/">首页</a>
         <a class="top-link" href="/style-presets">样式预设</a>
-      </div>
+      </nav>
     </header>
 
     <main class="workspace">
       <section class="hero-panel job-hero">
         <div>
-          <p class="eyebrow">Settings</p>
-          <h1>把不常改的选项放在这里。</h1>
-          <p class="hero-copy">首页只负责上传和开始处理；API 凭证、字幕微调、卡壳检测这些低频配置统一在设置页维护。</p>
+          <p class="eyebrow">设置</p>
+          <h1>把低频配置收在这里。</h1>
+          <p class="hero-copy">首页只负责上传和开始处理；API 凭证、字幕微调和卡壳检测在设置页维护。</p>
         </div>
       </section>
 
@@ -47,11 +48,11 @@
           <form action="/settings" method="post" enctype="multipart/form-data" class="job-form">
             <fieldset class="credential-box">
               <legend>火山引擎 API</legend>
-              <p class="field-hint">用于火山引擎识别字幕。Access Token 会保存在本机的设置文件里，不会写入任务日志。</p>
+              <p class="field-hint">用于识别字幕。Access Token 会保存在本机设置文件里，不会写入任务日志。</p>
               <div class="credential-grid">
                 <label class="field">
                   <span>APP ID</span>
-                  <input type="text" name="volc_app_id" value="{{ settings.volc_app_id }}" placeholder="例如：8209222262" autocomplete="off">
+                  <input type="text" name="volc_app_id" value="{{ settings.volc_app_id }}" placeholder="例如：209222262" autocomplete="off">
                 </label>
                 <label class="field">
                   <span>Access Token</span>
@@ -69,7 +70,7 @@
                 </label>
                 <label class="check">
                   <input type="checkbox" name="detect_disfluency" value="1" {{ 'checked' if settings.detect_disfluency else '' }}>
-                  <span>检测疑似卡壳/重复</span>
+                  <span>检测疑似卡壳 / 重复</span>
                 </label>
               </div>
             </fieldset>
@@ -80,6 +81,5 @@
       </div>
     </main>
   </div>
-
 </body>
 </html>

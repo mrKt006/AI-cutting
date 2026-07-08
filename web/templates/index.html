@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AI-cutting</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -21,25 +22,27 @@
         </span>
       </a>
 
-      <div class="env" aria-label="运行环境状态">
+      <nav class="env" aria-label="主要导航">
+        <a class="top-link" href="/style-presets">样式预设</a>
+        <a class="top-link" href="/settings">设置</a>
         <span class="env-pill {{ 'ok' if env.volc_ready else 'warn' }}">
           <span class="dot"></span>火山 {{ '已配置' if env.volc_ready else '未配置' }}
         </span>
-      </div>
+      </nav>
     </header>
 
     <main class="workspace">
       <section class="hero-panel">
         <div>
-          <p class="eyebrow">MVP 工作流</p>
-          <h1>上传原片，自动剪气口、生成字幕和封面。</h1>
-          <p class="hero-copy">当前版本适合竖屏口播视频：先完成可用流程，再逐步加入更智能的卡壳识别和人工复核。</p>
+          <p class="eyebrow">工作台</p>
+          <h1>上传口播原片，生成成片、字幕和封面。</h1>
+          <p class="hero-copy">适合批量处理竖屏口播视频。默认只导出成片和封面，需要素材文件时再额外勾选。</p>
         </div>
         <div class="steps" aria-label="处理流程">
-          <span>上传</span>
-          <span>剪辑</span>
-          <span>识别字幕</span>
-          <span>导出</span>
+          <span>上传视频</span>
+          <span>选择样式</span>
+          <span>自动处理</span>
+          <span>下载结果</span>
         </div>
       </section>
 
@@ -47,7 +50,7 @@
         <section class="panel task-panel">
           <div class="section-head">
             <div>
-              <p class="eyebrow">New Task</p>
+              <p class="eyebrow">任务</p>
               <h2>新建任务</h2>
             </div>
             <span class="soft-badge">本地处理</span>
@@ -61,7 +64,7 @@
                 </svg>
               </span>
               <strong>拖拽视频到这里</strong>
-              <small>也可以点击选择文件。支持 mp4、mov、mkv、avi，建议先用一条短视频试跑。</small>
+              <small>也可以点击选择文件。支持 mp4、mov、mkv、avi，建议先用短视频试跑。</small>
               <input class="drop-input" type="file" name="video" accept="video/*" multiple required>
               <span class="file-name" aria-live="polite">未选择文件</span>
             </label>
@@ -69,11 +72,12 @@
             <label class="field" id="single-title-field">
               <span>封面标题</span>
               <textarea name="title" rows="3" placeholder="例如：普通人怎么学会用 AI 工具&#10;从零开始提高效率" autocomplete="off"></textarea>
+              <small>需要手动换行时直接按 Enter。上传多个视频后，可以分别填写每条视频的标题。</small>
             </label>
 
             <fieldset class="per-video-titles" id="per-video-titles" hidden>
               <legend>每条视频的封面标题</legend>
-              <p class="field-hint">检测到多个视频时，可以分别填写封面标题。留空的视频会使用上面的标题加序号，或使用文件名。</p>
+              <p class="field-hint">检测到多个视频时，可以分别填写。留空的视频会使用上面的标题加序号，或使用文件名。</p>
               <div class="title-list" id="title-list"></div>
             </fieldset>
 
@@ -118,6 +122,7 @@
                 </label>
               </div>
             </fieldset>
+
             <button class="primary-button" type="submit">
               <span class="button-idle">开始处理</span>
               <span class="button-busy">任务创建中...</span>
@@ -129,21 +134,21 @@
           <section class="panel helper-panel">
             <div class="section-head">
               <div>
-                <p class="eyebrow">Run Guide</p>
+                <p class="eyebrow">建议</p>
                 <h2>建议用法</h2>
               </div>
             </div>
             <ol class="guide-list">
-              <li><strong>优先用火山引擎</strong><span>字幕时间轴会比本地 tiny 更稳定。</span></li>
-              <li><strong>先选标准强度</strong><span>如果气口多，再切到紧凑或激进。</span></li>
-              <li><strong>先调样式预设</strong><span>常用字幕样式可以保存后反复套用。</span></li>
+              <li><strong>先用标准强度</strong><span>如果气口仍然很多，再切到紧凑或激进。</span></li>
+              <li><strong>先调样式预设</strong><span>常用字幕和封面样式可以保存后反复套用。</span></li>
+              <li><strong>批量标题逐条写</strong><span>多视频上传后，每条视频都可以单独设置封面标题。</span></li>
             </ol>
           </section>
 
           <section class="panel">
             <div class="section-head">
               <div>
-                <p class="eyebrow">History</p>
+                <p class="eyebrow">历史</p>
                 <h2>最近任务</h2>
               </div>
             </div>

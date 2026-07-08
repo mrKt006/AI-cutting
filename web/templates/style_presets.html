@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>样式预设 - AI-cutting</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -27,7 +28,7 @@
       <div class="style-layout">
         <aside class="panel style-list">
           <div class="section-head">
-            <div><p class="eyebrow">Presets</p><h2>预设列表</h2></div>
+            <div><p class="eyebrow">预设</p><h2>预设列表</h2></div>
           </div>
           <div class="job-list">
             {% for preset in presets %}
@@ -192,7 +193,7 @@
         </section>
 
         <aside class="panel preview-panel">
-          <div class="section-head"><div><p class="eyebrow">Preview</p><h2>&#39044;&#35272;</h2></div></div>
+          <div class="section-head"><div><p class="eyebrow">预览</p><h2>&#39044;&#35272;</h2></div></div>
           <form action="/style-presets/preview-frame" method="post" enctype="multipart/form-data" class="preview-upload">
             <input type="hidden" name="preset" value="{{ selected.id }}">
             <input type="hidden" name="active" value="{{ active_style }}">
@@ -213,7 +214,7 @@
           <div class="video-preview precise-preview-surface" id="preview-surface" data-aspect="{{ preview_aspect }}">
             {% if preview %}<img src="{{ preview }}" alt="&#35270;&#39057;&#39044;&#35272;&#24103;">{% endif %}
             <div id="subtitle-preview" class="subtitle-preview">{{ preview_text }}</div>
-            <img id="accurate-preview" class="accurate-preview-image" alt="&#31934;&#30830;&#39044;&#35272;&#22270;">
+            <img id="accurate-preview" class="accurate-preview-image" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="&#31934;&#30830;&#39044;&#35272;&#22270;">
           </div>
         </aside>
       </div>
