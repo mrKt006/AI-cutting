@@ -12,72 +12,71 @@
     <header class="topbar">
       <a class="brand" href="/" aria-label="AI-cutting 首页">
         <span class="brand-mark" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M4 7.5h7.5M4 16.5h7.5M15.5 4l4 8-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </span>
         <span>
           <strong>AI-cutting</strong>
-          <small>口播视频自动剪辑</small>
+          <small>本地口播剪辑台</small>
         </span>
       </a>
 
-      <nav class="env" aria-label="主要导航">
-        <a class="top-link" href="/style-presets">样式预设</a>
-        <a class="top-link" href="/settings">设置</a>
-        <span class="env-pill {{ 'ok' if env.volc_ready else 'warn' }}">
+      <nav class="nav-links" aria-label="主要导航">
+        <a class="nav-link is-active" href="/">任务</a>
+        <a class="nav-link" href="/style-presets">样式预设</a>
+        <a class="nav-link" href="/settings">设置</a>
+        <span class="service-state {{ 'ok' if env.volc_ready else 'warn' }}">
           <span class="dot"></span>火山 {{ '已配置' if env.volc_ready else '未配置' }}
         </span>
       </nav>
     </header>
 
     <main class="workspace">
-      <section class="hero-panel">
+      <div class="page-title">
         <div>
-          <p class="eyebrow">工作台</p>
-          <h1>上传口播原片，生成成片、字幕和封面。</h1>
-          <p class="hero-copy">适合批量处理竖屏口播视频。默认只导出成片和封面，需要素材文件时再额外勾选。</p>
+          <p class="section-kicker">处理工作台</p>
+          <h1>上传视频，选择样式，开始剪辑。</h1>
         </div>
-        <div class="steps" aria-label="处理流程">
-          <span>上传视频</span>
-          <span>选择样式</span>
-          <span>自动处理</span>
-          <span>下载结果</span>
-        </div>
-      </section>
+        <a class="ghost-button" href="/style-presets">管理字幕样式</a>
+      </div>
 
-      <div class="layout">
-        <section class="panel task-panel">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">任务</p>
-              <h2>新建任务</h2>
-            </div>
-            <span class="soft-badge">本地处理</span>
-          </div>
-
+      <div class="workbench-layout">
+        <section class="surface task-surface">
           <form action="/jobs" method="post" enctype="multipart/form-data" class="job-form" id="job-form">
             <label class="upload-box">
               <span class="upload-icon" aria-hidden="true">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
                   <path d="M12 15V4m0 0 4 4m-4-4-4 4M4 15.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </span>
-              <strong>拖拽视频到这里</strong>
-              <small>也可以点击选择文件。支持 mp4、mov、mkv、avi，建议先用短视频试跑。</small>
+              <span class="upload-copy">
+                <strong>拖拽视频到这里</strong>
+                <small>支持多个视频。默认导出成片和封面。</small>
+              </span>
               <input class="drop-input" type="file" name="video" accept="video/*" multiple required>
               <span class="file-name" aria-live="polite">未选择文件</span>
             </label>
 
-            <label class="field" id="single-title-field">
-              <span>封面标题</span>
-              <textarea name="title" rows="3" placeholder="例如：普通人怎么学会用 AI 工具&#10;从零开始提高效率" autocomplete="off"></textarea>
-              <small>需要手动换行时直接按 Enter。上传多个视频后，可以分别填写每条视频的标题。</small>
-            </label>
+            <div class="form-grid">
+              <label class="field" id="single-title-field">
+                <span>封面标题</span>
+                <textarea name="title" rows="3" placeholder="普通人怎么学会用 AI 工具&#10;从零开始提高效率" autocomplete="off"></textarea>
+                <small>需要换行时直接按 Enter。多视频上传后可逐条填写标题。</small>
+              </label>
+
+              <label class="field">
+                <span>样式预设</span>
+                <select name="style_preset_id">
+                  {% for item in style_presets %}
+                  <option value="{{ item.id }}">{{ item.name }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+            </div>
 
             <fieldset class="per-video-titles" id="per-video-titles" hidden>
               <legend>每条视频的封面标题</legend>
-              <p class="field-hint">检测到多个视频时，可以分别填写。留空的视频会使用上面的标题加序号，或使用文件名。</p>
               <div class="title-list" id="title-list"></div>
             </fieldset>
 
@@ -89,32 +88,23 @@
                   <input type="radio" name="preset" value="{{ key }}" {{ 'checked' if key == 'standard' else '' }}>
                   <span>
                     <strong>{{ preset.label }}</strong>
-                    <small>{{ preset.noise }} · 停顿 {{ preset.min_silence }}s · 留白 {{ preset.padding }}s</small>
+                    <small>{{ preset.noise }} / 停顿 {{ preset.min_silence }}s / 留白 {{ preset.padding }}s</small>
                   </span>
                 </label>
                 {% endfor %}
               </div>
             </fieldset>
 
-            <label class="field">
-              <span>样式预设</span>
-              <select name="style_preset_id">
-                {% for item in style_presets %}
-                <option value="{{ item.id }}">{{ item.name }}</option>
-                {% endfor %}
-              </select>
-            </label>
-
             <fieldset>
               <legend>额外导出</legend>
               <div class="choice-grid">
                 <label class="check">
                   <input type="checkbox" name="export_subtitles" value="1">
-                  <span>字幕文件（ASS / SRT）</span>
+                  <span>字幕文件 ASS / SRT</span>
                 </label>
                 <label class="check">
                   <input type="checkbox" name="export_asr_json" value="1">
-                  <span>火山识别分句 JSON</span>
+                  <span>火山识别 JSON</span>
                 </label>
                 <label class="check">
                   <input type="checkbox" name="export_report" value="1">
@@ -123,54 +113,58 @@
               </div>
             </fieldset>
 
-            <button class="primary-button" type="submit">
-              <span class="button-idle">开始处理</span>
-              <span class="button-busy">任务创建中...</span>
-            </button>
+            <div class="submit-row">
+              <button class="primary-button" type="submit">
+                <span class="button-idle">开始处理</span>
+                <span class="button-busy">任务创建中...</span>
+              </button>
+              <p>未勾选的素材不会额外生成，保持输出目录干净。</p>
+            </div>
           </form>
         </section>
 
-        <aside class="side-stack">
-          <section class="panel helper-panel">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">建议</p>
-                <h2>建议用法</h2>
-              </div>
+        <aside class="surface queue-surface">
+          {% set status_labels = {"done": "完成", "running": "处理中", "failed": "失败", "queued": "等待中"} %}
+          <div class="surface-head">
+            <div>
+              <p class="section-kicker">队列</p>
+              <h2>最近任务</h2>
             </div>
-            <ol class="guide-list">
-              <li><strong>先用标准强度</strong><span>如果气口仍然很多，再切到紧凑或激进。</span></li>
-              <li><strong>先调样式预设</strong><span>常用字幕和封面样式可以保存后反复套用。</span></li>
-              <li><strong>批量标题逐条写</strong><span>多视频上传后，每条视频都可以单独设置封面标题。</span></li>
-            </ol>
-          </section>
-
-          <section class="panel">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">历史</p>
-                <h2>最近任务</h2>
-              </div>
-            </div>
-            {% if jobs %}
-            <div class="job-list">
-              {% for job in jobs %}
-              <a href="/jobs/{{ job.id }}" class="job-item">
-                <span>
+          </div>
+          {% if jobs %}
+          <div class="queue-list">
+            {% for job in jobs[:3] %}
+            <a href="/jobs/{{ job.id }}" class="queue-item">
+              <span class="queue-main">
+                <strong>{{ job.params.title }}</strong>
+                <small>{{ job.created_at }}</small>
+              </span>
+              <em class="{{ job.status }}">{{ status_labels.get(job.status, job.status) }}</em>
+            </a>
+            {% endfor %}
+          </div>
+          {% if jobs|length > 3 %}
+          <details class="queue-more">
+            <summary>查看全部任务</summary>
+            <div class="queue-list">
+              {% for job in jobs[3:] %}
+              <a href="/jobs/{{ job.id }}" class="queue-item quiet">
+                <span class="queue-main">
                   <strong>{{ job.params.title }}</strong>
                   <small>{{ job.created_at }}</small>
                 </span>
-                <em class="{{ job.status }}">{{ job.status }}</em>
+                <em class="{{ job.status }}">{{ status_labels.get(job.status, job.status) }}</em>
               </a>
               {% endfor %}
             </div>
-            {% else %}
-            <div class="empty-state">
-              <strong>还没有任务</strong>
-              <p>生成过的视频会出现在这里，方便回来下载。</p>
-            </div>
-            {% endif %}
-          </section>
+          </details>
+          {% endif %}
+          {% else %}
+          <div class="empty-state">
+            <strong>还没有任务</strong>
+            <p>处理过的视频会出现在这里，方便回来下载或查看日志。</p>
+          </div>
+          {% endif %}
         </aside>
       </div>
     </main>

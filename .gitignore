@@ -44,3 +44,9 @@ Thumbs.db
 .idea/
 .vscode/
 *.log
+
+# Local agent/skill tool installs
+.agents/
+.claude/
+.cursor/
+.gemini/

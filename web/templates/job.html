@@ -15,7 +15,7 @@
     <header class="topbar">
       <a class="brand" href="/" aria-label="返回 AI-cutting 首页">
         <span class="brand-mark" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M4 7.5h7.5M4 16.5h7.5M15.5 4l4 8-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </span>
@@ -24,94 +24,94 @@
           <small>任务详情</small>
         </span>
       </a>
-      <a class="secondary-button" href="/">新建任务</a>
+      <nav class="nav-links" aria-label="主要导航">
+        <a class="nav-link" href="/">任务</a>
+        <a class="nav-link" href="/style-presets">样式预设</a>
+        <a class="nav-link" href="/settings">设置</a>
+      </nav>
     </header>
 
     <main class="workspace">
-      <section class="hero-panel job-hero">
+      {% set status_labels = {"done": "完成", "running": "处理中", "failed": "失败", "queued": "等待中"} %}
+      <div class="page-title job-title">
         <div>
-          <p class="eyebrow">任务 {{ job.id }}</p>
+          <p class="section-kicker">任务 {{ job.id }}</p>
           <h1>{{ job.params.title }}</h1>
-          <p class="hero-copy">任务完成后可下载成片、封面和可选导出文件；批量任务会提供 ZIP 汇总包。</p>
         </div>
         <div class="status-card">
-          <span class="status {{ job.status }}">{{ stage_label }}</span>
-          <small>更新时间 {{ job.updated_at }}</small>
+          <span class="status {{ job.status }}">{{ status_labels.get(job.status, stage_label) }}</span>
+          <small>{{ job.updated_at }}</small>
         </div>
-      </section>
+      </div>
 
-      <div class="layout single">
-        <section class="panel task-panel">
+      <div class="job-layout">
+        <section class="surface task-surface">
           {% if job.error %}
-          <div class="error-banner">
-            <strong>处理失败</strong>
-            <p>{{ job.error }}</p>
-          </div>
+          <div class="toast error"><strong>处理失败</strong><span>{{ job.error }}</span></div>
           {% endif %}
 
           {% set job_items = job.params.get("items", []) %}
-          {% if job_items %}
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">批量</p>
-              <h2>批量视频</h2>
+          {% if job_items|length > 1 %}
+          <div class="surface-block">
+            <div class="surface-head">
+              <div>
+                <p class="section-kicker">批量</p>
+                <h2>批量视频</h2>
+              </div>
             </div>
-            <span class="soft-badge">{{ job_items|length }} 个视频</span>
-          </div>
-          <div class="job-list">
-            {% for item in job_items %}
-            <div class="job-item">
-              <span>
-                <strong>{{ item.title }}</strong>
-                <small>{{ item.source_name or item.id }}</small>
-              </span>
-              <em class="{{ item.status }}">{{ item.status }}</em>
+            <div class="queue-list">
+              {% for item in job_items %}
+              <div class="queue-item">
+                <span class="queue-main">
+                  <strong>{{ item.title }}</strong>
+                  <small>{{ item.source_name }}</small>
+                </span>
+                <em class="{{ item.status }}">{{ status_labels.get(item.status, item.status) }}</em>
+              </div>
+              {% endfor %}
             </div>
-            {% endfor %}
           </div>
           {% endif %}
 
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">输出</p>
-              <h2>输出文件</h2>
+          <div class="surface-block">
+            <div class="surface-head">
+              <div>
+                <p class="section-kicker">输出</p>
+                <h2>输出文件</h2>
+              </div>
             </div>
             {% if files %}
-            <span class="soft-badge">{{ files|length }} 个文件</span>
+            <div class="downloads">
+              {% for file in files %}
+              <a href="/jobs/{{ job.id }}/download/{{ file.name }}" class="download-card">
+                <span>
+                  <strong>{{ file.label }}</strong>
+                  <small>{{ file.name }}</small>
+                </span>
+                <em>{{ file.size }}</em>
+              </a>
+              {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+              <strong>输出还没生成</strong>
+              <p>任务完成后，成片、封面和可选导出文件会显示在这里。</p>
+            </div>
             {% endif %}
           </div>
 
-          {% if files %}
-          <div class="downloads">
-            {% for file in files %}
-            <a href="/jobs/{{ job.id }}/download/{{ file.name }}" class="download-card">
-              <span>
-                <strong>{{ file.display_name }}</strong>
-                <small>{{ file.description }} · {{ file.size }}</small>
-              </span>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M12 4v11m0 0 4-4m-4 4-4-4M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </a>
-            {% endfor %}
-          </div>
-          {% else %}
-          <div class="empty-state">
-            <strong>还没有输出文件</strong>
-            <p>处理过程中保持在这个页面，任务完成后这里会出现下载入口。</p>
-          </div>
-          {% endif %}
-
-          <div class="section-head log-head">
-            <div>
-              <p class="eyebrow">日志</p>
-              <h2>处理日志</h2>
+          <div class="surface-block">
+            <div class="surface-head">
+              <div>
+                <p class="section-kicker">日志</p>
+                <h2>处理日志</h2>
+              </div>
             </div>
-          </div>
-          <div class="log" aria-live="polite">
-            {% for item in job.log %}
-            <p><time>{{ item.time }}</time>{{ item.message }}</p>
-            {% endfor %}
+            <div class="log" aria-live="polite">
+              {% for item in job.log %}
+              <p><time>{{ item.time }}</time>{{ item.message }}</p>
+              {% endfor %}
+            </div>
           </div>
         </section>
       </div>

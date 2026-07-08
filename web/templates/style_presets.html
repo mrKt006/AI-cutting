@@ -8,32 +8,42 @@
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <div class="app-shell">
+  <div class="app-shell inspector-shell">
     <header class="topbar">
       <a class="brand" href="/" aria-label="返回 AI-cutting 首页">
         <span class="brand-mark" aria-hidden="true">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
             <path d="M4 7.5h7.5M4 16.5h7.5M15.5 4l4 8-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </span>
-        <span><strong>AI-cutting</strong><small>样式预设</small></span>
+        <span>
+          <strong>AI-cutting</strong>
+          <small>样式工作台</small>
+        </span>
       </a>
-      <div class="env">
-        <a class="top-link" href="/">首页</a>
-        <a class="top-link" href="/settings">设置</a>
-      </div>
+      <nav class="nav-links" aria-label="主要导航">
+        <a class="nav-link" href="/">任务</a>
+        <a class="nav-link is-active" href="/style-presets">样式预设</a>
+        <a class="nav-link" href="/settings">设置</a>
+      </nav>
     </header>
 
-    <main class="workspace style-workspace">
-      <div class="style-layout">
-        <aside class="panel style-list">
-          <div class="section-head">
-            <div><p class="eyebrow">预设</p><h2>预设列表</h2></div>
+    <main class="workspace inspector-workspace">
+      <div class="inspector-layout">
+        <aside class="surface preset-sidebar">
+          <div class="surface-head">
+            <div>
+              <p class="section-kicker">Styles</p>
+              <h2>预设</h2>
+            </div>
           </div>
-          <div class="job-list">
+          <div class="queue-list preset-list">
             {% for preset in presets %}
-            <a class="job-item {{ 'selected' if preset.id == selected.id else '' }}" href="/style-presets?preset={{ preset.id }}{% if preview %}&preview={{ preview }}{% endif %}&active={{ active_style }}&text={{ preview_text | urlencode }}&aspect={{ preview_aspect | urlencode }}">
-              <span><strong>{{ preset.name }}</strong><small>{{ preset.subtitle.font_family }} / {{ preset.subtitle.font_size }}px</small></span>
+            <a class="queue-item {{ 'selected' if preset.id == selected.id else '' }}" href="/style-presets?preset={{ preset.id }}{% if preview %}&preview={{ preview }}{% endif %}&active={{ active_style }}&text={{ preview_text | urlencode }}&aspect={{ preview_aspect | urlencode }}">
+              <span class="queue-main">
+                <strong>{{ preset.name }}</strong>
+                <small>{{ preset.subtitle.font_family }} / {{ preset.subtitle.font_size }}px</small>
+              </span>
             </a>
             {% endfor %}
           </div>
@@ -43,7 +53,7 @@
             <input type="hidden" name="active_text_style" value="{{ active_style }}">
             <input type="hidden" name="preview_text" value="{{ preview_text }}">
             <input type="hidden" name="preview_aspect" value="{{ preview_aspect }}">
-            <button class="primary-button" type="submit">&#26032;&#24314;&#39044;&#35774;</button>
+            <button class="primary-button" type="submit">新建预设</button>
           </form>
           <form action="/style-presets" method="post" class="inline-actions">
             <input type="hidden" name="action" value="duplicate">
@@ -52,13 +62,49 @@
             <input type="hidden" name="active_text_style" value="{{ active_style }}">
             <input type="hidden" name="preview_text" value="{{ preview_text }}">
             <input type="hidden" name="preview_aspect" value="{{ preview_aspect }}">
-            <button class="secondary-button" type="submit">&#22797;&#21046;&#24403;&#21069;&#39044;&#35774;</button>
+            <button class="ghost-button" type="submit">复制当前预设</button>
           </form>
         </aside>
 
-        <section class="panel task-panel style-editor-panel">
+        <section class="surface preview-panel">
+          <div class="surface-head">
+            <div>
+              <p class="section-kicker">Canvas</p>
+              <h2>预览画布</h2>
+            </div>
+          </div>
+          <div class="preview-stage-wrap">
+            <div class="video-preview precise-preview-surface" id="preview-surface" data-aspect="{{ preview_aspect }}">
+              {% if preview %}<img src="{{ preview }}" alt="视频预览帧">{% endif %}
+              <div id="subtitle-preview" class="subtitle-preview">{{ preview_text }}</div>
+              <img id="accurate-preview" class="accurate-preview-image" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="精确预览图">
+            </div>
+          </div>
+          <div class="preview-toolbar">
+            <form action="/style-presets/preview-frame" method="post" enctype="multipart/form-data" class="preview-upload">
+              <input type="hidden" name="preset" value="{{ selected.id }}">
+              <input type="hidden" name="active" value="{{ active_style }}">
+              <input type="hidden" name="text" value="{{ preview_text }}">
+              <input type="hidden" name="aspect" value="{{ preview_aspect }}">
+              <label class="field compact-file"><span>参考帧</span><input type="file" name="video" accept="video/*" required></label>
+              <button class="ghost-button" type="submit">上传并抽帧</button>
+            </form>
+            <div class="preview-controls">
+              <label class="field"><span>画幅</span>
+                <span class="segmented aspect-control" role="group" aria-label="预览画幅">
+                  {% for item in ["9:16", "16:9", "1:1", "4:5"] %}
+                  <label><input type="radio" name="preview_aspect_choice" value="{{ item }}" {{ 'checked' if preview_aspect == item else '' }}><span>{{ item }}</span></label>
+                  {% endfor %}
+                </span>
+              </label>
+              <label class="field preview-text-field"><span>预览文本</span><input id="preview-text" type="text" value="{{ preview_text }}"></label>
+            </div>
+          </div>
+        </section>
+
+        <section class="surface style-editor-panel">
           {% if saved %}
-          <div class="success-banner"><strong>样式已保存</strong><p>新任务会使用更新后的预设。</p></div>
+          <div class="toast success"><strong>样式已保存</strong><span>新任务会使用更新后的预设。</span></div>
           {% endif %}
 
           <form action="/style-presets" method="post" class="job-form" id="style-form">
@@ -68,121 +114,115 @@
             <input type="hidden" name="preview_aspect" id="preview-aspect-hidden" value="{{ preview_aspect }}">
             <input type="hidden" name="subtitle_style_json" id="subtitle-style-json">
             <input type="hidden" name="cover_style_json" id="cover-style-json">
-            <div class="style-form-scroll">
-            <label class="field"><span>预设 ID</span><input type="text" name="preset_id" value="{{ selected.id }}" autocomplete="off"></label>
-            <label class="field"><span>预设名称</span><input type="text" name="name" value="{{ selected.name }}" autocomplete="off"></label>
-            <div class="style-mode-tabs" role="group" aria-label="文本样式类型">
-              <button class="style-mode-button is-active" type="button" data-style-mode="subtitle">字幕设置</button>
-              <button class="style-mode-button" type="button" data-style-mode="cover">封面设置</button>
+
+            <div class="editor-fixed-head">
+              <div class="field-pair">
+                <label class="field"><span>预设 ID</span><input type="text" name="preset_id" value="{{ selected.id }}" autocomplete="off"></label>
+                <label class="field"><span>预设名称</span><input type="text" name="name" value="{{ selected.name }}" autocomplete="off"></label>
+              </div>
+              <div class="style-mode-tabs" role="group" aria-label="文本样式类型">
+                <button class="style-mode-button is-active" type="button" data-style-mode="subtitle">字幕设置</button>
+                <button class="style-mode-button" type="button" data-style-mode="cover">封面设置</button>
+              </div>
             </div>
 
-            <details class="capcut-section" open>
-              <summary>基础</summary>
-              <div class="capcut-row">
-                <label>字体</label>
-                <select name="font_family">
-                  {% for font in ["Microsoft YaHei", "SimHei", "SimSun", "Arial"] %}
-                  <option value="{{ font }}" {{ 'selected' if selected.subtitle.font_family == font else '' }}>{{ font }}</option>
-                  {% endfor %}
-                </select>
-              </div>
-              <div class="capcut-row">
-                <label>字号</label>
-                <input type="range" name="font_size" min="36" max="110" value="{{ selected.subtitle.font_size }}">
-                <input type="number" name="font_size" value="{{ selected.subtitle.font_size }}">
-              </div>
-              <div class="capcut-row">
-                <label>样式</label>
-                <div class="icon-toggle-row">
-                  <label><input type="checkbox" name="bold" value="1" {{ 'checked' if selected.subtitle.bold else '' }}><span>B</span></label>
-                  <label><input type="checkbox" name="underline" value="1" {{ 'checked' if selected.subtitle.underline else '' }}><span>U</span></label>
-                  <label><input type="checkbox" name="italic" value="1" {{ 'checked' if selected.subtitle.italic else '' }}><span>I</span></label>
+            <div class="style-form-scroll">
+              <details class="capcut-section" open>
+                <summary>基础</summary>
+                <div class="capcut-row">
+                  <label>字体</label>
+                  <select name="font_family">
+                    {% for font in ["Microsoft YaHei", "SimHei", "SimSun", "Arial"] %}
+                    <option value="{{ font }}" {{ 'selected' if selected.subtitle.font_family == font else '' }}>{{ font }}</option>
+                    {% endfor %}
+                  </select>
                 </div>
-              </div>
-              <div class="capcut-row">
-                <label>颜色</label>
-                <input type="color" name="primary_color" value="{{ selected.subtitle.primary_color }}">
-              </div>
-              <div class="capcut-row two">
-                <label>字间距</label><input type="number" name="letter_spacing" value="{{ selected.subtitle.letter_spacing }}">
-                <label>行间距</label><input type="number" name="line_spacing" value="{{ selected.subtitle.line_spacing }}">
-              </div>
-              <div class="capcut-row">
-                <label>对齐方式</label>
-                <div class="segmented">
-                  {% for item, label in [("left","左"),("center","中"),("right","右")] %}
-                  <label><input type="radio" name="text_align" value="{{ item }}" {{ 'checked' if selected.subtitle.text_align == item else '' }}><span>{{ label }}</span></label>
-                  {% endfor %}
+                <div class="capcut-row">
+                  <label>字号</label>
+                  <input type="range" name="font_size" min="36" max="110" value="{{ selected.subtitle.font_size }}">
+                  <input type="number" name="font_size" value="{{ selected.subtitle.font_size }}">
                 </div>
-              </div>
-            </details>
+                <div class="capcut-row">
+                  <label>样式</label>
+                  <div class="icon-toggle-row">
+                    <label><input type="checkbox" name="bold" value="1" {{ 'checked' if selected.subtitle.bold else '' }}><span>B</span></label>
+                    <label><input type="checkbox" name="underline" value="1" {{ 'checked' if selected.subtitle.underline else '' }}><span>U</span></label>
+                    <label><input type="checkbox" name="italic" value="1" {{ 'checked' if selected.subtitle.italic else '' }}><span>I</span></label>
+                  </div>
+                </div>
+                <div class="capcut-row">
+                  <label>颜色</label>
+                  <input type="color" name="primary_color" value="{{ selected.subtitle.primary_color }}">
+                </div>
+                <div class="capcut-row two">
+                  <label>字间距</label><input type="number" name="letter_spacing" value="{{ selected.subtitle.letter_spacing }}">
+                  <label>行间距</label><input type="number" name="line_spacing" value="{{ selected.subtitle.line_spacing }}">
+                </div>
+                <div class="capcut-row">
+                  <label>对齐</label>
+                  <div class="segmented">
+                    {% for item, label in [("left","左"),("center","中"),("right","右")] %}
+                    <label><input type="radio" name="text_align" value="{{ item }}" {{ 'checked' if selected.subtitle.text_align == item else '' }}><span>{{ label }}</span></label>
+                    {% endfor %}
+                  </div>
+                </div>
+              </details>
 
-            <details class="capcut-section" open>
-              <summary>位置大小</summary>
-              <div class="capcut-row">
-                <label>缩放</label>
-                <input type="range" name="scale" min="20" max="200" value="{{ selected.subtitle.scale }}">
-                <input type="number" name="scale" value="{{ selected.subtitle.scale }}">
-              </div>
-              <label class="capcut-switch"><span>等比缩放</span><input type="checkbox" name="uniform_scale" value="1" {{ 'checked' if selected.subtitle.uniform_scale else '' }}></label>
-              <div class="capcut-row two">
-                <label>Scale X</label><input type="number" name="scale_x" value="{{ selected.subtitle.scale_x }}">
-                <label>Scale Y</label><input type="number" name="scale_y" value="{{ selected.subtitle.scale_y }}">
-              </div>
-              <div class="capcut-row two">
-                <label>X</label><input type="number" name="position_x" value="{{ selected.subtitle.position_x }}">
-                <label>Y</label><input type="number" name="position_y" value="{{ selected.subtitle.position_y }}">
-              </div>
-              <div class="capcut-row">
-                <label>平面旋转</label>
-                <input type="number" name="rotation" step="0.1" value="{{ selected.subtitle.rotation }}">
-              </div>
-            </details>
+              <details class="capcut-section" open>
+                <summary>位置大小</summary>
+                <div class="capcut-row">
+                  <label>缩放</label>
+                  <input type="range" name="scale" min="20" max="200" value="{{ selected.subtitle.scale }}">
+                  <input type="number" name="scale" value="{{ selected.subtitle.scale }}">
+                </div>
+                <label class="capcut-switch"><span>等比缩放</span><input type="checkbox" name="uniform_scale" value="1" {{ 'checked' if selected.subtitle.uniform_scale else '' }}></label>
+                <div class="capcut-row two">
+                  <label>Scale X</label><input type="number" name="scale_x" value="{{ selected.subtitle.scale_x }}">
+                  <label>Scale Y</label><input type="number" name="scale_y" value="{{ selected.subtitle.scale_y }}">
+                </div>
+                <div class="capcut-row two">
+                  <label>X</label><input type="number" name="position_x" value="{{ selected.subtitle.position_x }}">
+                  <label>Y</label><input type="number" name="position_y" value="{{ selected.subtitle.position_y }}">
+                </div>
+                <div class="capcut-row">
+                  <label>旋转</label>
+                  <input type="number" name="rotation" step="0.1" value="{{ selected.subtitle.rotation }}">
+                </div>
+              </details>
 
-            <details class="capcut-section" open>
-              <summary>混合</summary>
-              <div class="capcut-row">
-                <label>不透明度</label>
-                <input type="range" name="opacity" min="0" max="100" value="{{ selected.subtitle.opacity }}">
-                <input type="number" name="opacity" value="{{ selected.subtitle.opacity }}">
-              </div>
-            </details>
+              <details class="capcut-section" open>
+                <summary><label><input type="checkbox" name="outline_enabled" value="1" {{ 'checked' if selected.subtitle.outline_enabled else '' }}> 描边</label></summary>
+                <div class="capcut-row"><label>描边颜色</label><input type="color" name="outline_color" value="{{ selected.subtitle.outline_color }}"></div>
+                <div class="capcut-row"><label>描边宽度</label><input type="range" name="outline_width" min="0" max="12" value="{{ selected.subtitle.outline_width }}"><input type="number" name="outline_width" value="{{ selected.subtitle.outline_width }}"></div>
+              </details>
 
-            <details class="capcut-section" open>
-              <summary><label><input type="checkbox" name="outline_enabled" value="1" {{ 'checked' if selected.subtitle.outline_enabled else '' }}> 描边</label></summary>
-              <div class="capcut-row"><label>描边颜色</label><input type="color" name="outline_color" value="{{ selected.subtitle.outline_color }}"></div>
-              <div class="capcut-row"><label>描边宽度</label><input type="range" name="outline_width" min="0" max="12" value="{{ selected.subtitle.outline_width }}"><input type="number" name="outline_width" value="{{ selected.subtitle.outline_width }}"></div>
-            </details>
+              <details class="capcut-section" open>
+                <summary><label><input type="checkbox" name="background_enabled" value="1" {{ 'checked' if selected.subtitle.background_enabled else '' }}> 背景</label></summary>
+                <div class="capcut-row"><label>背景颜色</label><input type="color" name="background_color" value="{{ selected.subtitle.background_color }}"></div>
+                <div class="capcut-row"><label>背景透明度</label><input type="range" name="background_opacity" min="0" max="100" value="{{ selected.subtitle.background_opacity }}"><input type="number" name="background_opacity" value="{{ selected.subtitle.background_opacity }}"></div>
+                <div class="capcut-row"><label>背景内边距</label><input type="number" name="background_padding" value="{{ selected.subtitle.background_padding }}"></div>
+              </details>
 
-            <details class="capcut-section">
-              <summary><label><input type="checkbox" name="background_enabled" value="1" {{ 'checked' if selected.subtitle.background_enabled else '' }}> 背景</label></summary>
-              <div class="capcut-row"><label>背景颜色</label><input type="color" name="background_color" value="{{ selected.subtitle.background_color }}"></div>
-              <div class="capcut-row"><label>背景不透明度</label><input type="range" name="background_opacity" min="0" max="100" value="{{ selected.subtitle.background_opacity }}"><input type="number" name="background_opacity" value="{{ selected.subtitle.background_opacity }}"></div>
-              <div class="capcut-row"><label>背景内边距</label><input type="number" name="background_padding" value="{{ selected.subtitle.background_padding }}"></div>
-            </details>
-
-            <details class="capcut-section">
-              <summary><label><input type="checkbox" name="glow_enabled" value="1" {{ 'checked' if selected.subtitle.glow_enabled else '' }}> 发光</label></summary>
-              <div class="capcut-row"><label>发光颜色</label><input type="color" name="glow_color" value="{{ selected.subtitle.glow_color }}"></div>
-              <div class="capcut-row"><label>发光强度</label><input type="range" name="glow_strength" min="0" max="10" value="{{ selected.subtitle.glow_strength }}"><input type="number" name="glow_strength" value="{{ selected.subtitle.glow_strength }}"></div>
-            </details>
-
-            <details class="capcut-section">
-              <summary><label><input type="checkbox" name="shadow_enabled" value="1" {{ 'checked' if selected.subtitle.shadow_enabled else '' }}> 阴影</label></summary>
-              <div class="capcut-row"><label>阴影颜色</label><input type="color" name="shadow_color" value="{{ selected.subtitle.shadow_color }}"></div>
-              <div class="capcut-row"><label>阴影距离</label><input type="range" name="shadow_offset" min="0" max="18" value="{{ selected.subtitle.shadow_offset }}"><input type="number" name="shadow_offset" value="{{ selected.subtitle.shadow_offset }}"></div>
-            </details>
-
-            <details class="advanced">
-              <summary>动画、断句和封面标题</summary>
-              <div class="credential-grid">
-                <label class="field"><span>出现动画</span><select name="animation_in">{% for item in ["none","fade","slide_up","pop"] %}<option value="{{ item }}" {{ 'selected' if selected.subtitle.animation_in == item else '' }}>{{ item }}</option>{% endfor %}</select></label>
-                <label class="field"><span>消失动画</span><select name="animation_out">{% for item in ["none","fade","slide_up","pop"] %}<option value="{{ item }}" {{ 'selected' if selected.subtitle.animation_out == item else '' }}>{{ item }}</option>{% endfor %}</select></label>
-                <label class="field"><span>建议每行字数</span><input type="number" name="target_len" value="{{ selected.subtitle.target_len }}"></label>
-                <label class="field"><span>每行最多字数</span><input type="number" name="max_len" value="{{ selected.subtitle.max_len }}"></label>
-              </div>
-            </details>
-
+              <details class="capcut-section">
+                <summary>高级</summary>
+                <div class="capcut-row">
+                  <label>不透明度</label>
+                  <input type="range" name="opacity" min="0" max="100" value="{{ selected.subtitle.opacity }}">
+                  <input type="number" name="opacity" value="{{ selected.subtitle.opacity }}">
+                </div>
+                <label class="capcut-switch"><span><input type="checkbox" name="glow_enabled" value="1" {{ 'checked' if selected.subtitle.glow_enabled else '' }}> 发光</span></label>
+                <div class="capcut-row"><label>发光颜色</label><input type="color" name="glow_color" value="{{ selected.subtitle.glow_color }}"></div>
+                <div class="capcut-row"><label>发光强度</label><input type="range" name="glow_strength" min="0" max="10" value="{{ selected.subtitle.glow_strength }}"><input type="number" name="glow_strength" value="{{ selected.subtitle.glow_strength }}"></div>
+                <label class="capcut-switch"><span><input type="checkbox" name="shadow_enabled" value="1" {{ 'checked' if selected.subtitle.shadow_enabled else '' }}> 阴影</span></label>
+                <div class="capcut-row"><label>阴影颜色</label><input type="color" name="shadow_color" value="{{ selected.subtitle.shadow_color }}"></div>
+                <div class="capcut-row"><label>阴影距离</label><input type="range" name="shadow_offset" min="0" max="18" value="{{ selected.subtitle.shadow_offset }}"><input type="number" name="shadow_offset" value="{{ selected.subtitle.shadow_offset }}"></div>
+                <div class="field-pair">
+                  <label class="field"><span>出现动画</span><select name="animation_in">{% for item in ["none","fade","slide_up","pop"] %}<option value="{{ item }}" {{ 'selected' if selected.subtitle.animation_in == item else '' }}>{{ item }}</option>{% endfor %}</select></label>
+                  <label class="field"><span>消失动画</span><select name="animation_out">{% for item in ["none","fade","slide_up","pop"] %}<option value="{{ item }}" {{ 'selected' if selected.subtitle.animation_out == item else '' }}>{{ item }}</option>{% endfor %}</select></label>
+                  <label class="field"><span>建议每行字数</span><input type="number" name="target_len" value="{{ selected.subtitle.target_len }}"></label>
+                  <label class="field"><span>每行最多字数</span><input type="number" name="max_len" value="{{ selected.subtitle.max_len }}"></label>
+                </div>
+              </details>
             </div>
 
             <div class="form-actions sticky-actions">
@@ -192,31 +232,6 @@
           </form>
         </section>
 
-        <aside class="panel preview-panel">
-          <div class="section-head"><div><p class="eyebrow">预览</p><h2>&#39044;&#35272;</h2></div></div>
-          <form action="/style-presets/preview-frame" method="post" enctype="multipart/form-data" class="preview-upload">
-            <input type="hidden" name="preset" value="{{ selected.id }}">
-            <input type="hidden" name="active" value="{{ active_style }}">
-            <input type="hidden" name="text" value="{{ preview_text }}">
-            <input type="hidden" name="aspect" value="{{ preview_aspect }}">
-            <label class="field"><span>&#39044;&#35272;&#32972;&#26223;&#35270;&#39057;&#24103;</span><input type="file" name="video" accept="video/*" required></label>
-            <button class="secondary-button" type="submit">&#19978;&#20256;&#24182;&#25277;&#21462;&#39044;&#35272;&#24103;</button>
-          </form>
-          <div class="field">
-            <span>画幅比例</span>
-            <div class="segmented aspect-control" role="group" aria-label="画幅比例">
-              {% for item in ["9:16", "16:9", "1:1", "4:5"] %}
-              <label><input type="radio" name="preview_aspect_choice" value="{{ item }}" {{ 'checked' if preview_aspect == item else '' }}><span>{{ item }}</span></label>
-              {% endfor %}
-            </div>
-          </div>
-          <label class="field"><span>&#39044;&#35272;&#25991;&#26696;</span><input id="preview-text" type="text" value="{{ preview_text }}"></label>
-          <div class="video-preview precise-preview-surface" id="preview-surface" data-aspect="{{ preview_aspect }}">
-            {% if preview %}<img src="{{ preview }}" alt="&#35270;&#39057;&#39044;&#35272;&#24103;">{% endif %}
-            <div id="subtitle-preview" class="subtitle-preview">{{ preview_text }}</div>
-            <img id="accurate-preview" class="accurate-preview-image" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="&#31934;&#30830;&#39044;&#35272;&#22270;">
-          </div>
-        </aside>
       </div>
     </main>
   </div>
@@ -434,7 +449,7 @@
       preview.style.textShadow = [shadowCss, glowCss].filter(Boolean).join(", ") || "none";
       preview.style.background = data.get("background_enabled") ? rgbaFromHex(firstValue(data, "background_color", "#000000"), Number(firstValue(data, "background_opacity", 52))) : "transparent";
       preview.style.padding = data.get("background_enabled") ? `${Math.max(4, Number(firstValue(data, "background_padding", 18)) * 0.32)}px` : "0";
-      preview.style.borderRadius = data.get("background_enabled") ? "8px" : "0";
+      preview.style.borderRadius = data.get("background_enabled") ? "6px" : "0";
       preview.style.left = `calc(50% + ${x}px)`;
       preview.style.top = `calc(50% + ${y}px)`;
       preview.style.bottom = "auto";
