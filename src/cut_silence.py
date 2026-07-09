@@ -30,7 +30,7 @@ def detect_silences(video: Path, noise: str, min_duration: float) -> list[Segmen
         "null",
         "-",
     ]
-    proc = subprocess.run(cmd, text=True, capture_output=True, check=False)
+    proc = subprocess.run(cmd, text=True, encoding="utf-8", errors="replace", capture_output=True, check=False)
     if proc.returncode != 0:
         raise RuntimeError(proc.stderr.strip() or "ffmpeg silencedetect failed")
 

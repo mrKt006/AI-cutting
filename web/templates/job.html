@@ -14,11 +14,7 @@
   <div class="app-shell">
     <header class="topbar">
       <a class="brand" href="/" aria-label="返回 AI-cutting 首页">
-        <span class="brand-mark" aria-hidden="true">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <path d="M4 7.5h7.5M4 16.5h7.5M15.5 4l4 8-4 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </span>
+        <span class="brand-mark" aria-hidden="true">AI</span>
         <span>
           <strong>AI-cutting</strong>
           <small>任务详情</small>
@@ -51,12 +47,12 @@
           {% endif %}
 
           {% set job_items = job.params.get("items", []) %}
-          {% if job_items|length > 1 %}
+          {% if job_items %}
           <div class="surface-block">
             <div class="surface-head">
               <div>
-                <p class="section-kicker">批量</p>
-                <h2>批量视频</h2>
+                <p class="section-kicker">视频</p>
+                <h2>任务视频</h2>
               </div>
             </div>
             <div class="queue-list">
@@ -64,12 +60,21 @@
               <div class="queue-item">
                 <span class="queue-main">
                   <strong>{{ item.title }}</strong>
-                  <small>{{ item.source_name }}</small>
+                  <small>{{ item.source_name or item.id }}</small>
                 </span>
-                <em class="{{ item.status }}">{{ status_labels.get(item.status, item.status) }}</em>
+                <span class="queue-actions">
+                  <em class="{{ item.status }}">{{ status_labels.get(item.status, item.status) }}</em>
+                  {% if item.status == "done" %}
+                  <a class="ghost-link" href="/jobs/{{ job.id }}/edit?item={{ item.id }}">进入精修</a>
+                  {% endif %}
+                </span>
               </div>
               {% endfor %}
             </div>
+          </div>
+          {% elif job.status == "done" %}
+          <div class="surface-block">
+            <a class="primary-action small" href="/jobs/{{ job.id }}/edit?item=001">进入精修</a>
           </div>
           {% endif %}
 
@@ -85,7 +90,7 @@
               {% for file in files %}
               <a href="/jobs/{{ job.id }}/download/{{ file.name }}" class="download-card">
                 <span>
-                  <strong>{{ file.label }}</strong>
+                  <strong>{{ file.description }}</strong>
                   <small>{{ file.name }}</small>
                 </span>
                 <em>{{ file.size }}</em>

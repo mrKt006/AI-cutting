@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>精修 {{ job.id }}</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="editor-body">
+  <div class="editor-shell">
+    <header class="editor-topbar">
+      <a class="brand compact" href="/jobs/{{ job.id }}">
+        <span class="brand-mark" aria-hidden="true">AI</span>
+        <span>
+          <strong>精修台</strong>
+          <small>{{ job.id }} / {{ item_id }}</small>
+        </span>
+      </a>
+      <div class="editor-actions">
+        <span id="save-state" class="save-state">已保存</span>
+        <button id="save-btn" class="secondary-action" type="button">保存</button>
+        <button id="render-btn" class="primary-action" type="button">导出精修版</button>
+      </div>
+    </header>
+
+    <main class="edit-workspace">
+      <aside class="sentence-panel">
+        <div class="panel-head">
+          <span>句子</span>
+          <strong id="sentence-count">0</strong>
+        </div>
+        <div id="sentence-list" class="sentence-list"></div>
+      </aside>
+
+      <section class="stage-panel">
+        <div class="video-stage">
+          <video id="edit-video" src="{{ video_url }}" controls preload="metadata"></video>
+          <div id="subtitle-preview" class="edit-subtitle-preview"></div>
+        </div>
+        <div class="timeline-head">
+          <span>视频轨道</span>
+          <small>点击句子定位，删除句子会同步剪掉对应视频片段</small>
+        </div>
+        <div id="timeline" class="edit-timeline"></div>
+      </section>
+
+      <aside class="edit-inspector">
+        <section class="inspector-section">
+          <div class="panel-head">
+            <span>当前字幕</span>
+            <strong id="current-range">--</strong>
+          </div>
+          <textarea id="subtitle-text" rows="6" placeholder="选择左侧句子后编辑字幕"></textarea>
+          <div class="inline-actions">
+            <button id="delete-btn" class="danger-action" type="button">删除这段</button>
+            <button id="recover-btn" class="secondary-action" type="button">恢复</button>
+          </div>
+        </section>
+
+        <section class="inspector-section">
+          <div class="panel-head">
+            <span>封面标题</span>
+          </div>
+          <textarea id="cover-title" rows="4" placeholder="可手动换行，最终封面会按这里渲染"></textarea>
+          <label class="check-line">
+            <input id="show-video-title" type="checkbox">
+            <span>后续片头标题也使用这段文字</span>
+          </label>
+        </section>
+
+        <section class="inspector-section output-section">
+          <div class="panel-head">
+            <span>精修输出</span>
+          </div>
+          <div id="render-status" class="render-status">还没有导出精修版</div>
+          <div id="render-files" class="render-files"></div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const project = {{ project|tojson }};
+    const apiUrl = `/api/jobs/{{ job.id }}/edit-project?item={{ item_id }}`;
+    const renderUrl = `/jobs/{{ job.id }}/render-edited?item={{ item_id }}`;
+    const video = document.getElementById("edit-video");
+    const list = document.getElementById("sentence-list");
+    const timeline = document.getElementById("timeline");
+    const subtitleText = document.getElementById("subtitle-text");
+    const subtitlePreview = document.getElementById("subtitle-preview");
+    const currentRange = document.getElementById("current-range");
+    const saveState = document.getElementById("save-state");
+    const coverTitle = document.getElementById("cover-title");
+    const showVideoTitle = document.getElementById("show-video-title");
+    const renderStatus = document.getElementById("render-status");
+    const renderFiles = document.getElementById("render-files");
+    let selectedId = project.sentences[0]?.id || null;
+    let dirty = false;
+
+    function formatTime(value) {
+      const total = Math.max(0, Number(value || 0));
+      const minute = Math.floor(total / 60);
+      const second = Math.floor(total % 60).toString().padStart(2, "0");
+      return `${minute}:${second}`;
+    }
+
+    function selectedSentence() {
+      return project.sentences.find((item) => item.id === selectedId) || project.sentences[0] || null;
+    }
+
+    function setDirty(value = true) {
+      dirty = value;
+      saveState.textContent = dirty ? "有未保存修改" : "已保存";
+      saveState.classList.toggle("dirty", dirty);
+    }
+
+    function renderList() {
+      list.innerHTML = "";
+      document.getElementById("sentence-count").textContent = project.sentences.length;
+      project.sentences.forEach((sentence, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "sentence-item";
+        button.classList.toggle("active", sentence.id === selectedId);
+        button.classList.toggle("removed", sentence.remove_video);
+        button.innerHTML = `<span>${String(index + 1).padStart(2, "0")} · ${formatTime(sentence.start)}</span><strong></strong>`;
+        button.querySelector("strong").textContent = sentence.text || sentence.original_text || "空字幕";
+        button.addEventListener("click", () => {
+          selectedId = sentence.id;
+          video.currentTime = sentence.start;
+          renderAll();
+        });
+        list.appendChild(button);
+      });
+    }
+
+    function renderTimeline() {
+      timeline.innerHTML = "";
+      const duration = Math.max(0.1, Number(project.duration || video.duration || 1));
+      project.sentences.forEach((sentence) => {
+        const item = document.createElement("button");
+        const start = Math.max(0, Number(sentence.start || 0));
+        const end = Math.max(start + 0.1, Number(sentence.end || start + 0.1));
+        item.type = "button";
+        item.className = "timeline-segment";
+        item.classList.toggle("active", sentence.id === selectedId);
+        item.classList.toggle("removed", sentence.remove_video);
+        item.style.left = `${Math.min(99, (start / duration) * 100)}%`;
+        item.style.width = `${Math.max(0.8, ((end - start) / duration) * 100)}%`;
+        item.title = sentence.text || sentence.original_text;
+        item.addEventListener("click", () => {
+          selectedId = sentence.id;
+          video.currentTime = sentence.start;
+          renderAll();
+        });
+        timeline.appendChild(item);
+      });
+    }
+
+    function renderInspector() {
+      const sentence = selectedSentence();
+      coverTitle.value = project.title?.cover_text || "";
+      showVideoTitle.checked = Boolean(project.title?.show_video_title);
+      if (!sentence) {
+        subtitleText.value = "";
+        subtitleText.disabled = true;
+        currentRange.textContent = "--";
+        subtitlePreview.textContent = "";
+        return;
+      }
+      subtitleText.disabled = false;
+      subtitleText.value = sentence.text || "";
+      currentRange.textContent = `${formatTime(sentence.start)} - ${formatTime(sentence.end)}`;
+      subtitlePreview.textContent = sentence.remove_video ? "" : (sentence.text || sentence.original_text || "");
+    }
+
+    function renderOutputs() {
+      const outputs = project.outputs || {};
+      const entries = Object.entries(outputs);
+      renderFiles.innerHTML = "";
+      if (!entries.length) return;
+      renderStatus.textContent = "精修版已生成";
+      entries.forEach(([key, value]) => {
+        const path = String(value);
+        const name = path.split(/[\\/]/).pop();
+        const item = document.createElement("div");
+        item.textContent = `${key}: ${name}`;
+        renderFiles.appendChild(item);
+      });
+    }
+
+    function renderAll() {
+      renderList();
+      renderTimeline();
+      renderInspector();
+      renderOutputs();
+    }
+
+    subtitleText.addEventListener("input", () => {
+      const sentence = selectedSentence();
+      if (!sentence) return;
+      sentence.text = subtitleText.value;
+      sentence.edited = sentence.text !== sentence.original_text;
+      subtitlePreview.textContent = sentence.remove_video ? "" : sentence.text;
+      setDirty();
+      renderList();
+      renderTimeline();
+    });
+
+    coverTitle.addEventListener("input", () => {
+      project.title = project.title || {};
+      project.title.cover_text = coverTitle.value;
+      setDirty();
+    });
+
+    showVideoTitle.addEventListener("change", () => {
+      project.title = project.title || {};
+      project.title.show_video_title = showVideoTitle.checked;
+      setDirty();
+    });
+
+    document.getElementById("delete-btn").addEventListener("click", () => {
+      const sentence = selectedSentence();
+      if (!sentence) return;
+      sentence.remove_video = true;
+      sentence.enabled = false;
+      setDirty();
+      renderAll();
+    });
+
+    document.getElementById("recover-btn").addEventListener("click", () => {
+      const sentence = selectedSentence();
+      if (!sentence) return;
+      sentence.remove_video = false;
+      sentence.enabled = true;
+      setDirty();
+      renderAll();
+    });
+
+    document.getElementById("save-btn").addEventListener("click", async () => {
+      saveState.textContent = "保存中";
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(project),
+      });
+      if (!response.ok) {
+        saveState.textContent = "保存失败";
+        return;
+      }
+      const data = await response.json();
+      Object.assign(project, data.project);
+      setDirty(false);
+      renderAll();
+    });
+
+    document.getElementById("render-btn").addEventListener("click", async () => {
+      renderStatus.textContent = "正在导出";
+      const response = await fetch(renderUrl, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(project),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        renderStatus.textContent = `导出失败：${text.slice(0, 120)}`;
+        return;
+      }
+      const data = await response.json();
+      project.outputs = {};
+      (data.outputs || []).forEach((file) => {
+        project.outputs[file.description] = file.path;
+      });
+      setDirty(false);
+      renderAll();
+    });
+
+    video.addEventListener("timeupdate", () => {
+      const current = project.sentences.find((sentence) => video.currentTime >= sentence.start && video.currentTime <= sentence.end);
+      if (current && current.id !== selectedId) {
+        selectedId = current.id;
+        renderAll();
+      }
+    });
+
+    window.addEventListener("beforeunload", (event) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
+
+    renderAll();
+  </script>
+</body>
+</html>

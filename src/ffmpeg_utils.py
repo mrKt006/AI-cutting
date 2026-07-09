@@ -7,7 +7,7 @@ from safe_json import loads_json
 
 
 def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(cmd, text=True, capture_output=True, check=True)
+    return subprocess.run(cmd, text=True, encoding="utf-8", errors="replace", capture_output=True, check=True)
 
 
 def require_tool(name: str) -> None:

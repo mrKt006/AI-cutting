@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--export-subtitles", action="store_true", help="keep subtitle.ass and subtitle.srt in output")
     parser.add_argument("--export-asr-json", action="store_true", help="keep Volcengine segment JSON in output")
     parser.add_argument("--export-report", action="store_true", help="keep edit_report.json in output")
+    parser.add_argument("--editor-work-dir", default=None, help="internal directory for visual editor source assets")
     parser.add_argument("--no-cut", action="store_true", help="skip silence cutting")
     parser.add_argument("--detect-disfluency", action="store_true", help="report repeated utterance candidates without cutting them")
     return parser.parse_args()
@@ -96,6 +97,11 @@ def main() -> int:
                 timeout=args.volc_timeout,
                 chinese_script=args.chinese_script,
             )
+            if args.editor_work_dir:
+                editor_work_dir = Path(args.editor_work_dir)
+                editor_work_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(working_video, editor_work_dir / "cut_no_subtitles.mp4")
+                _write_timing_segments(external_segments, editor_work_dir / "volcengine_segments.json")
             if args.export_asr_json:
                 _write_timing_segments(external_segments, output_dir / "volcengine_segments.json")
             cues = make_cues_from_timing_text(

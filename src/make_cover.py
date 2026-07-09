@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import re
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 
+from ffmpeg_utils import run
 from style_presets import DEFAULT_STYLE_PRESETS, hex_to_rgba
 
 
@@ -13,11 +13,8 @@ def make_cover(video: Path, title: str, output: Path, style: dict | None = None)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         frame = Path(tmp) / "frame.jpg"
-        subprocess.run(
+        run(
             ["ffmpeg", "-y", "-i", str(video), "-frames:v", "1", "-q:v", "2", str(frame)],
-            text=True,
-            capture_output=True,
-            check=True,
         )
         try:
             _draw_title(frame, title, output, style=style)

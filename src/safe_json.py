@@ -7,6 +7,7 @@ from typing import Any
 
 
 def loads_json(text: str, source: str, *, repair_backslashes: bool = True) -> Any:
+    text = text.lstrip("\ufeff")
     try:
         return json.loads(text)
     except json.JSONDecodeError as exc:
