@@ -2273,10 +2273,9 @@ legend {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 8px;
-  background: rgba(248, 250, 252, 0.78);
-  border-radius: 2px;
-  opacity: 0.34;
+  width: 12px;
+  background: transparent;
+  opacity: 1;
   cursor: ew-resize;
   transition: opacity 120ms ease;
   z-index: 5;
@@ -2285,25 +2284,34 @@ legend {
 .trim-handle::before {
   content: "";
   position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: 3px;
-  width: 2px;
-  background: rgba(15, 23, 42, 0.62);
-  border-radius: 2px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(191, 219, 254, 0.72);
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
 
 .trim-handle.left {
-  left: 3px;
+  left: 0;
+}
+
+.trim-handle.left::before {
+  left: 0;
 }
 
 .trim-handle.right {
-  right: 3px;
+  right: 0;
 }
 
-.timeline-segment:hover .trim-handle,
-.timeline-segment.active .trim-handle,
-.timeline-segment.gap-block .trim-handle {
+.trim-handle.right::before {
+  right: 0;
+}
+
+.timeline-segment:hover .trim-handle::before,
+.timeline-segment.active .trim-handle::before,
+.timeline-segment.gap-block .trim-handle::before,
+.trim-handle:hover::before {
   opacity: 1;
 }
 

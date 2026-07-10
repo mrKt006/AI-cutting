@@ -882,6 +882,39 @@
       return orderedSentences().filter((sentence) => !sentence.remove_video && clipDuration(sentence) > 0.05);
     }
 
+    function activeSourceSentences() {
+      return activeTimelineSentences()
+        .filter((sentence) => !isGapSentence(sentence))
+        .sort((a, b) => clipStart(a) - clipStart(b));
+    }
+
+    function removedSentenceAtTime(time) {
+      return orderedSentences().find((sentence) => {
+        if (isGapSentence(sentence) || (!sentence.remove_video && sentence.enabled)) return false;
+        return time >= clipStart(sentence) && time < clipEnd(sentence);
+      }) || null;
+    }
+
+    function nextActiveSourceSentenceAfter(time) {
+      return activeSourceSentences().find((sentence) => clipEnd(sentence) > time + 0.01) || null;
+    }
+
+    function skipRemovedPlaybackIfNeeded() {
+      if (video.paused || isManualTimeSyncLocked()) return false;
+      const time = Number(video.currentTime || 0);
+      if (!removedSentenceAtTime(time)) return false;
+      const next = nextActiveSourceSentenceAfter(time);
+      if (next) {
+        selectedId = next.id;
+        video.currentTime = Math.max(0, clipStart(next) + 0.001);
+        renderAll();
+      } else {
+        video.pause();
+        updatePlaybackButton();
+      }
+      return true;
+    }
+
     function isGapSentence(sentence) {
       return Boolean(sentence.gap) && !sentence.remove_video;
     }
@@ -1369,7 +1402,10 @@
     function setPreviewText(element, value) {
       const rawText = String(value || "").trim();
       const text = element === subtitlePreview ? rawText.replace(/\s+/g, " ") : rawText;
-      element.textContent = text;
+      const isEditing = document.activeElement === element && element.isContentEditable;
+      if (!isEditing && element.textContent !== text) {
+        element.textContent = text;
+      }
       element.classList.toggle("is-empty", !text);
       element.setAttribute("aria-hidden", text ? "false" : "true");
     }
@@ -1606,7 +1642,12 @@
       sentence.text = String(value || "").replace(/\s+/g, " ").trim();
       sentence.edited = sentence.text !== sentence.original_text;
       lockManualTimeSync();
-      setPreviewText(subtitlePreview, sentence.remove_video || !sentence.enabled ? "" : sentence.text);
+      if (document.activeElement !== subtitlePreview) {
+        setPreviewText(subtitlePreview, sentence.remove_video || !sentence.enabled ? "" : sentence.text);
+      } else {
+        subtitlePreview.classList.toggle("is-empty", !sentence.text);
+        subtitlePreview.setAttribute("aria-hidden", sentence.text ? "false" : "true");
+      }
       applyTextStyle(subtitlePreview, subtitleStyle, false);
       fitSingleLineText(subtitlePreview);
       setDirty();
@@ -2987,6 +3028,7 @@
 
     video.addEventListener("timeupdate", () => {
       if (stopPreviewClipIfNeeded()) return;
+      if (skipRemovedPlaybackIfNeeded()) return;
       if (isManualTimeSyncLocked()) {
         updateTimelinePlayhead();
         return;
