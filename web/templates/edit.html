@@ -20,6 +20,7 @@
       <div class="editor-transport" aria-label="播放控制">
         <button id="prev-btn" class="tool-button" type="button">上一句</button>
         <button id="play-btn" class="tool-button" type="button">播放</button>
+        <button id="play-selection-btn" class="tool-button" type="button">预览本句</button>
         <button id="next-btn" class="tool-button" type="button">下一句</button>
         <button id="split-playhead-btn" class="tool-button" type="button">播放头切割</button>
         <button id="snap-toggle-btn" class="tool-button is-on" type="button">磁吸开</button>
@@ -41,6 +42,7 @@
       </div>
       <div class="shortcut-grid">
         <span>播放 / 暂停</span><kbd>Space</kbd>
+        <span>预览当前片段</span><kbd>P</kbd>
         <span>选择工具</span><kbd>V</kbd>
         <span>切割工具</span><kbd>C</kbd>
         <span>播放头切割</span><kbd>B</kbd>
@@ -252,6 +254,7 @@
     const renderStatus = document.getElementById("render-status");
     const renderFiles = document.getElementById("render-files");
     const renderBtn = document.getElementById("render-btn");
+    const playSelectionBtn = document.getElementById("play-selection-btn");
     const timelineZoom = document.getElementById("timeline-zoom");
     const timelineTime = document.getElementById("timeline-time");
     const timelineStatus = document.getElementById("timeline-status");
@@ -283,6 +286,7 @@
     let freeDropEnabled = false;
     let timelineTool = "select";
     let clipInspectorCommitting = false;
+    let previewClipEndTime = null;
     let trimmingClipId = null;
     let trimmingSide = null;
     let trimmingKind = "";
@@ -774,6 +778,45 @@
       renderAll();
       const label = edge === "start" ? "入点" : "出点";
       setTimelineStatus(`已跳到${label} ${formatPreciseTime(time)}`, 1200);
+      return true;
+    }
+
+    async function previewSelectedClip() {
+      const sentence = selectedSentence();
+      if (!sentence || isGapSentence(sentence)) {
+        setTimelineStatus("请选择视频片段后再预览", 1400);
+        return false;
+      }
+      const start = clipStart(sentence);
+      const end = clipEnd(sentence);
+      if (end <= start + 0.03) {
+        setTimelineStatus("当前片段太短，无法预览", 1400);
+        return false;
+      }
+      lockManualTimeSync(Math.max(1200, (end - start) * 1000 + 500));
+      previewClipEndTime = end;
+      selectedId = sentence.id;
+      video.currentTime = Math.max(0, start + 0.001);
+      setTimelineStatus(`预览当前片段 ${formatPreciseTime(start)} - ${formatPreciseTime(end)}`);
+      try {
+        await video.play();
+        return true;
+      } catch {
+        previewClipEndTime = null;
+        setTimelineStatus("浏览器阻止自动播放，请手动点击播放", 1600);
+        return false;
+      }
+    }
+
+    function stopPreviewClipIfNeeded() {
+      if (previewClipEndTime === null) return false;
+      if (video.currentTime < previewClipEndTime - 0.006) return false;
+      const endedAt = previewClipEndTime;
+      previewClipEndTime = null;
+      video.pause();
+      video.currentTime = endedAt;
+      setTimelineStatus(`片段预览结束 ${formatPreciseTime(endedAt)}`, 1200);
+      updateTimelinePlayhead();
       return true;
     }
 
@@ -1290,6 +1333,7 @@
     function seekToSentence(sentence) {
       if (!sentence) return;
       selectedId = sentence.id;
+      previewClipEndTime = null;
       lockManualTimeSync();
       if (!isGapSentence(sentence)) {
         video.currentTime = Math.max(0, Number(sentence.start ?? sentence.clip_start ?? 0) + 0.001);
@@ -2876,8 +2920,10 @@
     document.getElementById("prev-btn").addEventListener("click", () => selectByOffset(-1));
     document.getElementById("next-btn").addEventListener("click", () => selectByOffset(1));
     document.getElementById("play-btn").addEventListener("click", () => video.paused ? video.play() : video.pause());
+    playSelectionBtn.addEventListener("click", previewSelectedClip);
 
     video.addEventListener("timeupdate", () => {
+      if (stopPreviewClipIfNeeded()) return;
       if (isManualTimeSyncLocked()) {
         updateTimelinePlayhead();
         return;
@@ -2979,6 +3025,8 @@
         updateModeButtons();
       } else if (event.key.toLowerCase() === "b") {
         splitAtPlayhead();
+      } else if (event.key.toLowerCase() === "p") {
+        previewSelectedClip();
       } else if (event.key.toLowerCase() === "i") {
         if (event.shiftKey) jumpToSelectedClipEdge("start");
         else setSelectedClipEdgeToPlayhead("start");
