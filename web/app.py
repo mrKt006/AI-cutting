@@ -47,6 +47,10 @@ JOB_SECRETS: dict[str, dict[str, str]] = {}
 SETTINGS_PATH = ROOT / "web" / "settings.local.json"
 STYLE_PRESETS_PATH = ROOT / "web" / "style_presets.local.json"
 PREVIEW_DIR = ROOT / "web" / "static" / "style_previews"
+WINDOWS_TOOL_DIRS = [
+    Path.home() / "AppData" / "Local" / "Microsoft" / "WinGet" / "Links",
+    Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links",
+]
 
 PRESETS = {
     "natural": {"label": "自然", "noise": "-30dB", "min_silence": 0.45, "padding": 0.12},
@@ -82,12 +86,7 @@ async def unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
 def index(request: Request) -> HTMLResponse:
     settings = _load_settings()
     style_presets = load_style_presets(STYLE_PRESETS_PATH)
-    env = {
-        "volc_ready": bool(
-            (os.environ.get("VOLC_APP_ID") and os.environ.get("VOLC_ACCESS_TOKEN"))
-            or (settings.get("volc_app_id") and settings.get("volc_access_token"))
-        ),
-    }
+    env = _runtime_status(settings)
     return templates.TemplateResponse(
         request=request,
         name="index.html",
@@ -362,6 +361,9 @@ async def create_job(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if preset not in PRESETS:
         raise HTTPException(status_code=400, detail="Unsupported preset")
+    runtime = _runtime_status(settings)
+    if not runtime["ffmpeg_ready"]:
+        raise HTTPException(status_code=400, detail="本机未检测到 FFmpeg / FFprobe，请先安装并确保命令行可直接运行。")
     has_env_creds = bool(os.environ.get("VOLC_APP_ID") and os.environ.get("VOLC_ACCESS_TOKEN"))
     has_saved_creds = bool(settings.get("volc_app_id") and settings.get("volc_access_token"))
     if not has_env_creds and not has_saved_creds:
@@ -591,7 +593,7 @@ def _run_job(job_id: str) -> None:
         _append_log(job_dir, f"工作目录: {ROOT}")
         _append_log(job_dir, "字幕源: 火山引擎")
         _append_log(job_dir, f"样式预设: {params.get('style_preset_id') or 'default-white'}")
-        env = os.environ.copy()
+        env = _augment_tool_path(os.environ.copy())
         secrets = JOB_SECRETS.pop(job_id, {})
         for key, value in secrets.items():
             if value:
@@ -1783,6 +1785,58 @@ def _load_settings() -> dict[str, Any]:
 
 def _save_settings(settings: dict[str, Any]) -> None:
     SETTINGS_PATH.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _known_tool_dirs() -> list[Path]:
+    seen: set[str] = set()
+    dirs: list[Path] = []
+    for directory in WINDOWS_TOOL_DIRS:
+        if not str(directory):
+            continue
+        try:
+            resolved = directory.resolve()
+        except OSError:
+            continue
+        key = str(resolved).lower()
+        if key in seen or not resolved.exists():
+            continue
+        seen.add(key)
+        dirs.append(resolved)
+    return dirs
+
+
+def _ensure_runtime_tool_path() -> None:
+    current = os.environ.get("PATH", "")
+    current_parts = {part.lower() for part in current.split(os.pathsep) if part}
+    extras = [str(directory) for directory in _known_tool_dirs() if str(directory).lower() not in current_parts]
+    if extras:
+        os.environ["PATH"] = os.pathsep.join(extras + [current])
+
+
+def _augment_tool_path(env: dict[str, str]) -> dict[str, str]:
+    current = env.get("PATH", "")
+    current_parts = {part.lower() for part in current.split(os.pathsep) if part}
+    extras = [str(directory) for directory in _known_tool_dirs() if str(directory).lower() not in current_parts]
+    if extras:
+        env["PATH"] = os.pathsep.join(extras + [current])
+    return env
+
+
+def _runtime_status(settings: dict[str, Any] | None = None) -> dict[str, Any]:
+    settings = settings or {}
+    _ensure_runtime_tool_path()
+    ffmpeg_path = shutil.which("ffmpeg")
+    ffprobe_path = shutil.which("ffprobe")
+    volc_ready = bool(
+        (os.environ.get("VOLC_APP_ID") and os.environ.get("VOLC_ACCESS_TOKEN"))
+        or (settings.get("volc_app_id") and settings.get("volc_access_token"))
+    )
+    return {
+        "ffmpeg_ready": bool(ffmpeg_path and ffprobe_path),
+        "ffmpeg_path": ffmpeg_path or "",
+        "ffprobe_path": ffprobe_path or "",
+        "volc_ready": volc_ready,
+    }
 
 
 def _load_json_file(path: Path) -> dict[str, Any]:

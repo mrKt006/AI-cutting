@@ -26,6 +26,9 @@
         <a class="nav-link is-active" href="/">任务</a>
         <a class="nav-link" href="/style-presets">样式预设</a>
         <a class="nav-link" href="/settings">设置</a>
+        <span class="service-state {{ 'ok' if env.ffmpeg_ready else 'warn' }}" title="{{ env.ffmpeg_path if env.ffmpeg_ready else '未检测到 ffmpeg / ffprobe' }}">
+          <span class="dot"></span>FFmpeg {{ '可用' if env.ffmpeg_ready else '缺失' }}
+        </span>
         <span class="service-state {{ 'ok' if env.volc_ready else 'warn' }}">
           <span class="dot"></span>火山 {{ '已配置' if env.volc_ready else '未配置' }}
         </span>
@@ -114,11 +117,11 @@
             </fieldset>
 
             <div class="submit-row">
-              <button class="primary-button" type="submit">
+              <button class="primary-button" type="submit" {{ 'disabled' if not env.ffmpeg_ready else '' }}>
                 <span class="button-idle">开始处理</span>
                 <span class="button-busy">任务创建中...</span>
               </button>
-              <p>未勾选的素材不会额外生成，保持输出目录干净。</p>
+              <p>{{ '请先安装 FFmpeg / FFprobe，再开始处理。' if not env.ffmpeg_ready else '未勾选的素材不会额外生成，保持输出目录干净。' }}</p>
             </div>
           </form>
         </section>

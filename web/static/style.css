@@ -185,6 +185,12 @@ small {
   border: 1px solid #25694f;
 }
 
+.service-state.warn {
+  color: #f8d7a0;
+  background: #3a2612;
+  border-color: #7c4a18;
+}
+
 .dot {
   width: 7px;
   height: 7px;
