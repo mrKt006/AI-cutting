@@ -279,6 +279,7 @@
     let contextMenu = null;
     let contextTarget = null;
     let timelineStatusTimer = null;
+    const manualSelectionLockMs = 1800;
     const timelineTrackOffset = 44;
     const defaultTimelineStatus = "拖动片段调整顺序，拖两端裁切；按 Alt 拖动可留空。";
 
@@ -379,6 +380,14 @@
       }
     }
 
+    function lockManualTimeSync(duration = manualSelectionLockMs) {
+      suppressTimeSyncUntil = performance.now() + duration;
+    }
+
+    function isManualTimeSyncLocked() {
+      return performance.now() < suppressTimeSyncUntil;
+    }
+
     function pushHistory() {
       undoStack.push(snapshotProject());
       if (undoStack.length > 80) undoStack.shift();
@@ -424,6 +433,7 @@
       selectedId = id;
       selectedIds = new Set([id]);
       lastSelectedId = id;
+      lockManualTimeSync();
     }
 
     function toggleSentenceSelection(id) {
@@ -475,7 +485,7 @@
       const count = selectedSentences().length;
       const visibleCount = visibleSentences().length;
       const multi = count > 1;
-      selectionTools.hidden = visibleCount <= 1;
+      selectionTools.hidden = !multi;
       selectionCount.textContent = `已选 ${count} 段`;
       document.getElementById("select-visible-btn").disabled = visibleCount <= 1 || count === visibleCount;
       document.getElementById("clear-selection-btn").disabled = count <= 1;
@@ -740,7 +750,7 @@
       const hit = timelineLookup(clamp(time, 0, activeTimelineDuration()));
       if (!hit) return;
       selectedId = hit.sentence.id;
-      suppressTimeSyncUntil = performance.now() + 280;
+      lockManualTimeSync();
       if (!isGapSentence(hit.sentence)) {
         video.currentTime = clamp(hit.sourceTime, clipStart(hit.sentence), clipEnd(hit.sentence));
       }
@@ -1192,7 +1202,7 @@
     function seekToSentence(sentence) {
       if (!sentence) return;
       selectedId = sentence.id;
-      suppressTimeSyncUntil = performance.now() + 280;
+      lockManualTimeSync();
       if (!isGapSentence(sentence)) {
         video.currentTime = Math.max(0, Number(sentence.start ?? sentence.clip_start ?? 0) + 0.001);
       }
@@ -1376,6 +1386,7 @@
       if (!sentence) return;
       sentence.text = String(value || "").replace(/\s+/g, " ").trim();
       sentence.edited = sentence.text !== sentence.original_text;
+      lockManualTimeSync();
       setPreviewText(subtitlePreview, sentence.remove_video || !sentence.enabled ? "" : sentence.text);
       applyTextStyle(subtitlePreview, subtitleStyle, false);
       fitSingleLineText(subtitlePreview);
@@ -1463,12 +1474,17 @@
       const row = event.target.closest(".sentence-item");
       if (!row || !list.contains(row)) return;
       const editable = row.querySelector(".sentence-edit");
-      if (event.target === editable && editable.isContentEditable) return;
       const sentence = project.sentences.find((item) => item.id === row.dataset.clipId);
       if (!sentence) return;
-      if (event.target === editable && sentence.id === selectedId) return;
+      if (event.target === editable && sentence.id === selectedId) {
+        event.preventDefault();
+        focusEditableText(editable, true);
+        return;
+      }
       selectedId = sentence.id;
-      suppressTimeSyncUntil = performance.now() + 280;
+      selectedIds = new Set([sentence.id]);
+      lastSelectedId = sentence.id;
+      lockManualTimeSync();
       try {
         video.currentTime = Math.max(0, Number(sentence.start ?? sentence.clip_start ?? 0) + 0.001);
       } catch {
@@ -2019,7 +2035,7 @@
           const hit = timelineLookup(time);
           if (!hit) return;
           selectedId = hit.sentence.id;
-          suppressTimeSyncUntil = performance.now() + 280;
+          lockManualTimeSync();
           if (!isGapSentence(hit.sentence)) {
             video.currentTime = hit.sourceTime;
           }
@@ -2349,7 +2365,12 @@
       if (event.key !== "Enter") return;
       event.preventDefault();
       updateSelectedText(editable.textContent);
-      splitSentenceAt(sentenceCaretOffset(editable));
+      const cursor = sentenceCaretOffset(editable);
+      if (cursor <= 0) {
+        mergeSentence("prev");
+      } else {
+        splitSentenceAt(cursor);
+      }
     }
 
     function insertTimelineGap() {
@@ -2698,7 +2719,10 @@
     document.getElementById("play-btn").addEventListener("click", () => video.paused ? video.play() : video.pause());
 
     video.addEventListener("timeupdate", () => {
-      if (performance.now() < suppressTimeSyncUntil) return;
+      if (isManualTimeSyncLocked()) {
+        updateTimelinePlayhead();
+        return;
+      }
       const current = sentenceAtTime(video.currentTime);
       if (current && current.id !== selectedId && document.activeElement !== subtitlePreview && !document.activeElement?.isContentEditable) {
         selectedId = current.id;

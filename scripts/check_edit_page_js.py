@@ -66,6 +66,10 @@ def main() -> int:
         "拖动片段调整顺序",
         "defaultTimelineStatus",
         "setTimelineStatus",
+        "manualSelectionLockMs",
+        "lockManualTimeSync",
+        "isManualTimeSyncLocked",
+        "handleEditableEnter",
         'project.preview_source !== "clean-no-subtitles"',
         "当前任务没有无字幕精修源",
     ]
