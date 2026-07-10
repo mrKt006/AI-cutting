@@ -52,6 +52,7 @@
         <span>微调入点</span><kbd>Alt + [ / ]</kbd>
         <span>微调出点</span><kbd>Alt + , / .</kbd>
         <span>播放头设入/出点</span><kbd>I / O</kbd>
+        <span>跳到入/出点</span><kbd>Shift + I / O</kbd>
         <span>隐藏字幕</span><kbd>H</kbd>
         <span>插入空隙</span><kbd>G</kbd>
       </div>
@@ -173,6 +174,8 @@
             <input id="clip-duration" type="number" step="0.05" min="0.05">
           </label>
           <div class="clip-step-grid" aria-label="片段步进微调">
+            <button id="clip-jump-start-btn" class="tool-button" type="button">跳到入点</button>
+            <button id="clip-jump-end-btn" class="tool-button" type="button">跳到出点</button>
             <button id="clip-set-start-btn" class="tool-button" type="button">入点=播放头</button>
             <button id="clip-set-end-btn" class="tool-button" type="button">出点=播放头</button>
             <button class="tool-button" type="button" data-clip-nudge="start:-0.05">入点 -0.05</button>
@@ -241,6 +244,8 @@
     const clipRange = document.getElementById("clip-range");
     const clipHint = document.getElementById("clip-hint");
     const clipNudgeButtons = [...document.querySelectorAll("[data-clip-nudge]")];
+    const clipJumpStartBtn = document.getElementById("clip-jump-start-btn");
+    const clipJumpEndBtn = document.getElementById("clip-jump-end-btn");
     const clipSetStartBtn = document.getElementById("clip-set-start-btn");
     const clipSetEndBtn = document.getElementById("clip-set-end-btn");
     const subtitleOffset = document.getElementById("subtitle-offset");
@@ -581,7 +586,7 @@
       [clipStartInput, clipEndInput, clipDurationInput].forEach((input) => {
         input.disabled = disabled;
       });
-      [clipSetStartBtn, clipSetEndBtn].forEach((button) => {
+      [clipJumpStartBtn, clipJumpEndBtn, clipSetStartBtn, clipSetEndBtn].forEach((button) => {
         button.disabled = disabled;
       });
       clipNudgeButtons.forEach((button) => {
@@ -610,8 +615,9 @@
       clipStartInput.disabled = Boolean(sentence.synthetic_gap);
       clipEndInput.disabled = false;
       clipDurationInput.disabled = false;
-      clipSetStartBtn.disabled = isGap;
-      clipSetEndBtn.disabled = isGap;
+      [clipJumpStartBtn, clipJumpEndBtn, clipSetStartBtn, clipSetEndBtn].forEach((button) => {
+        button.disabled = isGap;
+      });
       clipNudgeButtons.forEach((button) => {
         const edge = String(button.dataset.clipNudge || "").split(":")[0];
         button.disabled = Boolean(sentence.synthetic_gap && edge === "start");
@@ -750,6 +756,24 @@
       const rect = block?.getBoundingClientRect();
       showTrimTooltip(rect ? rect.left + rect.width / 2 : window.innerWidth / 2, rect ? rect.top - 6 : 80, clipTrimLabel(sentence));
       setTimeout(hideTrimTooltip, 850);
+      return true;
+    }
+
+    function jumpToSelectedClipEdge(edge) {
+      const sentence = selectedSentence();
+      if (!sentence || isGapSentence(sentence)) {
+        setTimelineStatus("请选择视频片段后再跳转入点/出点", 1400);
+        return false;
+      }
+      const time = edge === "start"
+        ? clipStart(sentence)
+        : Math.max(clipStart(sentence), clipEnd(sentence) - 0.001);
+      lockManualTimeSync();
+      video.currentTime = time;
+      selectedId = sentence.id;
+      renderAll();
+      const label = edge === "start" ? "入点" : "出点";
+      setTimelineStatus(`已跳到${label} ${formatPreciseTime(time)}`, 1200);
       return true;
     }
 
@@ -2760,6 +2784,8 @@
         nudgeSelectedClip(edge, Number(delta || 0));
       });
     });
+    clipJumpStartBtn.addEventListener("click", () => jumpToSelectedClipEdge("start"));
+    clipJumpEndBtn.addEventListener("click", () => jumpToSelectedClipEdge("end"));
     clipSetStartBtn.addEventListener("click", () => setSelectedClipEdgeToPlayhead("start"));
     clipSetEndBtn.addEventListener("click", () => setSelectedClipEdgeToPlayhead("end"));
 
@@ -2954,9 +2980,11 @@
       } else if (event.key.toLowerCase() === "b") {
         splitAtPlayhead();
       } else if (event.key.toLowerCase() === "i") {
-        setSelectedClipEdgeToPlayhead("start");
+        if (event.shiftKey) jumpToSelectedClipEdge("start");
+        else setSelectedClipEdgeToPlayhead("start");
       } else if (event.key.toLowerCase() === "o") {
-        setSelectedClipEdgeToPlayhead("end");
+        if (event.shiftKey) jumpToSelectedClipEdge("end");
+        else setSelectedClipEdgeToPlayhead("end");
       } else if (event.key.toLowerCase() === "h") {
         hideSelectedSubtitle();
       } else if (event.key.toLowerCase() === "r") {
