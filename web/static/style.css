@@ -1874,8 +1874,14 @@ legend {
   line-height: 1.12;
   text-align: center;
   text-shadow: 0 2px 0 #000, 0 0 8px #000;
-  pointer-events: none;
+  cursor: text;
+  outline: 0;
+  pointer-events: auto;
   white-space: pre-wrap;
+}
+
+.edit-title-preview:focus {
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.5);
 }
 
 .timeline-head {

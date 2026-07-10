@@ -102,7 +102,7 @@
         <div class="video-stage">
           <div class="video-frame" id="video-frame">
             <video id="edit-video" src="{{ video_url }}" controls preload="metadata"></video>
-            <div id="title-preview" class="edit-title-preview"></div>
+            <div id="title-preview" class="edit-title-preview" contenteditable="true" spellcheck="false" aria-label="直接编辑画面标题"></div>
             <div id="subtitle-preview" class="edit-subtitle-preview" contenteditable="true" spellcheck="false" aria-label="直接编辑预览字幕"></div>
           </div>
         </div>
@@ -1197,6 +1197,20 @@
       element.textContent = text;
       element.classList.toggle("is-empty", !text);
       element.setAttribute("aria-hidden", text ? "false" : "true");
+    }
+
+    function updateSelectedTitleText(value) {
+      const clip = titleClip();
+      if (!clip) return;
+      clip.text = String(value || "").trim();
+      project.title.video_text = clip.text;
+      if (clip.use_for_cover && !project.title.cover_text.trim()) {
+        project.title.cover_text = clip.text;
+      }
+      syncTitleGlobalState();
+      lockManualTimeSync();
+      titleText.value = clip.text;
+      setDirty();
     }
 
     function seekToSentence(sentence) {
@@ -2559,6 +2573,32 @@
 
     subtitlePreview.addEventListener("blur", () => {
       delete subtitlePreview.dataset.historyActive;
+      renderAll();
+    });
+
+    titlePreview.addEventListener("input", () => {
+      updateSelectedTitleText(titlePreview.textContent || "");
+      renderTimeline();
+    });
+
+    titlePreview.addEventListener("focus", () => {
+      const clip = titleClip();
+      if (!titlePreview.dataset.historyActive) {
+        pushHistory();
+        titlePreview.dataset.historyActive = "1";
+      }
+      if (clip) titlePreview.textContent = clip.text || "";
+    });
+
+    titlePreview.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      titlePreview.blur();
+    });
+
+    titlePreview.addEventListener("blur", () => {
+      delete titlePreview.dataset.historyActive;
+      updateSelectedTitleText(titlePreview.textContent || "");
       renderAll();
     });
 

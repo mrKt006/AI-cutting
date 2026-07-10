@@ -70,6 +70,9 @@ def main() -> int:
         "lockManualTimeSync",
         "isManualTimeSyncLocked",
         "handleEditableEnter",
+        'id="title-preview" class="edit-title-preview" contenteditable="true"',
+        "updateSelectedTitleText",
+        'titlePreview.addEventListener("input"',
         'project.preview_source !== "clean-no-subtitles"',
         "当前任务没有无字幕精修源",
     ]
