@@ -1395,6 +1395,34 @@
       selection.addRange(range);
     }
 
+    function focusSubtitlePreviewFromTimeline(sentence) {
+      if (!sentence || isGapSentence(sentence)) return;
+      setSingleSelection(sentence.id);
+      renderAll();
+      requestAnimationFrame(() => {
+        setPreviewText(subtitlePreview, sentence.text || sentence.original_text || "");
+        applyTextStyle(subtitlePreview, subtitleStyle, false);
+        fitSingleLineText(subtitlePreview);
+        focusEditableText(subtitlePreview, true);
+        setTimelineStatus("正在编辑字幕文字", 1200);
+      });
+    }
+
+    function focusTitlePreviewFromTimeline(clip) {
+      if (!clip) return;
+      selectedTitleId = clip.id;
+      clip.enabled = true;
+      syncTitleGlobalState();
+      setDirty();
+      renderAll();
+      requestAnimationFrame(() => {
+        setPreviewText(titlePreview, clip.text || "");
+        applyTextStyle(titlePreview, {...titleStyle, position_y: titleStyle.position_y ?? -520}, true);
+        focusEditableText(titlePreview, true);
+        setTimelineStatus("正在编辑标题文字", 1200);
+      });
+    }
+
     function updateSelectedText(value) {
       const sentence = selectedSentence();
       if (!sentence) return;
@@ -1909,6 +1937,11 @@
         selectedTitleId = clip.id;
         renderAll();
       });
+      block.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        focusTitlePreviewFromTimeline(clip);
+      });
       block.addEventListener("contextmenu", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -2126,6 +2159,14 @@
             }
             selectSentenceFromEvent(event, sentence, !(event.ctrlKey || event.metaKey || event.shiftKey));
           });
+          if (block === subtitleBlock) {
+            block.addEventListener("dblclick", (event) => {
+              if (timelineTool === "split") return;
+              event.preventDefault();
+              event.stopPropagation();
+              focusSubtitlePreviewFromTimeline(sentence);
+            });
+          }
           block.addEventListener("contextmenu", (event) => {
             event.preventDefault();
             event.stopPropagation();

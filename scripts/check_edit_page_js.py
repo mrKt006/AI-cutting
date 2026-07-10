@@ -70,6 +70,8 @@ def main() -> int:
         "lockManualTimeSync",
         "isManualTimeSyncLocked",
         "handleEditableEnter",
+        "focusSubtitlePreviewFromTimeline",
+        "focusTitlePreviewFromTimeline",
         'id="title-preview" class="edit-title-preview" contenteditable="true"',
         "updateSelectedTitleText",
         'titlePreview.addEventListener("input"',
