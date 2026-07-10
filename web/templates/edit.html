@@ -20,7 +20,7 @@
       <div class="editor-transport" aria-label="播放控制">
         <button id="prev-btn" class="tool-button" type="button">上一句</button>
         <button id="play-btn" class="tool-button" type="button">播放</button>
-        <button id="play-selection-btn" class="tool-button" type="button">预览本句</button>
+        <button id="play-selection-btn" class="tool-button" type="button" aria-pressed="false">预览本句</button>
         <button id="next-btn" class="tool-button" type="button">下一句</button>
         <button id="split-playhead-btn" class="tool-button" type="button">播放头切割</button>
         <button id="snap-toggle-btn" class="tool-button is-on" type="button">磁吸开</button>
@@ -781,7 +781,24 @@
       return true;
     }
 
+    function setPreviewClipActive(active) {
+      playSelectionBtn.classList.toggle("is-on", active);
+      playSelectionBtn.setAttribute("aria-pressed", active ? "true" : "false");
+      playSelectionBtn.textContent = active ? "停止预览" : "预览本句";
+    }
+
+    function cancelPreviewClip(message = "") {
+      if (previewClipEndTime === null) return false;
+      previewClipEndTime = null;
+      video.pause();
+      setPreviewClipActive(false);
+      if (message) setTimelineStatus(message, 1200);
+      updateTimelinePlayhead();
+      return true;
+    }
+
     async function previewSelectedClip() {
+      if (cancelPreviewClip("已停止片段预览")) return false;
       const sentence = selectedSentence();
       if (!sentence || isGapSentence(sentence)) {
         setTimelineStatus("请选择视频片段后再预览", 1400);
@@ -797,12 +814,14 @@
       previewClipEndTime = end;
       selectedId = sentence.id;
       video.currentTime = Math.max(0, start + 0.001);
+      setPreviewClipActive(true);
       setTimelineStatus(`预览当前片段 ${formatPreciseTime(start)} - ${formatPreciseTime(end)}`);
       try {
         await video.play();
         return true;
       } catch {
         previewClipEndTime = null;
+        setPreviewClipActive(false);
         setTimelineStatus("浏览器阻止自动播放，请手动点击播放", 1600);
         return false;
       }
@@ -815,6 +834,7 @@
       previewClipEndTime = null;
       video.pause();
       video.currentTime = endedAt;
+      setPreviewClipActive(false);
       setTimelineStatus(`片段预览结束 ${formatPreciseTime(endedAt)}`, 1200);
       updateTimelinePlayhead();
       return true;
@@ -1333,7 +1353,7 @@
     function seekToSentence(sentence) {
       if (!sentence) return;
       selectedId = sentence.id;
-      previewClipEndTime = null;
+      cancelPreviewClip();
       lockManualTimeSync();
       if (!isGapSentence(sentence)) {
         video.currentTime = Math.max(0, Number(sentence.start ?? sentence.clip_start ?? 0) + 0.001);
@@ -2919,7 +2939,10 @@
 
     document.getElementById("prev-btn").addEventListener("click", () => selectByOffset(-1));
     document.getElementById("next-btn").addEventListener("click", () => selectByOffset(1));
-    document.getElementById("play-btn").addEventListener("click", () => video.paused ? video.play() : video.pause());
+    document.getElementById("play-btn").addEventListener("click", () => {
+      cancelPreviewClip();
+      video.paused ? video.play() : video.pause();
+    });
     playSelectionBtn.addEventListener("click", previewSelectedClip);
 
     video.addEventListener("timeupdate", () => {
@@ -3016,6 +3039,7 @@
       }
       if (event.code === "Space") {
         event.preventDefault();
+        cancelPreviewClip();
         video.paused ? video.play() : video.pause();
       } else if (event.key.toLowerCase() === "v") {
         timelineTool = "select";
