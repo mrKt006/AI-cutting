@@ -208,6 +208,7 @@ def _ass_time(seconds: float) -> str:
 
 
 def _ass_text(text: str) -> str:
-    text = text.replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}")
+    text = str(text).replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}").replace("\n", r"\N")
     text = MARK_RE.sub(lambda match: r"{\c&H00FFFF&}" + match.group(1) + r"{\c&H00FFFFFF&}", text)
     return text

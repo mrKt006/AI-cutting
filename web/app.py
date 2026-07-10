@@ -1,12 +1,17 @@
 ﻿from __future__ import annotations
 
 import json
+import math
 import os
+import re
 import shutil
+import struct
 import subprocess
 import sys
 import threading
+import traceback
 import uuid
+import wave
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -20,9 +25,9 @@ from fastapi.templating import Jinja2Templates
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from cut_silence import Segment, cut_video  # noqa: E402
-from ffmpeg_utils import ffmpeg_filter_path, media_duration, video_size  # noqa: E402
+from ffmpeg_utils import ffmpeg_filter_path, media_duration, run as ffmpeg_run, video_size  # noqa: E402
 from make_cover import make_cover  # noqa: E402
-from make_subtitle import SubtitleCue, write_ass  # noqa: E402
+from make_subtitle import SubtitleCue  # noqa: E402
 from render_video import burn_subtitles  # noqa: E402
 from safe_json import read_json_file  # noqa: E402
 from style_presets import (  # noqa: E402
@@ -60,6 +65,17 @@ STAGES = {
 app = FastAPI(title="AI-cutting Web")
 templates = Jinja2Templates(directory=str(ROOT / "web" / "templates"))
 app.mount("/static", StaticFiles(directory=str(ROOT / "web" / "static")), name="static")
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
+    match = re.search(r"/jobs/([^/?#]+)", request.url.path)
+    if match:
+        try:
+            _write_web_traceback(_job_path(match.group(1)), "web-unhandled", exc)
+        except Exception:
+            pass
+    return JSONResponse(status_code=500, content={"detail": "服务器内部错误，诊断信息已记录"})
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -465,6 +481,11 @@ def edit_page(request: Request, job_id: str, item: str = "001") -> HTMLResponse:
     job_dir = _job_path(job_id)
     job = _read_job(job_id)
     project = _load_or_create_edit_project(job_dir, job, item)
+    video_path = Path(project["current_video"])
+    style_preset = get_style_preset(project.get("style_preset_id") or "default-white", STYLE_PRESETS_PATH)
+    editor_assets = _safe_editor_assets(job_dir, project)
+    project = dict(project)
+    project["output_files"] = [file for file in _output_files(job_id) if file["name"].startswith(f"edited/{project['item_id']}/")]
     return templates.TemplateResponse(
         request=request,
         name="edit.html",
@@ -474,7 +495,11 @@ def edit_page(request: Request, job_id: str, item: str = "001") -> HTMLResponse:
             "item_id": project["item_id"],
             "project": project,
             "project_json": json.dumps(project, ensure_ascii=False),
-            "video_url": _download_url_for_path(job_dir, Path(project["current_video"])),
+            "video_url": _media_url_for_path(job_dir, video_path),
+            "video_info": _editor_video_info(video_path),
+            "editor_assets": editor_assets,
+            "subtitle_style": style_preset.get("subtitle") or {},
+            "title_style": style_preset.get("cover_title") or {},
         },
     )
 
@@ -489,26 +514,36 @@ def api_edit_project(job_id: str, item: str = "001") -> dict[str, Any]:
 @app.post("/api/jobs/{job_id}/edit-project")
 async def api_save_edit_project(job_id: str, request: Request, item: str = "001") -> dict[str, Any]:
     job_dir = _job_path(job_id)
-    existing = _load_or_create_edit_project(job_dir, _read_job(job_id), item)
-    payload = await request.json()
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="编辑项目格式无效")
-    project = _sanitize_edit_project({**existing, **payload}, existing)
-    _write_edit_project(job_dir, project)
-    return {"ok": True, "project": project}
+    try:
+        existing = _load_or_create_edit_project(job_dir, _read_job(job_id), item)
+        payload = await _read_json_object(request, source="保存精修项目", required=True)
+        project = _sanitize_edit_project({**existing, **payload}, existing)
+        _write_edit_project(job_dir, project)
+        return {"ok": True, "project": project}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _write_web_traceback(job_dir, "save-edit-project", exc)
+        raise HTTPException(status_code=500, detail="保存精修项目失败，诊断信息已写入任务目录") from exc
 
 
 @app.post("/jobs/{job_id}/render-edited")
 async def render_edited(job_id: str, request: Request, item: str = "001") -> JSONResponse:
     job_dir = _job_path(job_id)
-    job = _read_job(job_id)
-    project = _load_or_create_edit_project(job_dir, job, item)
-    payload = await request.json()
-    if isinstance(payload, dict) and payload:
-        project = _sanitize_edit_project({**project, **payload}, project)
-        _write_edit_project(job_dir, project)
-    result = _render_edit_project(job_dir, job, project)
-    return JSONResponse({"ok": True, "outputs": result, "files": _output_files(job_id)})
+    try:
+        job = _read_job(job_id)
+        project = _load_or_create_edit_project(job_dir, job, item)
+        payload = await _read_json_object(request, source="导出精修项目", required=False)
+        if payload:
+            project = _sanitize_edit_project({**project, **payload}, project)
+            _write_edit_project(job_dir, project)
+        result = _render_edit_project(job_dir, job, project)
+        return JSONResponse({"ok": True, "outputs": result, "files": _output_files(job_id)})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _write_web_traceback(job_dir, "render-edited", exc)
+        raise HTTPException(status_code=500, detail="导出精修版失败，诊断信息已写入任务目录") from exc
 
 
 @app.get("/jobs/{job_id}/download/{name:path}")
@@ -517,6 +552,31 @@ def download(job_id: str, name: str) -> FileResponse:
     if name not in files:
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(files[name]["path"], filename=files[name]["download_name"])
+
+
+@app.get("/jobs/{job_id}/editor-media/{name:path}")
+def editor_media(job_id: str, name: str) -> FileResponse:
+    job_dir = _job_path(job_id)
+    work_dir = (job_dir / "work").resolve()
+    path = (work_dir / name).resolve()
+    if not str(path).startswith(str(work_dir)) or not path.is_file():
+        raise HTTPException(status_code=404, detail="Editor media not found")
+    if path.suffix.lower() not in {".mp4", ".mov", ".m4v", ".jpg", ".jpeg", ".png"}:
+        raise HTTPException(status_code=404, detail="Editor media not found")
+    return FileResponse(path)
+
+
+@app.get("/jobs/{job_id}/editor-assets/{item_id}/{name:path}")
+def editor_assets(job_id: str, item_id: str, name: str) -> FileResponse:
+    job_dir = _job_path(job_id)
+    safe_item = _safe_path_segment(item_id) or "001"
+    asset_dir = (job_dir / "work" / "editor_assets" / safe_item).resolve()
+    path = (asset_dir / name).resolve()
+    if not str(path).startswith(str(asset_dir)) or not path.is_file():
+        raise HTTPException(status_code=404, detail="Editor asset not found")
+    if path.suffix.lower() not in {".jpg", ".jpeg", ".png", ".json"}:
+        raise HTTPException(status_code=404, detail="Editor asset not found")
+    return FileResponse(path)
 
 
 def _run_job(job_id: str) -> None:
@@ -689,6 +749,37 @@ def _write_job(job_dir: Path, job: dict[str, Any]) -> None:
     temp.replace(target)
 
 
+async def _read_json_object(request: Request, *, source: str, required: bool = True) -> dict[str, Any]:
+    body = await request.body()
+    if not body or not body.strip():
+        if required:
+            raise HTTPException(status_code=400, detail=f"{source}请求体不能为空")
+        return {}
+    try:
+        payload = json.loads(body.decode("utf-8-sig"))
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"{source}请求体必须是 UTF-8 JSON") from exc
+    except json.JSONDecodeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{source}JSON 格式无效：第 {exc.lineno} 行第 {exc.colno} 列",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail=f"{source}JSON 必须是对象")
+    return payload
+
+
+def _write_web_traceback(job_dir: Path, label: str, exc: BaseException) -> Path:
+    job_dir.mkdir(parents=True, exist_ok=True)
+    safe_label = re.sub(r"[^A-Za-z0-9_-]+", "-", label).strip("-") or "web-error"
+    path = job_dir / f"debug_traceback_{safe_label}.txt"
+    path.write_text(
+        "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+        encoding="utf-8",
+    )
+    return path
+
+
 def _update_job(job_dir: Path, **updates: Any) -> None:
     job = _load_job(job_dir)
     if "message" in updates:
@@ -723,11 +814,14 @@ def _load_or_create_edit_project(job_dir: Path, job: dict[str, Any], item_id: st
         title = item.get("title") or job.get("params", {}).get("title") or "未命名视频"
         segments = [{"start": 0.0, "end": max(0.2, duration), "text": title}]
 
-    project["sentences"] = [
+    sentences = [
         {
             "id": f"s{index:03d}",
             "start": round(float(segment["start"]), 3),
             "end": round(float(segment["end"]), 3),
+            "clip_start": round(float(segment["start"]), 3),
+            "clip_end": round(float(segment["end"]), 3),
+            "timeline_order": index,
             "original_text": str(segment.get("text") or "").strip(),
             "text": str(segment.get("text") or "").strip(),
             "enabled": True,
@@ -737,6 +831,14 @@ def _load_or_create_edit_project(job_dir: Path, job: dict[str, Any], item_id: st
         for index, segment in enumerate(segments, start=1)
         if float(segment.get("end", 0)) > float(segment.get("start", 0))
     ]
+    for index, sentence in enumerate(sentences):
+        if index == 0:
+            sentence["clip_start"] = 0.0
+        if index + 1 < len(sentences):
+            sentence["clip_end"] = max(sentence["clip_end"], sentences[index + 1]["start"])
+        else:
+            sentence["clip_end"] = max(sentence["clip_end"], project["duration"] or sentence["clip_end"])
+    project["sentences"] = sentences
     _write_edit_project(job_dir, project)
     return project
 
@@ -746,7 +848,8 @@ def _blank_edit_project(job_dir: Path, job: dict[str, Any], item: dict[str, Any]
     output_dir = Path(item.get("output_dir") or job_dir / "output")
     preview_video = _find_preview_video(output_dir)
     work_video = job_dir / "work" / item["id"] / "cut_no_subtitles.mp4"
-    render_source = work_video if work_video.exists() else preview_video
+    clean_source = work_video if work_video.exists() else None
+    render_source = clean_source or preview_video
     duration = 0.0
     for candidate in (render_source, preview_video, Path(item.get("video") or "")):
         if candidate and candidate.exists():
@@ -757,14 +860,27 @@ def _blank_edit_project(job_dir: Path, job: dict[str, Any], item: dict[str, Any]
                 continue
     title = item.get("title") or params.get("title") or "未命名视频"
     return {
-        "version": 1,
+        "version": 3,
         "job_id": job.get("id"),
         "item_id": item["id"],
         "title": {"cover_text": title, "video_text": "", "show_video_title": False},
+        "title_clips": [
+            {
+                "id": "t001",
+                "start": 0.0,
+                "end": min(max(duration, 0.2), 3.0),
+                "text": title,
+                "enabled": False,
+                "use_for_cover": True,
+            }
+        ],
+        "settings": {"subtitle_offset": 0.0},
         "style_preset_id": params.get("style_preset_id") or "default-white",
         "duration": duration,
-        "current_video": str(preview_video or render_source or ""),
+        "current_video": str(render_source or ""),
         "render_source_video": str(render_source or preview_video or ""),
+        "preview_source": "clean-no-subtitles" if clean_source else "burned-output-fallback",
+        "preview_warning": "" if clean_source else "这个任务没有无字幕精修源，预览可能出现双字幕。请重新处理一次视频后再精修。",
         "sentences": [],
         "outputs": {},
         "created_at": _now(),
@@ -774,6 +890,9 @@ def _blank_edit_project(job_dir: Path, job: dict[str, Any], item: dict[str, Any]
 
 def _sanitize_edit_project(project: dict[str, Any], existing: dict[str, Any]) -> dict[str, Any]:
     cleaned = dict(existing)
+    duration = max(0.0, float(project.get("duration") or existing.get("duration") or 0.0))
+    cleaned["version"] = 3
+    cleaned["duration"] = duration
     title = project.get("title") if isinstance(project.get("title"), dict) else {}
     old_title = existing.get("title") if isinstance(existing.get("title"), dict) else {}
     cleaned["title"] = {
@@ -781,33 +900,151 @@ def _sanitize_edit_project(project: dict[str, Any], existing: dict[str, Any]) ->
         "video_text": str(title.get("video_text", old_title.get("video_text", "")))[:800],
         "show_video_title": bool(title.get("show_video_title", old_title.get("show_video_title", False))),
     }
+    settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
+    old_settings = existing.get("settings") if isinstance(existing.get("settings"), dict) else {}
+    cleaned["settings"] = {
+        "subtitle_offset": _clamp_float(settings.get("subtitle_offset", old_settings.get("subtitle_offset", 0.0)), -5.0, 5.0),
+    }
     cleaned["style_preset_id"] = str(project.get("style_preset_id") or existing.get("style_preset_id") or "default-white")
-    sentence_by_id = {
+    old_sentences = {
         str(item.get("id")): item
-        for item in project.get("sentences", [])
+        for item in existing.get("sentences", [])
         if isinstance(item, dict) and item.get("id")
     }
-    cleaned_sentences = []
-    for original in existing.get("sentences", []):
-        incoming = sentence_by_id.get(str(original.get("id")), {})
-        text = str(incoming.get("text", original.get("text", ""))).strip()
-        cleaned_sentences.append(
-            {
-                "id": str(original.get("id")),
-                "start": float(original.get("start", 0.0)),
-                "end": float(original.get("end", 0.0)),
-                "original_text": str(original.get("original_text", "")),
-                "text": text[:1000],
-                "enabled": bool(incoming.get("enabled", original.get("enabled", True))),
-                "remove_video": bool(incoming.get("remove_video", original.get("remove_video", False))),
-                "edited": bool(incoming.get("edited", original.get("edited", False))) or text != str(original.get("original_text", "")),
-            }
-        )
-    cleaned["sentences"] = cleaned_sentences
+    incoming_sentences = project.get("sentences") if isinstance(project.get("sentences"), list) else existing.get("sentences", [])
+    cleaned["sentences"] = _sanitize_sentences(incoming_sentences, old_sentences, duration)
+    old_titles = {
+        str(item.get("id")): item
+        for item in existing.get("title_clips", [])
+        if isinstance(item, dict) and item.get("id")
+    }
+    incoming_titles = project.get("title_clips") if isinstance(project.get("title_clips"), list) else existing.get("title_clips", [])
+    cleaned["title_clips"] = _sanitize_title_clips(incoming_titles, old_titles, duration, cleaned["title"])
     if isinstance(project.get("outputs"), dict):
         cleaned["outputs"] = project["outputs"]
     cleaned["updated_at"] = _now()
     return cleaned
+
+
+def _sanitize_sentences(items: list[Any], old_by_id: dict[str, dict[str, Any]], duration: float) -> list[dict[str, Any]]:
+    cleaned: list[dict[str, Any]] = []
+    used_ids: set[str] = set()
+    needs_clip_init = False
+    for index, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            continue
+        sentence_id = _safe_clip_id(str(item.get("id") or f"s{index:03d}"), "s", index, used_ids)
+        original = old_by_id.get(sentence_id, {})
+        synthetic_gap = bool(item.get("synthetic_gap", original.get("synthetic_gap", False))) and bool(item.get("gap", original.get("gap", False)))
+        max_clip_end = 3600.0 if synthetic_gap else duration
+        start = _clamp_float(item.get("start", original.get("start", 0.0)), 0.0, max_clip_end)
+        end = _clamp_float(item.get("end", original.get("end", min(max_clip_end, start + 0.2))), 0.0, max_clip_end)
+        if end <= start:
+            end = min(max_clip_end, start + 0.2)
+        if "clip_start" not in item and "clip_start" not in original:
+            needs_clip_init = True
+        if "clip_end" not in item and "clip_end" not in original:
+            needs_clip_init = True
+        clip_start = _clamp_float(item.get("clip_start", original.get("clip_start", start)), 0.0, max_clip_end)
+        clip_end = _clamp_float(item.get("clip_end", original.get("clip_end", end)), 0.0, max_clip_end)
+        if clip_end <= clip_start:
+            clip_end = min(max_clip_end, clip_start + 0.05)
+        text = str(item.get("text", original.get("text", ""))).strip()[:1000]
+        original_text = str(item.get("original_text", original.get("original_text", text))).strip()[:1000]
+        cleaned.append(
+            {
+                "id": sentence_id,
+                "start": round(start, 3),
+                "end": round(end, 3),
+                "clip_start": round(clip_start, 3),
+                "clip_end": round(clip_end, 3),
+                "timeline_order": _clamp_float(item.get("timeline_order", original.get("timeline_order", index)), 0.0, 100000.0),
+                "original_text": original_text,
+                "text": text,
+                "enabled": bool(item.get("enabled", original.get("enabled", True))),
+                "remove_video": bool(item.get("remove_video", original.get("remove_video", False))),
+                "gap": bool(item.get("gap", original.get("gap", False))),
+                "synthetic_gap": synthetic_gap,
+                "edited": bool(item.get("edited", original.get("edited", False))) or text != original_text,
+            }
+        )
+    cleaned.sort(key=lambda item: (item["timeline_order"], item["start"], item["end"], item["id"]))
+    for index, item in enumerate(cleaned, start=1):
+        item["timeline_order"] = index
+    if needs_clip_init:
+        by_source_time = sorted(cleaned, key=lambda item: (item["start"], item["end"], item["id"]))
+        for index, item in enumerate(by_source_time):
+            if index == 0:
+                item["clip_start"] = 0.0
+            if index + 1 < len(by_source_time):
+                item["clip_end"] = round(max(float(item["clip_end"]), float(by_source_time[index + 1]["start"])), 3)
+            else:
+                item["clip_end"] = round(max(float(item["clip_end"]), duration), 3)
+    return cleaned
+
+
+def _sanitize_title_clips(
+    items: list[Any],
+    old_by_id: dict[str, dict[str, Any]],
+    duration: float,
+    title: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not items:
+        items = [
+            {
+                "id": "t001",
+                "start": 0.0,
+                "end": min(max(duration, 0.2), 3.0),
+                "text": title.get("video_text") or title.get("cover_text") or "",
+                "enabled": bool(title.get("show_video_title")),
+                "use_for_cover": True,
+            }
+        ]
+    cleaned: list[dict[str, Any]] = []
+    used_ids: set[str] = set()
+    for index, item in enumerate(items, start=1):
+        if not isinstance(item, dict):
+            continue
+        clip_id = _safe_clip_id(str(item.get("id") or f"t{index:03d}"), "t", index, used_ids)
+        original = old_by_id.get(clip_id, {})
+        start = _clamp_float(item.get("start", original.get("start", 0.0)), 0.0, duration)
+        end = _clamp_float(item.get("end", original.get("end", min(duration, start + 3.0))), 0.0, duration)
+        if end <= start:
+            end = min(duration, start + 0.2)
+        cleaned.append(
+            {
+                "id": clip_id,
+                "start": round(start, 3),
+                "end": round(end, 3),
+                "text": str(item.get("text", original.get("text", title.get("cover_text", ""))))[:800],
+                "enabled": bool(item.get("enabled", original.get("enabled", False))),
+                "use_for_cover": bool(item.get("use_for_cover", original.get("use_for_cover", False))),
+            }
+        )
+    cleaned.sort(key=lambda item: (item["start"], item["end"], item["id"]))
+    return cleaned
+
+
+def _safe_clip_id(value: str, prefix: str, index: int, used_ids: set[str]) -> str:
+    value = re.sub(r"[^A-Za-z0-9_-]+", "-", value).strip("-") or f"{prefix}{index:03d}"
+    if not value.startswith(prefix):
+        value = f"{prefix}-{value}"
+    base = value[:40]
+    candidate = base
+    offset = 2
+    while candidate in used_ids:
+        candidate = f"{base}-{offset}"
+        offset += 1
+    used_ids.add(candidate)
+    return candidate
+
+
+def _clamp_float(value: Any, minimum: float, maximum: float) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        number = minimum
+    return max(minimum, min(maximum, number))
 
 
 def _write_edit_project(job_dir: Path, project: dict[str, Any]) -> None:
@@ -820,46 +1057,75 @@ def _render_edit_project(job_dir: Path, job: dict[str, Any], project: dict[str, 
     source = Path(project.get("render_source_video") or project.get("current_video") or "")
     if not source.exists():
         raise HTTPException(status_code=400, detail="找不到可精修的视频源，请重新跑一次任务")
+    if not _is_clean_editor_source(job_dir, source):
+        raise HTTPException(status_code=400, detail="当前任务没有无字幕精修源，不能导出精修版。请重新处理一次视频后再进入精修台。")
     edited_dir = job_dir / "output" / "edited" / item["id"]
     edited_dir.mkdir(parents=True, exist_ok=True)
     duration = float(project.get("duration") or media_duration(source))
-    remove_segments = _merge_segments(
-        [
-            Segment(float(sentence["start"]), float(sentence["end"]))
-            for sentence in project.get("sentences", [])
-            if sentence.get("remove_video") and float(sentence.get("end", 0)) > float(sentence.get("start", 0))
-        ],
-        duration,
-    )
-    keep_segments = _keep_segments(duration, remove_segments)
+    timeline_clips = _timeline_clips(project, duration)
     no_subtitle = edited_dir / "精修无字幕.mp4"
-    if remove_segments:
-        cut_video(source, no_subtitle, keep_segments)
-    else:
-        shutil.copyfile(source, no_subtitle)
+    _render_timeline_video(source, no_subtitle, timeline_clips)
 
     preset = get_style_preset(project.get("style_preset_id") or "default-white", STYLE_PRESETS_PATH)
     width, height = video_size(no_subtitle)
     edited_duration = media_duration(no_subtitle)
-    cues = _edit_cues(project, remove_segments, edited_duration)
+    cues = _timeline_subtitle_cues(project, timeline_clips, edited_duration)
     ass_path = edited_dir / "精修字幕.ass"
-    write_ass(cues, ass_path, width=width, height=height, style=preset.get("subtitle"))
+    title_cues = _timeline_title_cues(project, edited_duration)
+    _write_edit_ass(cues, title_cues, ass_path, width=width, height=height, preset=preset)
     video_title = project.get("title", {}).get("cover_text") or item.get("title") or "精修视频"
     output_video = edited_dir / f"{_safe_output_basename(video_title)}-精修.mp4"
     burn_subtitles(no_subtitle, ass_path, output_video)
     cover_path = edited_dir / f"{_safe_output_basename(video_title)}-精修封面.jpg"
     make_cover(no_subtitle, video_title, cover_path, preset.get("cover_title"))
+    plan_path = edited_dir / "edit_plan.json"
+    manifest_path = edited_dir / "render_manifest.json"
+    plan = _build_edit_plan(project, timeline_clips, cues, title_cues, edited_duration)
+    plan_path.write_text(json.dumps(plan, ensure_ascii=True, indent=2), encoding="utf-8")
+    manifest = {
+        "job_id": job.get("id"),
+        "item_id": item["id"],
+        "input": {"source": str(source), "render_source": str(no_subtitle)},
+        "outputs": {
+            "edited_video": str(output_video),
+            "edited_cover": str(cover_path),
+            "edited_subtitle": str(ass_path),
+            "edit_plan": str(plan_path),
+        },
+        "duration": {"source": duration, "edited": edited_duration},
+        "created_at": _now(),
+        "errors": [],
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2), encoding="utf-8")
     project["outputs"] = {
         "edited_video": str(output_video),
         "edited_cover": str(cover_path),
         "edited_subtitle": str(ass_path),
+        "edit_plan": str(plan_path),
+        "render_manifest": str(manifest_path),
     }
     _write_edit_project(job_dir, project)
-    return [_output_file_item(job_dir, output_video), _output_file_item(job_dir, cover_path), _output_file_item(job_dir, ass_path)]
+    return [
+        _output_file_item(job_dir, output_video),
+        _output_file_item(job_dir, cover_path),
+        _output_file_item(job_dir, ass_path),
+        _output_file_item(job_dir, plan_path),
+        _output_file_item(job_dir, manifest_path),
+    ]
+
+
+def _is_clean_editor_source(job_dir: Path, source: Path) -> bool:
+    try:
+        resolved = source.resolve()
+        work_dir = (job_dir / "work").resolve()
+    except OSError:
+        return False
+    return source.name == "cut_no_subtitles.mp4" and str(resolved).startswith(str(work_dir))
 
 
 def _edit_cues(project: dict[str, Any], removed: list[Segment], duration: float) -> list[SubtitleCue]:
     cues = []
+    offset = float(project.get("settings", {}).get("subtitle_offset", 0.0))
     for sentence in project.get("sentences", []):
         if sentence.get("remove_video") or not sentence.get("enabled", True):
             continue
@@ -869,10 +1135,265 @@ def _edit_cues(project: dict[str, Any], removed: list[Segment], duration: float)
             continue
         mapped_start = _map_time_after_removes(start, removed)
         mapped_end = _map_time_after_removes(end, removed)
+        if mapped_start is None or mapped_end is None:
+            continue
+        mapped_start = max(0.0, mapped_start + offset)
+        mapped_end = min(duration, mapped_end + offset)
+        if mapped_end <= mapped_start:
+            continue
+        cues.append(SubtitleCue(index=len(cues) + 1, start=mapped_start, end=mapped_end, text=str(sentence.get("text") or "")))
+    return cues
+
+
+def _edit_title_cues(project: dict[str, Any], removed: list[Segment], duration: float) -> list[SubtitleCue]:
+    cues: list[SubtitleCue] = []
+    for clip in project.get("title_clips", []):
+        if not clip.get("enabled", False):
+            continue
+        mapped_start = _map_time_after_removes(float(clip.get("start", 0.0)), removed)
+        mapped_end = _map_time_after_removes(float(clip.get("end", 0.0)), removed)
         if mapped_start is None or mapped_end is None or mapped_end <= mapped_start:
             continue
-        cues.append(SubtitleCue(index=len(cues) + 1, start=mapped_start, end=min(mapped_end, duration), text=str(sentence.get("text") or "")))
+        cues.append(
+            SubtitleCue(
+                index=len(cues) + 1,
+                start=max(0.0, mapped_start),
+                end=min(duration, mapped_end),
+                text=str(clip.get("text") or ""),
+            )
+        )
     return cues
+
+
+def _timeline_clips(project: dict[str, Any], duration: float) -> list[dict[str, Any]]:
+    clips: list[dict[str, Any]] = []
+    for sentence in sorted(project.get("sentences", []), key=lambda item: (float(item.get("timeline_order", 0)), float(item.get("start", 0)))):
+        if sentence.get("remove_video"):
+            continue
+        if sentence.get("synthetic_gap") and sentence.get("gap"):
+            start = _clamp_float(sentence.get("clip_start", sentence.get("start", 0.0)), 0.0, 3600.0)
+            end = _clamp_float(sentence.get("clip_end", sentence.get("end", start + 1.0)), start + 0.05, 3600.0)
+        else:
+            start = _clamp_float(sentence.get("clip_start", sentence.get("start", 0.0)), 0.0, duration)
+            end = _clamp_float(sentence.get("clip_end", sentence.get("end", start)), 0.0, duration)
+        if end - start <= 0.05:
+            continue
+        clips.append({"sentence": sentence, "segment": Segment(start, end)})
+    if clips:
+        return clips
+    return [{"sentence": {}, "segment": Segment(0.0, duration)}]
+
+
+def _clip_is_gap(clip: dict[str, Any]) -> bool:
+    sentence = clip.get("sentence") if isinstance(clip.get("sentence"), dict) else {}
+    return bool(sentence.get("gap")) and not bool(sentence.get("remove_video"))
+
+
+def _render_timeline_video(source: Path, output: Path, clips: list[dict[str, Any]]) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    if not any(_clip_is_gap(clip) for clip in clips):
+        cut_video(source, output, [clip["segment"] for clip in clips])
+        return
+
+    width, height = video_size(source)
+    parts: list[str] = []
+    labels: list[str] = []
+    for index, clip in enumerate(clips):
+        segment = clip["segment"]
+        duration = max(0.05, float(segment.duration))
+        if _clip_is_gap(clip):
+            parts.append(
+                f"color=c=black:s={width}x{height}:r=30:d={duration:.3f},"
+                f"format=yuv420p,setsar=1[v{index}]"
+            )
+            parts.append(
+                f"anullsrc=channel_layout=stereo:sample_rate=44100:d={duration:.3f},"
+                f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a{index}]"
+            )
+        else:
+            parts.append(
+                f"[0:v]trim=start={segment.start:.3f}:end={segment.end:.3f},"
+                f"setpts=PTS-STARTPTS,scale={width}:{height},fps=30,format=yuv420p,setsar=1[v{index}]"
+            )
+            parts.append(
+                f"[0:a]atrim=start={segment.start:.3f}:end={segment.end:.3f},"
+                f"asetpts=PTS-STARTPTS,"
+                f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a{index}]"
+            )
+        labels.append(f"[v{index}][a{index}]")
+
+    filter_complex = ";".join(parts) + ";" + "".join(labels) + f"concat=n={len(clips)}:v=1:a=1[v][a]"
+    ffmpeg_run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(source),
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "[v]",
+            "-map",
+            "[a]",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "20",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "160k",
+            "-movflags",
+            "+faststart",
+            str(output),
+        ]
+    )
+
+
+def _timeline_subtitle_cues(project: dict[str, Any], clips: list[dict[str, Any]], duration: float) -> list[SubtitleCue]:
+    cues: list[SubtitleCue] = []
+    offset = float(project.get("settings", {}).get("subtitle_offset", 0.0))
+    cursor = 0.0
+    for clip in clips:
+        sentence = clip.get("sentence") or {}
+        segment = clip["segment"]
+        clip_duration = segment.duration
+        if sentence.get("enabled", True) and str(sentence.get("text") or "").strip():
+            source_start = _clamp_float(sentence.get("start", segment.start), segment.start, segment.end)
+            source_end = _clamp_float(sentence.get("end", segment.end), segment.start, segment.end)
+            cue_start = cursor + max(0.0, source_start - segment.start) + offset
+            cue_end = cursor + min(clip_duration, source_end - segment.start) + offset
+            cue_start = max(0.0, cue_start)
+            cue_end = min(duration, cue_end)
+            if cue_end > cue_start:
+                cues.append(SubtitleCue(index=len(cues) + 1, start=cue_start, end=cue_end, text=str(sentence.get("text") or "")))
+        cursor += clip_duration
+    return cues
+
+
+def _timeline_title_cues(project: dict[str, Any], duration: float) -> list[SubtitleCue]:
+    cues: list[SubtitleCue] = []
+    for clip in project.get("title_clips", []):
+        if not clip.get("enabled", False):
+            continue
+        start = _clamp_float(clip.get("start", 0.0), 0.0, duration)
+        end = _clamp_float(clip.get("end", start), 0.0, duration)
+        if end <= start:
+            continue
+        cues.append(SubtitleCue(index=len(cues) + 1, start=start, end=end, text=str(clip.get("text") or "")))
+    return cues
+
+
+def _write_edit_ass(
+    subtitle_cues: list[SubtitleCue],
+    title_cues: list[SubtitleCue],
+    path: Path,
+    *,
+    width: int,
+    height: int,
+    preset: dict[str, Any],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subtitle_style = preset.get("subtitle") or DEFAULT_STYLE_PRESETS[0]["subtitle"]
+    title_style = dict(DEFAULT_STYLE_PRESETS[0]["subtitle"])
+    title_style.update(preset.get("cover_title") or {})
+    title_style.setdefault("position_x", 0)
+    title_style.setdefault("position_y", -520)
+    title_style.setdefault("text_align", "center")
+    title_style.setdefault("opacity", 100)
+    lines = [
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        f"PlayResX: {width}",
+        f"PlayResY: {height}",
+        "WrapStyle: 2",
+        "ScaledBorderAndShadow: yes",
+        "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+        subtitle_to_ass_style(subtitle_style, width=width, height=height).replace("Style: Default,", "Style: Subtitle,", 1),
+        subtitle_to_ass_style(title_style, width=width, height=height).replace("Style: Default,", "Style: Title,", 1),
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+    for cue in subtitle_cues:
+        override = subtitle_override(subtitle_style, cue.start, cue.end, width=width, height=height)
+        lines.append(f"Dialogue: 0,{_ass_time(cue.start)},{_ass_time(cue.end)},Subtitle,,0,0,0,,{override}{_ass_text(cue.text)}")
+    for cue in title_cues:
+        override = subtitle_override(title_style, cue.start, cue.end, width=width, height=height)
+        lines.append(f"Dialogue: 1,{_ass_time(cue.start)},{_ass_time(cue.end)},Title,,0,0,0,,{override}{_ass_text(cue.text)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _build_edit_plan(
+    project: dict[str, Any],
+    clips: list[dict[str, Any]],
+    subtitle_cues: list[SubtitleCue],
+    title_cues: list[SubtitleCue],
+    duration: float,
+) -> dict[str, Any]:
+    cursor = 0.0
+    timeline_segments = []
+    for index, clip in enumerate(clips, start=1):
+        segment = clip["segment"]
+        sentence = clip.get("sentence") or {}
+        timeline_segments.append(
+            {
+                "index": index,
+                "sentence_id": sentence.get("id") or "",
+                "type": "gap" if sentence.get("gap") and not sentence.get("remove_video") else "source",
+                "text": sentence.get("text") or sentence.get("original_text") or "",
+                "source_start": segment.start,
+                "source_end": segment.end,
+                "timeline_start": round(cursor, 3),
+                "timeline_end": round(cursor + segment.duration, 3),
+                "subtitle_enabled": bool(sentence.get("enabled", True)),
+                "gap": bool(sentence.get("gap", False)),
+                "synthetic_gap": bool(sentence.get("synthetic_gap", False)),
+            }
+        )
+        cursor += segment.duration
+    return {
+        "version": 1,
+        "source_duration": float(project.get("duration") or 0.0),
+        "edited_duration": duration,
+        "timeline_segments": timeline_segments,
+        "removed_sentence_ids": [str(item.get("id")) for item in project.get("sentences", []) if item.get("remove_video")],
+        "subtitle_cues": [{"start": item.start, "end": item.end, "text": item.text} for item in subtitle_cues],
+        "title_cues": [{"start": item.start, "end": item.end, "text": item.text} for item in title_cues],
+        "title_clips": [
+            {
+                "id": str(item.get("id") or ""),
+                "start": float(item.get("start") or 0.0),
+                "end": float(item.get("end") or 0.0),
+                "text": str(item.get("text") or ""),
+                "enabled": bool(item.get("enabled", False)),
+                "use_for_cover": bool(item.get("use_for_cover", False)),
+            }
+            for item in project.get("title_clips", [])
+            if isinstance(item, dict)
+        ],
+        "render_settings": {
+            "style_preset_id": project.get("style_preset_id") or "default-white",
+            "subtitle_offset": project.get("settings", {}).get("subtitle_offset", 0.0),
+        },
+    }
+
+
+def _ass_time(seconds: float) -> str:
+    centiseconds = round(max(0.0, seconds) * 100)
+    hours, rem = divmod(centiseconds, 360_000)
+    minutes, rem = divmod(rem, 6_000)
+    sec, cs = divmod(rem, 100)
+    return f"{hours}:{minutes:02}:{sec:02}.{cs:02}"
+
+
+def _ass_text(text: str) -> str:
+    text = str(text).replace("\r\n", "\n").replace("\r", "\n")
+    return text.replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}").replace("\n", r"\N")
 
 
 def _map_time_after_removes(value: float, removed: list[Segment]) -> float | None:
@@ -924,6 +1445,10 @@ def _edit_project_path(job_dir: Path, item_id: str) -> Path:
     return job_dir / f"edit_project_{safe_item}.json"
 
 
+def _safe_path_segment(value: Any) -> str:
+    return "".join(char for char in str(value) if char.isalnum() or char in {"-", "_"})[:80]
+
+
 def _download_url_for_path(job_dir: Path, path: Path) -> str:
     output_dir = (job_dir / "output").resolve()
     resolved = path.resolve()
@@ -934,6 +1459,182 @@ def _download_url_for_path(job_dir: Path, path: Path) -> str:
         resolved = fallback.resolve()
     rel = resolved.relative_to(output_dir).as_posix()
     return f"/jobs/{job_dir.name}/download/{quote(rel)}"
+
+
+def _media_url_for_path(job_dir: Path, path: Path) -> str:
+    resolved = path.resolve()
+    output_dir = (job_dir / "output").resolve()
+    work_dir = (job_dir / "work").resolve()
+    if str(resolved).startswith(str(output_dir)):
+        rel = resolved.relative_to(output_dir).as_posix()
+        return f"/jobs/{job_dir.name}/download/{quote(rel)}"
+    if str(resolved).startswith(str(work_dir)):
+        rel = resolved.relative_to(work_dir).as_posix()
+        return f"/jobs/{job_dir.name}/editor-media/{quote(rel)}"
+    return _download_url_for_path(job_dir, path)
+
+
+def _safe_editor_assets(job_dir: Path, project: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return _ensure_editor_assets(job_dir, project)
+    except Exception as exc:
+        _write_web_traceback(job_dir, "editor-assets", exc)
+        return {"thumbs": [], "waveform": [], "duration": project.get("duration") or 0, "error": "editor_assets_failed"}
+
+
+def _ensure_editor_assets(job_dir: Path, project: dict[str, Any]) -> dict[str, Any]:
+    source = Path(project.get("render_source_video") or project.get("current_video") or "")
+    if not source.exists():
+        return {"thumbs": [], "waveform": [], "duration": project.get("duration") or 0, "error": "source_missing"}
+    item_id = _safe_path_segment(project.get("item_id") or "001") or "001"
+    asset_dir = job_dir / "work" / "editor_assets" / item_id
+    asset_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = asset_dir / "manifest.json"
+    source_signature = f"{source.resolve()}::{source.stat().st_size}::{source.stat().st_mtime_ns}"
+    if manifest_path.exists():
+        try:
+            manifest = read_json_file(manifest_path)
+            if manifest.get("source_signature") == source_signature:
+                return _editor_assets_payload(job_dir, item_id, manifest)
+        except RuntimeError:
+            pass
+
+    duration = float(project.get("duration") or media_duration(source))
+    width, height = video_size(source)
+    thumb_count = max(10, min(42, math.ceil(max(duration, 1.0) / 2.0)))
+    thumbs: list[dict[str, Any]] = []
+    for index in range(thumb_count):
+        time = min(max(duration - 0.05, 0.0), duration * (index + 0.5) / thumb_count)
+        filename = f"thumb_{index:03d}.jpg"
+        output = asset_dir / filename
+        ffmpeg_run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-ss",
+                f"{time:.3f}",
+                "-i",
+                str(source),
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=96:-2",
+                "-q:v",
+                "5",
+                str(output),
+            ]
+        )
+        thumbs.append({"time": round(time, 3), "file": filename})
+
+    waveform = _build_waveform(asset_dir, source, bars=360)
+    manifest = {
+        "version": 1,
+        "item_id": item_id,
+        "source": str(source),
+        "source_signature": source_signature,
+        "duration": duration,
+        "video": {"width": width, "height": height},
+        "thumbs": thumbs,
+        "waveform": waveform,
+        "created_at": _now(),
+    }
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2), encoding="utf-8")
+    return _editor_assets_payload(job_dir, item_id, manifest)
+
+
+def _editor_assets_payload(job_dir: Path, item_id: str, manifest: dict[str, Any]) -> dict[str, Any]:
+    thumbs = []
+    for item in manifest.get("thumbs", []):
+        if not isinstance(item, dict) or not item.get("file"):
+            continue
+        filename = quote(str(item["file"]))
+        thumbs.append(
+            {
+                "time": float(item.get("time") or 0.0),
+                "url": f"/jobs/{job_dir.name}/editor-assets/{quote(item_id)}/{filename}",
+            }
+        )
+    return {
+        "duration": float(manifest.get("duration") or 0.0),
+        "video": manifest.get("video") if isinstance(manifest.get("video"), dict) else {},
+        "thumbs": thumbs,
+        "waveform": manifest.get("waveform") if isinstance(manifest.get("waveform"), list) else [],
+        "error": manifest.get("error") or "",
+    }
+
+
+def _build_waveform(asset_dir: Path, source: Path, bars: int = 320) -> list[float]:
+    wav_path = asset_dir / "waveform.wav"
+    try:
+        ffmpeg_run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                str(source),
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "8000",
+                "-acodec",
+                "pcm_s16le",
+                str(wav_path),
+            ]
+        )
+        with wave.open(str(wav_path), "rb") as handle:
+            sample_width = handle.getsampwidth()
+            raw = handle.readframes(handle.getnframes())
+        if sample_width != 2 or not raw:
+            return []
+        sample_count = len(raw) // 2
+        samples = struct_unpack_int16(raw, sample_count)
+        if not samples:
+            return []
+        chunk_size = max(1, math.ceil(len(samples) / bars))
+        values: list[float] = []
+        for start in range(0, len(samples), chunk_size):
+            chunk = samples[start : start + chunk_size]
+            if not chunk:
+                continue
+            rms = math.sqrt(sum(value * value for value in chunk) / len(chunk)) / 32768
+            values.append(round(min(1.0, rms * 4.0), 4))
+        return values[:bars]
+    finally:
+        try:
+            wav_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def struct_unpack_int16(raw: bytes, sample_count: int) -> tuple[int, ...]:
+    return struct.unpack(f"<{sample_count}h", raw[: sample_count * 2])
+
+
+def _editor_video_info(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {"width": 0, "height": 0, "aspect": "--", "size": "--"}
+    try:
+        width, height = video_size(path)
+    except Exception:
+        return {"width": 0, "height": 0, "aspect": "--", "size": _format_size(path.stat().st_size)}
+    if height and abs(width / height - 9 / 16) < 0.04:
+        aspect = "9:16"
+    elif height and abs(width / height - 16 / 9) < 0.04:
+        aspect = "16:9"
+    elif width == height:
+        aspect = "1:1"
+    elif height and abs(width / height - 4 / 5) < 0.04:
+        aspect = "4:5"
+    else:
+        aspect = f"{width}:{height}"
+    return {"width": width, "height": height, "aspect": aspect, "size": _format_size(path.stat().st_size)}
 
 
 def _find_preview_video(output_dir: Path) -> Path | None:
@@ -1058,6 +1759,10 @@ def _file_description(path: Path) -> str:
         return "剪辑参数和片段报告"
     if name == "volcengine_segments.json":
         return "火山引擎识别结果"
+    if name == "edit_plan.json":
+        return "精修渲染计划"
+    if name == "render_manifest.json":
+        return "精修导出清单"
     return "输出文件"
 
 
@@ -1252,11 +1957,6 @@ def _preview_ass(text: str, style: dict[str, Any], width: int, height: int) -> s
             "",
         ]
     )
-
-
-def _ass_text(text: str) -> str:
-    return text.replace("\\", r"\\").replace("{", r"\{").replace("}", r"\}")
-
 
 def _form_str(form: Any, key: str, default: str) -> str:
     value = form.get(key)

@@ -35,7 +35,7 @@ SUSPICIOUS_PATTERNS = {
     "repeated question marks": re.compile(r"\?{3,}"),
     "replacement character": re.compile("\ufffd"),
     "common mojibake": re.compile(
-        r"(Ã|Â|â€|â€™|â€œ|â€�|鏂|浠|澶|杈|绗|鎶|鍙|棣|鐏|婵|鈱|€)"
+        r"(Ã|Â|â€|â€™|â€œ|â€�|鏄|涓|瀛|鐨|鍜|锛|銆|鏂|浠|澶|杈|绗|鎶|鍙|棣|鐏|婵|鈱|€)"
     ),
 }
 

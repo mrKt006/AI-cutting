@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>精修 {{ job.id }}</title>
+  <title>精修台 {{ job.id }}</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-43">
 </head>
 <body class="editor-body">
   <div class="editor-shell">
@@ -17,55 +17,175 @@
           <small>{{ job.id }} / {{ item_id }}</small>
         </span>
       </a>
+      <div class="editor-transport" aria-label="播放控制">
+        <button id="prev-btn" class="tool-button" type="button">上一句</button>
+        <button id="play-btn" class="tool-button" type="button">播放</button>
+        <button id="next-btn" class="tool-button" type="button">下一句</button>
+        <button id="split-playhead-btn" class="tool-button" type="button">播放头切割</button>
+        <button id="snap-toggle-btn" class="tool-button is-on" type="button">磁吸开</button>
+        <button id="ripple-toggle-btn" class="tool-button is-on" type="button">波纹删除</button>
+        <button id="undo-btn" class="tool-button" type="button" disabled>撤销</button>
+        <button id="redo-btn" class="tool-button" type="button" disabled>重做</button>
+      </div>
       <div class="editor-actions">
         <span id="save-state" class="save-state">已保存</span>
+        <button id="shortcut-help-btn" class="tool-button" type="button" aria-expanded="false" aria-controls="shortcut-panel">快捷键</button>
         <button id="save-btn" class="secondary-action" type="button">保存</button>
-        <button id="render-btn" class="primary-action" type="button">导出精修版</button>
+        <button id="render-btn" class="primary-action" type="button" {% if project.preview_source != "clean-no-subtitles" %}disabled title="当前任务没有无字幕精修源，请重新处理后再导出"{% endif %}>导出精修版</button>
       </div>
     </header>
+    <div id="shortcut-panel" class="shortcut-panel" hidden>
+      <div class="shortcut-panel-head">
+        <strong>快捷键</strong>
+        <button id="shortcut-close-btn" class="tool-button" type="button">关闭</button>
+      </div>
+      <div class="shortcut-grid">
+        <span>播放 / 暂停</span><kbd>Space</kbd>
+        <span>选择工具</span><kbd>V</kbd>
+        <span>切割工具</span><kbd>C</kbd>
+        <span>播放头切割</span><kbd>B</kbd>
+        <span>保存</span><kbd>Ctrl + S</kbd>
+        <span>撤销 / 重做</span><kbd>Ctrl + Z / Y</kbd>
+        <span>全选当前列表</span><kbd>Ctrl + A</kbd>
+        <span>移动所选字幕</span><kbd>Alt + ← / →</kbd>
+        <span>标题微移</span><kbd>Alt + Shift + ← / →</kbd>
+        <span>微调入点</span><kbd>Alt + [ / ]</kbd>
+        <span>微调出点</span><kbd>Alt + , / .</kbd>
+        <span>隐藏字幕</span><kbd>H</kbd>
+        <span>插入空隙</span><kbd>G</kbd>
+      </div>
+    </div>
 
-    <main class="edit-workspace">
+    <main class="edit-workspace roadmap-editor">
       <aside class="sentence-panel">
         <div class="panel-head">
-          <span>句子</span>
+          <span>字幕</span>
           <strong id="sentence-count">0</strong>
         </div>
-        <div id="sentence-list" class="sentence-list"></div>
+        <div class="sentence-tools">
+          <input id="sentence-search" class="compact-input" type="search" placeholder="搜索字幕">
+          <div class="filter-tabs" aria-label="句子筛选">
+            <button class="filter-tab active" type="button" data-filter="all" data-label="全部">全部</button>
+            <button class="filter-tab" type="button" data-filter="edited" data-label="已改">已改</button>
+            <button class="filter-tab" type="button" data-filter="removed" data-label="已删">已删</button>
+            <button class="filter-tab" type="button" data-filter="hidden" data-label="隐藏">隐藏</button>
+          </div>
+          <div id="sentence-filter-state" class="sentence-filter-state" hidden>
+            <span id="sentence-filter-text"></span>
+            <button id="clear-sentence-filter-btn" class="tool-button" type="button">显示全部</button>
+          </div>
+          <div class="sentence-action-bar" aria-label="字幕操作">
+            <button id="split-btn" class="tool-button" type="button">拆句</button>
+            <button id="merge-prev-btn" class="tool-button" type="button">合上</button>
+            <button id="merge-next-btn" class="tool-button" type="button">合下</button>
+            <button id="hide-subtitle-btn" class="tool-button" type="button">隐藏</button>
+            <button id="delete-btn" class="danger-action compact-danger" type="button">删段</button>
+            <button id="recover-btn" class="tool-button" type="button">恢复</button>
+          </div>
+          <div id="selection-tools" class="selection-tools" hidden>
+            <span id="selection-count">已选 1 段</span>
+            <button id="select-visible-btn" class="tool-button" type="button">全选当前</button>
+            <button id="clear-selection-btn" class="tool-button" type="button">清空</button>
+            <button id="move-selection-left-btn" class="tool-button" type="button">左移所选</button>
+            <button id="move-selection-right-btn" class="tool-button" type="button">右移所选</button>
+          </div>
+        </div>
+        <div class="sentence-list-shell">
+          <div id="sentence-list" class="sentence-list"></div>
+        </div>
       </aside>
 
       <section class="stage-panel">
+        {% if project.preview_warning %}
+        <div class="editor-warning">{{ project.preview_warning }} 当前页面仅供查看，不能导出精修版。</div>
+        {% endif %}
         <div class="video-stage">
-          <video id="edit-video" src="{{ video_url }}" controls preload="metadata"></video>
-          <div id="subtitle-preview" class="edit-subtitle-preview"></div>
+          <div class="video-frame" id="video-frame">
+            <video id="edit-video" src="{{ video_url }}" controls preload="metadata"></video>
+            <div id="title-preview" class="edit-title-preview"></div>
+            <div id="subtitle-preview" class="edit-subtitle-preview" contenteditable="true" spellcheck="false" aria-label="直接编辑预览字幕"></div>
+          </div>
         </div>
         <div class="timeline-head">
-          <span>视频轨道</span>
-          <small>点击句子定位，删除句子会同步剪掉对应视频片段</small>
+          <span>时间线</span>
+          <strong id="timeline-time" class="timeline-time">0:00.00</strong>
+          <div class="timeline-toolset" aria-label="时间线工具">
+            <button id="select-tool-btn" class="tool-button mode-toggle is-on" type="button">选择</button>
+            <button id="split-tool-btn" class="tool-button mode-toggle" type="button">切割</button>
+          </div>
+          <button id="insert-gap-btn" class="tool-button" type="button">插入空隙</button>
+          <button id="free-drop-toggle-btn" class="tool-button mode-toggle" type="button">吸附插入</button>
+          <div class="timeline-zoom-actions" aria-label="时间线缩放工具">
+            <button id="zoom-out-btn" class="tool-button" type="button">缩小</button>
+            <button id="zoom-in-btn" class="tool-button" type="button">放大</button>
+            <button id="zoom-fit-btn" class="tool-button" type="button">适合</button>
+            <button id="locate-selected-btn" class="tool-button" type="button">定位</button>
+          </div>
+          <label class="timeline-zoom">缩放
+            <input id="timeline-zoom" type="range" min="4" max="180" value="58">
+          </label>
+          <small>
+            预览源：{{ "无字幕精修源" if project.preview_source == "clean-no-subtitles" else "旧成片兜底" }}
+            · {{ video_info.aspect }} · {{ video_info.width }}x{{ video_info.height }}
+          </small>
         </div>
-        <div id="timeline" class="edit-timeline"></div>
+        <div id="timeline-status" class="timeline-status" aria-live="polite">拖动片段调整顺序，拖两端裁切；按 Alt 拖动可留空。</div>
+        <div id="timeline" class="edit-timeline multi-track-timeline"></div>
       </section>
 
       <aside class="edit-inspector">
         <section class="inspector-section">
           <div class="panel-head">
-            <span>当前字幕</span>
-            <strong id="current-range">--</strong>
+            <span>标题轨</span>
+            <strong id="title-range">--</strong>
           </div>
-          <textarea id="subtitle-text" rows="6" placeholder="选择左侧句子后编辑字幕"></textarea>
-          <div class="inline-actions">
-            <button id="delete-btn" class="danger-action" type="button">删除这段</button>
-            <button id="recover-btn" class="secondary-action" type="button">恢复</button>
+          <textarea id="cover-title" rows="3" placeholder="封面标题，可手动换行"></textarea>
+          <textarea id="title-text" rows="3" placeholder="视频内标题文字"></textarea>
+          <label class="check-line">
+            <input id="show-video-title" type="checkbox">
+            <span>显示视频内标题</span>
+          </label>
+          <div class="sentence-action-bar title-action-bar" aria-label="标题片段操作">
+            <button id="add-title-clip-btn" class="tool-button" type="button">添加标题</button>
+            <button id="delete-title-clip-btn" class="tool-button" type="button">删除标题</button>
+          </div>
+          <div class="field-pair dense">
+            <label>开始 <input id="title-start" type="number" step="0.05" min="0"></label>
+            <label>结束 <input id="title-end" type="number" step="0.05" min="0"></label>
+          </div>
+          <div class="clip-step-grid" aria-label="标题步进微调">
+            <button id="title-nudge-left-btn" class="tool-button" type="button">左移 0.05</button>
+            <button id="title-nudge-right-btn" class="tool-button" type="button">右移 0.05</button>
           </div>
         </section>
 
         <section class="inspector-section">
           <div class="panel-head">
-            <span>封面标题</span>
+            <span>片段微调</span>
+            <strong id="clip-range">--</strong>
           </div>
-          <textarea id="cover-title" rows="4" placeholder="可手动换行，最终封面会按这里渲染"></textarea>
-          <label class="check-line">
-            <input id="show-video-title" type="checkbox">
-            <span>后续片头标题也使用这段文字</span>
+          <div class="field-pair dense">
+            <label>入点 <input id="clip-start" type="number" step="0.05" min="0"></label>
+            <label>出点 <input id="clip-end" type="number" step="0.05" min="0"></label>
+          </div>
+          <label class="full-field">时长（秒）
+            <input id="clip-duration" type="number" step="0.05" min="0.05">
+          </label>
+          <div class="clip-step-grid" aria-label="片段步进微调">
+            <button class="tool-button" type="button" data-clip-nudge="start:-0.05">入点 -0.05</button>
+            <button class="tool-button" type="button" data-clip-nudge="start:0.05">入点 +0.05</button>
+            <button class="tool-button" type="button" data-clip-nudge="end:-0.05">出点 -0.05</button>
+            <button class="tool-button" type="button" data-clip-nudge="end:0.05">出点 +0.05</button>
+          </div>
+          <div id="clip-hint" class="clip-hint">选择视频片段后可精确调整</div>
+        </section>
+
+        <section class="inspector-section">
+          <div class="panel-head">
+            <span>全局微调</span>
+          </div>
+          <label class="full-field">字幕偏移（秒）
+            <input id="subtitle-offset" type="number" step="0.05" min="-5" max="5">
           </label>
         </section>
 
@@ -82,21 +202,114 @@
 
   <script>
     const project = {{ project|tojson }};
+    const editorAssets = {{ editor_assets|tojson }};
+    const subtitleStyle = {{ subtitle_style|tojson }};
+    const titleStyle = {{ title_style|tojson }};
     const apiUrl = `/api/jobs/{{ job.id }}/edit-project?item={{ item_id }}`;
     const renderUrl = `/jobs/{{ job.id }}/render-edited?item={{ item_id }}`;
     const video = document.getElementById("edit-video");
+    const videoFrame = document.getElementById("video-frame");
     const list = document.getElementById("sentence-list");
+    const sentenceSearch = document.getElementById("sentence-search");
+    const sentenceFilterState = document.getElementById("sentence-filter-state");
+    const sentenceFilterText = document.getElementById("sentence-filter-text");
+    const clearSentenceFilterBtn = document.getElementById("clear-sentence-filter-btn");
+    const selectionTools = document.getElementById("selection-tools");
+    const selectionCount = document.getElementById("selection-count");
+    const splitBtn = document.getElementById("split-btn");
+    const mergePrevBtn = document.getElementById("merge-prev-btn");
+    const mergeNextBtn = document.getElementById("merge-next-btn");
+    const hideSubtitleBtn = document.getElementById("hide-subtitle-btn");
+    const deleteBtn = document.getElementById("delete-btn");
+    const recoverBtn = document.getElementById("recover-btn");
     const timeline = document.getElementById("timeline");
-    const subtitleText = document.getElementById("subtitle-text");
     const subtitlePreview = document.getElementById("subtitle-preview");
-    const currentRange = document.getElementById("current-range");
+    const titlePreview = document.getElementById("title-preview");
     const saveState = document.getElementById("save-state");
     const coverTitle = document.getElementById("cover-title");
+    const titleText = document.getElementById("title-text");
     const showVideoTitle = document.getElementById("show-video-title");
+    const titleStart = document.getElementById("title-start");
+    const titleEnd = document.getElementById("title-end");
+    const titleRange = document.getElementById("title-range");
+    const clipStartInput = document.getElementById("clip-start");
+    const clipEndInput = document.getElementById("clip-end");
+    const clipDurationInput = document.getElementById("clip-duration");
+    const clipRange = document.getElementById("clip-range");
+    const clipHint = document.getElementById("clip-hint");
+    const clipNudgeButtons = [...document.querySelectorAll("[data-clip-nudge]")];
+    const subtitleOffset = document.getElementById("subtitle-offset");
     const renderStatus = document.getElementById("render-status");
     const renderFiles = document.getElementById("render-files");
+    const renderBtn = document.getElementById("render-btn");
+    const timelineZoom = document.getElementById("timeline-zoom");
+    const timelineTime = document.getElementById("timeline-time");
+    const timelineStatus = document.getElementById("timeline-status");
+    const undoBtn = document.getElementById("undo-btn");
+    const redoBtn = document.getElementById("redo-btn");
+    const shortcutHelpBtn = document.getElementById("shortcut-help-btn");
+    const shortcutPanel = document.getElementById("shortcut-panel");
+    const shortcutCloseBtn = document.getElementById("shortcut-close-btn");
+    const snapToggleBtn = document.getElementById("snap-toggle-btn");
+    const rippleToggleBtn = document.getElementById("ripple-toggle-btn");
+    const freeDropToggleBtn = document.getElementById("free-drop-toggle-btn");
+    const selectToolBtn = document.getElementById("select-tool-btn");
+    const splitToolBtn = document.getElementById("split-tool-btn");
     let selectedId = project.sentences[0]?.id || null;
+    let selectedIds = new Set(selectedId ? [selectedId] : []);
+    let lastSelectedId = selectedId;
+    let selectedTitleId = project.title_clips?.[0]?.id || "t001";
     let dirty = false;
+    let activeFilter = "all";
+    let autosaveTimer = null;
+    let suppressTimeSyncUntil = 0;
+    let undoStack = [];
+    let redoStack = [];
+    let trimTooltip = null;
+    let savedSnapshot = "";
+    let timelineScrollLeft = 0;
+    let snapEnabled = true;
+    let rippleDelete = true;
+    let freeDropEnabled = false;
+    let timelineTool = "select";
+    let clipInspectorCommitting = false;
+    let trimmingClipId = null;
+    let trimmingSide = null;
+    let trimmingKind = "";
+    let contextMenu = null;
+    let contextTarget = null;
+    let timelineStatusTimer = null;
+    const timelineTrackOffset = 44;
+    const defaultTimelineStatus = "拖动片段调整顺序，拖两端裁切；按 Alt 拖动可留空。";
+
+    function ensureProjectShape() {
+      project.settings = project.settings || {subtitle_offset: 0};
+      project.title = project.title || {cover_text: "", video_text: "", show_video_title: false};
+      project.title_clips = project.title_clips?.length ? project.title_clips : [{
+        id: "t001",
+        start: 0,
+        end: Math.min(Math.max(Number(project.duration || 0.2), 0.2), 3),
+        text: project.title.video_text || project.title.cover_text || "",
+        enabled: Boolean(project.title.show_video_title),
+        use_for_cover: true,
+      }];
+      project.title_clips.forEach((clip, index) => {
+        clip.id = clip.id || `t${String(index + 1).padStart(3, "0")}`;
+        clip.start = Number(clip.start || 0);
+        clip.end = Number(clip.end || Math.min(Math.max(Number(project.duration || 0.2), 0.2), 3));
+        clip.text = String(clip.text || "");
+        clip.enabled = Boolean(clip.enabled);
+      });
+      selectedTitleId = project.title_clips.find((clip) => clip.id === selectedTitleId)?.id || project.title_clips[0]?.id || "t001";
+      project.sentences.forEach((sentence, index) => {
+        sentence.timeline_order = Number(sentence.timeline_order || index + 1);
+        sentence.clip_start = Number(sentence.clip_start ?? sentence.start ?? 0);
+        sentence.clip_end = Number(sentence.clip_end ?? sentence.end ?? sentence.clip_start + 0.2);
+        sentence.gap = Boolean(sentence.gap);
+        sentence.synthetic_gap = Boolean(sentence.synthetic_gap);
+      });
+      normalizeTimelineOrders();
+    }
 
     function formatTime(value) {
       const total = Math.max(0, Number(value || 0));
@@ -105,80 +318,1901 @@
       return `${minute}:${second}`;
     }
 
+    function formatPreciseTime(value) {
+      const total = Math.max(0, Number(value || 0));
+      const minute = Math.floor(total / 60);
+      const second = Math.floor(total % 60).toString().padStart(2, "0");
+      const centisecond = Math.floor((total % 1) * 100).toString().padStart(2, "0");
+      return `${minute}:${second}.${centisecond}`;
+    }
+
+    function snapshotProject() {
+      return JSON.stringify(project);
+    }
+
+    function restoreProject(snapshot) {
+      const isSavedState = snapshot === savedSnapshot;
+      const restored = JSON.parse(snapshot);
+      for (const key of Object.keys(project)) delete project[key];
+      Object.assign(project, restored);
+      selectedId = project.sentences.find((item) => item.id === selectedId)?.id || project.sentences[0]?.id || null;
+      selectedIds = new Set(selectedId ? [selectedId] : []);
+      lastSelectedId = selectedId;
+      ensureProjectShape();
+      setDirty(!isSavedState, false);
+      updateHistoryButtons();
+      renderAll();
+    }
+
+    function updateHistoryButtons() {
+      undoBtn.disabled = undoStack.length === 0;
+      redoBtn.disabled = redoStack.length === 0;
+    }
+
+    function updateModeButtons() {
+      snapToggleBtn.classList.toggle("is-on", snapEnabled);
+      snapToggleBtn.textContent = snapEnabled ? "磁吸开" : "磁吸关";
+      rippleToggleBtn.classList.toggle("is-on", rippleDelete);
+      rippleToggleBtn.textContent = rippleDelete ? "波纹删除" : "留空隐藏";
+      freeDropToggleBtn.classList.toggle("is-on", freeDropEnabled);
+      freeDropToggleBtn.textContent = freeDropEnabled ? "自由留空" : "吸附插入";
+      freeDropToggleBtn.title = freeDropEnabled ? "拖动片段时按落点自动留出空白" : "拖动片段时紧贴插入，按 Alt 可临时自由留空";
+      selectToolBtn.classList.toggle("is-on", timelineTool === "select");
+      splitToolBtn.classList.toggle("is-on", timelineTool === "split");
+      selectToolBtn.title = "选择片段、跳转播放头";
+      splitToolBtn.title = "点击片段即可按位置切开";
+    }
+
+    function setShortcutPanel(open) {
+      shortcutPanel.hidden = !open;
+      shortcutHelpBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    function setTimelineStatus(message = defaultTimelineStatus, timeout = 0) {
+      if (!timelineStatus) return;
+      clearTimeout(timelineStatusTimer);
+      timelineStatus.textContent = message || defaultTimelineStatus;
+      if (timeout > 0) {
+        timelineStatusTimer = setTimeout(() => {
+          timelineStatus.textContent = defaultTimelineStatus;
+        }, timeout);
+      }
+    }
+
+    function pushHistory() {
+      undoStack.push(snapshotProject());
+      if (undoStack.length > 80) undoStack.shift();
+      redoStack = [];
+      updateHistoryButtons();
+    }
+
+    function undoEdit() {
+      if (!undoStack.length) return;
+      redoStack.push(snapshotProject());
+      restoreProject(undoStack.pop());
+    }
+
+    function redoEdit() {
+      if (!redoStack.length) return;
+      undoStack.push(snapshotProject());
+      restoreProject(redoStack.pop());
+    }
+
     function selectedSentence() {
       return project.sentences.find((item) => item.id === selectedId) || project.sentences[0] || null;
     }
 
-    function setDirty(value = true) {
+    function sentenceById(id) {
+      return project.sentences.find((item) => item.id === id) || null;
+    }
+
+    function ensureSelectionState() {
+      const validIds = new Set(project.sentences.map((item) => item.id));
+      selectedIds = new Set([...selectedIds].filter((id) => validIds.has(id)));
+      if (selectedId && !validIds.has(selectedId)) selectedId = null;
+      if (selectedId && !selectedIds.has(selectedId)) selectedIds = new Set([selectedId]);
+      if (!selectedId && selectedIds.size) selectedId = [...selectedIds][0];
+      if (!selectedId && project.sentences[0]) {
+        selectedId = project.sentences[0].id;
+        selectedIds = new Set([selectedId]);
+      }
+      if (!lastSelectedId || !validIds.has(lastSelectedId)) lastSelectedId = selectedId;
+    }
+
+    function setSingleSelection(id) {
+      if (!id) return;
+      selectedId = id;
+      selectedIds = new Set([id]);
+      lastSelectedId = id;
+    }
+
+    function toggleSentenceSelection(id) {
+      if (!id) return;
+      if (selectedIds.has(id) && selectedIds.size > 1) {
+        selectedIds.delete(id);
+        selectedId = [...selectedIds].at(-1) || id;
+      } else {
+        selectedIds.add(id);
+        selectedId = id;
+      }
+      lastSelectedId = id;
+    }
+
+    function rangeSelectSentence(id) {
+      const rows = visibleSentences();
+      const from = rows.findIndex((item) => item.id === lastSelectedId);
+      const to = rows.findIndex((item) => item.id === id);
+      if (from < 0 || to < 0) {
+        setSingleSelection(id);
+        return;
+      }
+      const [start, end] = from < to ? [from, to] : [to, from];
+      selectedIds = new Set(rows.slice(start, end + 1).map((item) => item.id));
+      selectedId = id;
+    }
+
+    function selectVisibleSentences() {
+      const rows = visibleSentences();
+      if (!rows.length) return;
+      selectedIds = new Set(rows.map((item) => item.id));
+      selectedId = rows.at(-1).id;
+      lastSelectedId = selectedId;
+      renderAll();
+    }
+
+    function clearMultiSelection() {
+      setSingleSelection(selectedId || selectedSentence()?.id);
+      renderAll();
+    }
+
+    function selectedSentences() {
+      ensureSelectionState();
+      const batch = [...selectedIds].map(sentenceById).filter(Boolean);
+      return batch.length ? batch : selectedSentence() ? [selectedSentence()] : [];
+    }
+
+    function updateSelectionTools() {
+      const count = selectedSentences().length;
+      const visibleCount = visibleSentences().length;
+      const multi = count > 1;
+      selectionTools.hidden = visibleCount <= 1;
+      selectionCount.textContent = `已选 ${count} 段`;
+      document.getElementById("select-visible-btn").disabled = visibleCount <= 1 || count === visibleCount;
+      document.getElementById("clear-selection-btn").disabled = count <= 1;
+      document.getElementById("move-selection-left-btn").disabled = count <= 1;
+      document.getElementById("move-selection-right-btn").disabled = count <= 1;
+      splitBtn.textContent = multi ? "拆当前" : "拆句";
+      mergePrevBtn.textContent = multi ? "合当前上" : "合上";
+      mergeNextBtn.textContent = multi ? "合当前下" : "合下";
+      hideSubtitleBtn.textContent = multi ? `隐藏 ${count} 段` : "隐藏";
+      deleteBtn.textContent = multi ? `删 ${count} 段` : "删段";
+      recoverBtn.textContent = multi ? `恢复 ${count} 段` : "恢复";
+      hideSubtitleBtn.title = multi ? `只隐藏已选 ${count} 段字幕，不剪掉视频` : "隐藏当前字幕，不剪掉视频";
+      deleteBtn.title = multi ? `对已选 ${count} 段执行当前删除模式` : "删除或留空当前片段";
+      recoverBtn.title = multi ? `恢复已选 ${count} 段` : "恢复当前片段";
+    }
+
+    function selectSentenceFromEvent(event, sentence, seek = true) {
+      if (event.shiftKey) {
+        rangeSelectSentence(sentence.id);
+      } else if (event.ctrlKey || event.metaKey) {
+        toggleSentenceSelection(sentence.id);
+      } else {
+        setSingleSelection(sentence.id);
+      }
+      if (seek) seekToSentence(sentence);
+      else renderAll();
+    }
+
+    function selectedIndex() {
+      return Math.max(0, project.sentences.findIndex((item) => item.id === selectedId));
+    }
+
+    function titleClip() {
+      return project.title_clips.find((clip) => clip.id === selectedTitleId) || project.title_clips[0];
+    }
+
+    function orderedSentences() {
+      return [...project.sentences].sort((a, b) => Number(a.timeline_order || 0) - Number(b.timeline_order || 0));
+    }
+
+    function normalizeTimelineOrders() {
+      project.sentences = orderedSentences();
+      project.sentences.forEach((sentence, index) => {
+        sentence.timeline_order = index + 1;
+      });
+    }
+
+    function clipStart(sentence) {
+      return clamp(sentence.clip_start ?? sentence.start ?? 0, 0, Number(project.duration || video.duration || 0));
+    }
+
+    function clipEnd(sentence) {
+      if (sentence.synthetic_gap) return Number(sentence.clip_end ?? sentence.end ?? clipStart(sentence) + 1);
+      const duration = Number(project.duration || video.duration || 0);
+      return clamp(sentence.clip_end ?? sentence.end ?? clipStart(sentence) + 0.2, 0, duration);
+    }
+
+    function clipDuration(sentence) {
+      return Math.max(0.05, clipEnd(sentence) - clipStart(sentence));
+    }
+
+    function clipTrimLabel(sentence) {
+      return `${formatPreciseTime(clipStart(sentence))} - ${formatPreciseTime(clipEnd(sentence))} · ${formatPreciseTime(clipDuration(sentence))}`;
+    }
+
+    function titleClipStart(clip) {
+      return clamp(clip.start || 0, 0, activeTimelineDuration());
+    }
+
+    function titleClipEnd(clip) {
+      return clamp(clip.end || titleClipStart(clip) + 0.2, 0, activeTimelineDuration());
+    }
+
+    function titleClipDuration(clip) {
+      return Math.max(0.05, titleClipEnd(clip) - titleClipStart(clip));
+    }
+
+    function titleTrimLabel(clip) {
+      return `${formatPreciseTime(titleClipStart(clip))} - ${formatPreciseTime(titleClipEnd(clip))} · ${formatPreciseTime(titleClipDuration(clip))}`;
+    }
+
+    function syncTitleGlobalState() {
+      project.title.show_video_title = project.title_clips.some((clip) => clip.enabled);
+      project.title.video_text = titleClip()?.text || "";
+    }
+
+    function setClipInspectorDisabled(disabled) {
+      [clipStartInput, clipEndInput, clipDurationInput].forEach((input) => {
+        input.disabled = disabled;
+      });
+      clipNudgeButtons.forEach((button) => {
+        button.disabled = disabled;
+      });
+    }
+
+    function updateClipInspector(sentence) {
+      if (!sentence) {
+        clipRange.textContent = "--";
+        clipStartInput.value = "";
+        clipEndInput.value = "";
+        clipDurationInput.value = "";
+        clipHint.textContent = "选择视频片段后可精确调整";
+        setClipInspectorDisabled(true);
+        return;
+      }
+      const start = clipStart(sentence);
+      const end = clipEnd(sentence);
+      const duration = clipDuration(sentence);
+      const isGap = isGapSentence(sentence);
+      clipRange.textContent = isGap ? "空隙" : "源片段";
+      clipStartInput.value = start.toFixed(2);
+      clipEndInput.value = end.toFixed(2);
+      clipDurationInput.value = duration.toFixed(2);
+      clipStartInput.disabled = Boolean(sentence.synthetic_gap);
+      clipEndInput.disabled = false;
+      clipDurationInput.disabled = false;
+      clipNudgeButtons.forEach((button) => {
+        const edge = String(button.dataset.clipNudge || "").split(":")[0];
+        button.disabled = Boolean(sentence.synthetic_gap && edge === "start");
+      });
+      clipHint.textContent = isGap
+        ? "空隙不会取原视频画面，只导出黑场静音"
+        : `素材范围 ${formatPreciseTime(start)} - ${formatPreciseTime(end)}`;
+    }
+
+    function updateSelectedClipFromInspector(changedField) {
+      const sentence = selectedSentence();
+      if (!sentence) return;
+      if (clipInspectorCommitting) return;
+      clipInspectorCommitting = true;
+      pushHistory();
+      const durationLimit = Number(project.duration || video.duration || 0);
+      const currentStart = clipStart(sentence);
+      const currentEnd = clipEnd(sentence);
+      const currentDuration = clipDuration(sentence);
+      if (sentence.synthetic_gap) {
+        const nextDuration = changedField === "duration"
+          ? clamp(clipDurationInput.value, 0.05, 3600)
+          : Math.max(0.05, clamp(clipEndInput.value, 0.05, 3600) - currentStart);
+        sentence.clip_start = 0;
+        sentence.start = 0;
+        sentence.clip_end = Number(nextDuration.toFixed(3));
+        sentence.end = sentence.clip_end;
+        sentence.gap = true;
+        sentence.enabled = false;
+      } else if (changedField === "duration") {
+        const nextDuration = clamp(clipDurationInput.value, 0.05, durationLimit || currentDuration);
+        const bounds = snapEnabled ? adjacentSourceBounds(sentence) : {previousEnd: 0, nextStart: durationLimit || currentEnd};
+        sentence.clip_end = Number(clamp(currentStart + nextDuration, currentStart + 0.05, bounds.nextStart).toFixed(3));
+        sentence.end = clamp(sentence.end, sentence.clip_start, sentence.clip_end);
+      } else {
+        const bounds = snapEnabled ? adjacentSourceBounds(sentence) : {previousEnd: 0, nextStart: durationLimit || currentEnd};
+        const nextStart = changedField === "start" ? clamp(clipStartInput.value, bounds.previousEnd, currentEnd - 0.05) : currentStart;
+        const nextEnd = changedField === "end" ? clamp(clipEndInput.value, nextStart + 0.05, bounds.nextStart) : currentEnd;
+        sentence.clip_start = Number(nextStart.toFixed(3));
+        sentence.clip_end = Number(nextEnd.toFixed(3));
+        sentence.start = clamp(sentence.start, sentence.clip_start, sentence.clip_end);
+        sentence.end = clamp(sentence.end, sentence.clip_start, sentence.clip_end);
+      }
+      sentence.edited = true;
+      setDirty();
+      renderAll();
+      setTimeout(() => {
+        clipInspectorCommitting = false;
+      }, 0);
+    }
+
+    function bindClipInspectorInput(input, field) {
+      input.addEventListener("change", () => updateSelectedClipFromInspector(field));
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        updateSelectedClipFromInspector(field);
+        input.blur();
+      });
+    }
+
+    function nudgeSelectedClip(edge, delta) {
+      const sentence = selectedSentence();
+      if (!sentence) return;
+      if (sentence.synthetic_gap && edge === "start") return;
+      const step = Number(delta || 0);
+      const durationLimit = Number(project.duration || video.duration || 0);
+      const currentStart = clipStart(sentence);
+      const currentEnd = clipEnd(sentence);
+      let nextStart = currentStart;
+      let nextEnd = currentEnd;
+      if (sentence.synthetic_gap) {
+        nextEnd = clamp(currentEnd + step, currentStart + 0.05, 3600);
+      } else {
+        const bounds = snapEnabled ? adjacentSourceBounds(sentence) : {previousEnd: 0, nextStart: durationLimit || currentEnd};
+        if (edge === "start") {
+          nextStart = clamp(currentStart + step, bounds.previousEnd, currentEnd - 0.05);
+        } else {
+          nextEnd = clamp(currentEnd + step, currentStart + 0.05, bounds.nextStart);
+        }
+      }
+      if (Math.abs(nextStart - currentStart) < 0.0005 && Math.abs(nextEnd - currentEnd) < 0.0005) return;
+      pushHistory();
+      if (sentence.synthetic_gap) {
+        sentence.clip_start = 0;
+        sentence.start = 0;
+        sentence.clip_end = Number(nextEnd.toFixed(3));
+        sentence.end = sentence.clip_end;
+        sentence.gap = true;
+        sentence.enabled = false;
+      } else {
+        sentence.clip_start = Number(nextStart.toFixed(3));
+        sentence.clip_end = Number(nextEnd.toFixed(3));
+        sentence.start = clamp(sentence.start, sentence.clip_start, sentence.clip_end);
+        sentence.end = clamp(sentence.end, sentence.clip_start, sentence.clip_end);
+      }
+      sentence.edited = true;
+      setDirty();
+      renderAll();
+    }
+
+    function activeTimelineSentences() {
+      return orderedSentences().filter((sentence) => !sentence.remove_video && clipDuration(sentence) > 0.05);
+    }
+
+    function isGapSentence(sentence) {
+      return Boolean(sentence.gap) && !sentence.remove_video;
+    }
+
+    function activeTimelineDuration() {
+      return activeTimelineSentences().reduce((sum, sentence) => sum + clipDuration(sentence), 0) || 1;
+    }
+
+    function timelinePositionForSentence(sentence) {
+      let cursor = 0;
+      for (const item of activeTimelineSentences()) {
+        if (item.id === sentence.id) return cursor;
+        cursor += clipDuration(item);
+      }
+      return 0;
+    }
+
+    function timelineTimeForPlayback() {
+      const sentence = selectedSentence();
+      if (!sentence) return 0;
+      if (isGapSentence(sentence)) return timelinePositionForSentence(sentence);
+      const local = clamp(video.currentTime - clipStart(sentence), 0, clipDuration(sentence));
+      return timelinePositionForSentence(sentence) + local;
+    }
+
+    function timelineLookup(time) {
+      let cursor = 0;
+      for (const sentence of activeTimelineSentences()) {
+        const duration = clipDuration(sentence);
+        const end = cursor + duration;
+        if (time >= cursor && time <= end) {
+          return {sentence, timelineStart: cursor, timelineEnd: end, sourceTime: isGapSentence(sentence) ? clipStart(sentence) : clipStart(sentence) + clamp(time - cursor, 0, duration)};
+        }
+        cursor = end;
+      }
+      const last = activeTimelineSentences().at(-1);
+      return last ? {sentence: last, timelineStart: Math.max(0, cursor - clipDuration(last)), timelineEnd: cursor, sourceTime: clipEnd(last)} : null;
+    }
+
+    function seekTimelineTime(time) {
+      const hit = timelineLookup(clamp(time, 0, activeTimelineDuration()));
+      if (!hit) return;
+      selectedId = hit.sentence.id;
+      suppressTimeSyncUntil = performance.now() + 280;
+      if (!isGapSentence(hit.sentence)) {
+        video.currentTime = clamp(hit.sourceTime, clipStart(hit.sentence), clipEnd(hit.sentence));
+      }
+      renderAll();
+    }
+
+    function timelineScrollElement() {
+      return timeline.querySelector(".timeline-scroll");
+    }
+
+    function keepTimelineTimeVisible(time, center = false) {
+      const scroll = timelineScrollElement();
+      if (!scroll) return;
+      const pxPerSecond = Number(timelineZoom.value || 58);
+      const x = timelineTrackOffset + clamp(time, 0, activeTimelineDuration()) * pxPerSecond;
+      const padding = 72;
+      let nextLeft = scroll.scrollLeft;
+      if (center) {
+        nextLeft = x - scroll.clientWidth / 2;
+      } else if (x < scroll.scrollLeft + padding) {
+        nextLeft = x - padding;
+      } else if (x > scroll.scrollLeft + scroll.clientWidth - padding) {
+        nextLeft = x - scroll.clientWidth + padding;
+      } else {
+        return;
+      }
+      scroll.scrollLeft = clamp(nextLeft, 0, Math.max(0, scroll.scrollWidth - scroll.clientWidth));
+      timelineScrollLeft = scroll.scrollLeft;
+    }
+
+    function keepSelectedClipVisible(center = false) {
+      const sentence = selectedSentence();
+      if (!sentence) return;
+      keepTimelineTimeVisible(timelinePositionForSentence(sentence), center);
+    }
+
+    function setTimelineZoom(value, centerSelected = true) {
+      const min = Number(timelineZoom.min || 4);
+      const max = Number(timelineZoom.max || 180);
+      timelineZoom.value = String(Math.round(clamp(value, min, max)));
+      renderTimeline();
+      if (centerSelected) keepSelectedClipVisible(true);
+      setTimelineStatus(`时间线缩放 ${timelineZoom.value}px/s`, 900);
+    }
+
+    function setTimelineZoomAroundPoint(value, clientX) {
+      const scroll = timelineScrollElement();
+      if (!scroll) {
+        setTimelineZoom(value);
+        return;
+      }
+      const rect = scroll.getBoundingClientRect();
+      const oldPxPerSecond = Number(timelineZoom.value || 58);
+      const localX = clamp(clientX - rect.left + scroll.scrollLeft - timelineTrackOffset, 0, scroll.scrollWidth);
+      const anchorTime = localX / oldPxPerSecond;
+      const min = Number(timelineZoom.min || 4);
+      const max = Number(timelineZoom.max || 180);
+      const nextZoom = Math.round(clamp(value, min, max));
+      if (nextZoom === oldPxPerSecond) return;
+      timelineZoom.value = String(nextZoom);
+      const viewportX = clientX - rect.left;
+      timelineScrollLeft = clamp(
+        timelineTrackOffset + anchorTime * nextZoom - viewportX,
+        0,
+        Math.max(0, activeTimelineDuration() * nextZoom + timelineTrackOffset - scroll.clientWidth)
+      );
+      renderTimeline();
+      setTimelineStatus(`时间线缩放 ${nextZoom}px/s`, 900);
+    }
+
+    function fitTimelineToWindow() {
+      const available = Math.max(120, timeline.clientWidth - timelineTrackOffset - 24);
+      const duration = Math.max(0.1, activeTimelineDuration());
+      setTimelineZoom(Math.floor(available / duration), false);
+      timelineScrollLeft = 0;
+      const scroll = timelineScrollElement();
+      if (scroll) scroll.scrollLeft = 0;
+      setTimelineStatus("已适合窗口显示", 900);
+      updateTimelinePlayhead();
+    }
+
+    function updateTimelinePlayhead() {
+      const playhead = timeline.querySelector(".timeline-playhead");
+      if (timelineTime) timelineTime.textContent = formatPreciseTime(timelineTimeForPlayback());
+      if (!playhead) return;
+      const pxPerSecond = Number(timelineZoom.value || 58);
+      playhead.style.left = `${timelineTrackOffset + timelineTimeForPlayback() * pxPerSecond}px`;
+      keepTimelineTimeVisible(timelineTimeForPlayback(), false);
+    }
+
+    function moveSentenceBefore(dragId, targetId) {
+      if (!dragId || !targetId || dragId === targetId) return;
+      const items = orderedSentences();
+      const fromIndex = items.findIndex((item) => item.id === dragId);
+      const toIndex = items.findIndex((item) => item.id === targetId);
+      if (fromIndex < 0 || toIndex < 0) return;
+      pushHistory();
+      const [item] = items.splice(fromIndex, 1);
+      items.splice(toIndex, 0, item);
+      project.sentences = items;
+      selectedId = dragId;
+      normalizeTimelineOrders();
+      setDirty();
+      renderAll();
+    }
+
+    function moveSentenceToTimelineIndex(dragId, targetIndex, record = true) {
+      const active = activeTimelineSentences();
+      const fromIndex = active.findIndex((item) => item.id === dragId);
+      if (fromIndex < 0) return;
+      const nextIds = active.map((item) => item.id);
+      const [draggedId] = nextIds.splice(fromIndex, 1);
+      const insertAt = clamp(targetIndex, 0, nextIds.length);
+      nextIds.splice(insertAt, 0, draggedId);
+      if (nextIds.every((id, index) => id === active[index]?.id)) return;
+      if (record) pushHistory();
+      const activeRank = new Map(nextIds.map((id, index) => [id, index + 1]));
+      const inactiveStart = nextIds.length + 1;
+      orderedSentences().forEach((sentence, index) => {
+        sentence.timeline_order = activeRank.get(sentence.id) || inactiveStart + index;
+      });
+      selectedId = dragId;
+      normalizeTimelineOrders();
+      setDirty();
+      renderAll();
+    }
+
+    function createSyntheticGap(duration, order = 0) {
+      const safeDuration = Math.max(0.05, Number(duration || 0));
+      return {
+        id: `g${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`,
+        start: 0,
+        end: Number(safeDuration.toFixed(3)),
+        clip_start: 0,
+        clip_end: Number(safeDuration.toFixed(3)),
+        timeline_order: order,
+        original_text: "",
+        text: "",
+        enabled: false,
+        remove_video: false,
+        gap: true,
+        synthetic_gap: true,
+        edited: true,
+      };
+    }
+
+    function moveSentenceToTimelineIndexWithGap(dragId, targetIndex, gapBefore = 0) {
+      const active = activeTimelineSentences();
+      const dragged = active.find((item) => item.id === dragId);
+      if (!dragged) return {changed: false, reason: "missing"};
+      const nextIds = active.filter((item) => item.id !== dragId).map((item) => item.id);
+      const insertAt = clamp(targetIndex, 0, nextIds.length);
+      const normalizedGap = Number(gapBefore || 0);
+      const shouldCreateGap = normalizedGap >= 0.18 && !dragged.synthetic_gap;
+      if (!shouldCreateGap) {
+        const unchangedOrder = [...nextIds];
+        unchangedOrder.splice(insertAt, 0, dragId);
+        if (unchangedOrder.every((id, index) => id === active[index]?.id)) return {changed: false, reason: "same"};
+      }
+      pushHistory();
+      const nextOrder = [...nextIds];
+      let finalGap = 0;
+      if (shouldCreateGap) {
+        const previous = sentenceById(nextOrder[insertAt - 1]);
+        if (previous?.synthetic_gap) {
+          previous.clip_start = 0;
+          previous.start = 0;
+          previous.clip_end = Number(normalizedGap.toFixed(3));
+          previous.end = previous.clip_end;
+          previous.gap = true;
+          previous.enabled = false;
+          finalGap = previous.clip_end;
+          nextOrder.splice(insertAt, 0, dragId);
+        } else {
+          const gap = createSyntheticGap(normalizedGap);
+          project.sentences.push(gap);
+          finalGap = gap.clip_end;
+          nextOrder.splice(insertAt, 0, gap.id, dragId);
+        }
+      } else {
+        nextOrder.splice(insertAt, 0, dragId);
+      }
+      const activeRank = new Map(nextOrder.map((id, index) => [id, index + 1]));
+      const inactiveStart = nextOrder.length + 1;
+      orderedSentences().forEach((sentence, index) => {
+        sentence.timeline_order = activeRank.get(sentence.id) || inactiveStart + index;
+      });
+      selectedId = dragId;
+      selectedIds = new Set([dragId]);
+      lastSelectedId = dragId;
+      normalizeTimelineOrders();
+      setDirty();
+      renderAll();
+      return {
+        changed: true,
+        gap: shouldCreateGap,
+        gapDuration: finalGap,
+        index: activeTimelineSentences().findIndex((item) => item.id === dragId),
+      };
+    }
+
+    function applyTimelineOrder(nextIds) {
+      const activeRank = new Map(nextIds.map((id, index) => [id, index + 1]));
+      const inactiveStart = nextIds.length + 1;
+      orderedSentences().forEach((sentence, index) => {
+        sentence.timeline_order = activeRank.get(sentence.id) || inactiveStart + index;
+      });
+      normalizeTimelineOrders();
+    }
+
+    function moveSelectedGroupByOffset(offset) {
+      ensureSelectionState();
+      const active = activeTimelineSentences();
+      const activeIds = active.map((item) => item.id);
+      const selectedActiveIds = activeIds.filter((id) => selectedIds.has(id));
+      if (selectedActiveIds.length <= 1) return {changed: false, reason: "single"};
+      const direction = Number(offset || 0) > 0 ? 1 : -1;
+      const selectedSet = new Set(selectedActiveIds);
+      const unselectedIds = activeIds.filter((id) => !selectedSet.has(id));
+      if (!unselectedIds.length) return {changed: false, reason: "all-selected"};
+
+      let insertAt = 0;
+      if (direction > 0) {
+        const lastSelectedIndex = Math.max(...selectedActiveIds.map((id) => activeIds.indexOf(id)));
+        const nextUnselected = activeIds.slice(lastSelectedIndex + 1).find((id) => !selectedSet.has(id));
+        if (!nextUnselected) return {changed: false, reason: "edge"};
+        insertAt = unselectedIds.indexOf(nextUnselected) + 1;
+      } else {
+        const firstSelectedIndex = Math.min(...selectedActiveIds.map((id) => activeIds.indexOf(id)));
+        const previousUnselected = [...activeIds.slice(0, firstSelectedIndex)].reverse().find((id) => !selectedSet.has(id));
+        if (!previousUnselected) return {changed: false, reason: "edge"};
+        insertAt = unselectedIds.indexOf(previousUnselected);
+      }
+
+      const nextIds = [...unselectedIds];
+      nextIds.splice(insertAt, 0, ...selectedActiveIds);
+      if (nextIds.every((id, index) => id === activeIds[index])) return {changed: false, reason: "same"};
+      pushHistory();
+      applyTimelineOrder(nextIds);
+      selectedIds = new Set(selectedActiveIds);
+      selectedId = selectedActiveIds.at(direction > 0 ? -1 : 0) || selectedId;
+      lastSelectedId = selectedId;
+      setDirty();
+      renderAll();
+      return {changed: true, count: selectedActiveIds.length};
+    }
+
+    function moveSelectedClipByOffset(offset) {
+      if (selectedIds.size > 1) {
+        const groupResult = moveSelectedGroupByOffset(offset);
+        if (groupResult.changed) {
+          keepSelectedClipVisible(true);
+          const sentence = selectedSentence();
+          const row = sentence ? document.querySelector(`.timeline-segment[data-clip-id="${CSS.escape(sentence.id)}"]`) : null;
+          const rect = row?.getBoundingClientRect();
+          showTrimTooltip(
+            rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
+            rect ? rect.top - 6 : 80,
+            `已移动 ${groupResult.count} 段`
+          );
+          setTimeout(hideTrimTooltip, 850);
+        }
+        return;
+      }
+      const active = activeTimelineSentences();
+      const sentence = selectedSentence();
+      if (!sentence) return;
+      const currentIndex = active.findIndex((item) => item.id === sentence.id);
+      if (currentIndex < 0) return;
+      const targetIndex = clamp(currentIndex + Number(offset || 0), 0, active.length - 1);
+      if (targetIndex === currentIndex) return;
+      const result = moveSentenceToTimelineIndexWithGap(sentence.id, targetIndex, 0);
+      if (result?.changed) {
+        keepSelectedClipVisible(true);
+        const row = document.querySelector(`.timeline-segment[data-clip-id="${CSS.escape(sentence.id)}"]`);
+        const rect = row?.getBoundingClientRect();
+        const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+        const y = rect ? rect.top - 6 : 80;
+        showTrimTooltip(x, y, `已移动到第 ${Number(result.index || 0) + 1} 段`);
+        setTimeout(hideTrimTooltip, 850);
+      }
+    }
+
+    function nudgeSelectedTitleClip(offset) {
+      const clip = titleClip();
+      if (!clip) return false;
+      const duration = titleClipDuration(clip);
+      const maxStart = Math.max(0, activeTimelineDuration() - duration);
+      const nextStart = clamp(titleClipStart(clip) + Number(offset || 0), 0, maxStart);
+      if (Math.abs(nextStart - titleClipStart(clip)) < 0.001) return false;
+      pushHistory();
+      clip.start = Number(nextStart.toFixed(3));
+      clip.end = Number((nextStart + duration).toFixed(3));
+      selectedTitleId = clip.id;
+      syncTitleGlobalState();
+      setDirty();
+      renderAll();
+      const block = document.querySelector(`.timeline-segment.title-block[data-clip-id="${CSS.escape(clip.id)}"]`);
+      const rect = block?.getBoundingClientRect();
+      showTrimTooltip(rect ? rect.left + rect.width / 2 : window.innerWidth / 2, rect ? rect.top - 6 : 80, titleTrimLabel(clip));
+      setTimeout(hideTrimTooltip, 850);
+      return true;
+    }
+
+    function timelineIndexFromTime(time, dragId) {
+      let cursor = 0;
+      let index = 0;
+      for (const sentence of activeTimelineSentences()) {
+        if (sentence.id === dragId) {
+          cursor += clipDuration(sentence);
+          continue;
+        }
+        const middle = cursor + clipDuration(sentence) / 2;
+        if (time < middle) return index;
+        cursor += clipDuration(sentence);
+        index += 1;
+      }
+      return index;
+    }
+
+    function timelineIndexFromX(clientX, canvas, pxPerSecond, dragId) {
+      const rect = canvas.getBoundingClientRect();
+      const time = clamp((clientX - rect.left - timelineTrackOffset), 0, canvas.scrollWidth) / pxPerSecond;
+      return timelineIndexFromTime(time, dragId);
+    }
+
+    function timelineSnapTargets(dragId) {
+      const duration = activeTimelineDuration();
+      const targets = [{time: timelineTimeForPlayback(), label: "播放头"}];
+      for (let second = 0; second <= Math.ceil(duration); second += 1) {
+        targets.push({time: second, label: `${formatTime(second)}`});
+      }
+      let cursor = 0;
+      for (const sentence of activeTimelineSentences()) {
+        if (sentence.id !== dragId) targets.push({time: cursor, label: "片段边缘"});
+        cursor += clipDuration(sentence);
+        if (sentence.id !== dragId) targets.push({time: cursor, label: "片段边缘"});
+      }
+      return targets;
+    }
+
+    function snapTimelineTime(time, dragId, pxPerSecond) {
+      if (!snapEnabled) return {time, snapped: false, label: ""};
+      const threshold = Math.max(0.04, 9 / Math.max(1, pxPerSecond));
+      let best = null;
+      for (const target of timelineSnapTargets(dragId)) {
+        const distance = Math.abs(target.time - time);
+        if (distance <= threshold && (!best || distance < best.distance)) {
+          best = {...target, distance};
+        }
+      }
+      return best ? {time: best.time, snapped: true, label: best.label} : {time, snapped: false, label: ""};
+    }
+
+    function titleSnapTargets(excludedId = "") {
+      const targets = timelineSnapTargets("");
+      project.title_clips.forEach((clip) => {
+        if (clip.id === excludedId) return;
+        targets.push({time: titleClipStart(clip), label: "标题边缘"});
+        targets.push({time: titleClipEnd(clip), label: "标题边缘"});
+      });
+      return targets;
+    }
+
+    function snapTitleClipStart(rawStart, clipDurationValue, excludedId, pxPerSecond) {
+      if (!snapEnabled) return {start: rawStart, snapped: false, label: ""};
+      const threshold = Math.max(0.04, 9 / Math.max(1, pxPerSecond));
+      const duration = Math.max(0.08, Number(clipDurationValue || 0.08));
+      let best = null;
+      for (const target of titleSnapTargets(excludedId)) {
+        const startDistance = Math.abs(target.time - rawStart);
+        if (startDistance <= threshold && (!best || startDistance < best.distance)) {
+          best = {start: target.time, distance: startDistance, label: target.label};
+        }
+        const endDistance = Math.abs(target.time - (rawStart + duration));
+        if (endDistance <= threshold && (!best || endDistance < best.distance)) {
+          best = {start: target.time - duration, distance: endDistance, label: target.label};
+        }
+      }
+      return best ? {start: best.start, snapped: true, label: best.label} : {start: rawStart, snapped: false, label: ""};
+    }
+
+    function snapTitleClipEdge(rawValue, side, clip, pxPerSecond) {
+      if (!snapEnabled) return {value: rawValue, snapped: false, label: ""};
+      const threshold = Math.max(0.04, 9 / Math.max(1, pxPerSecond));
+      let best = null;
+      for (const target of titleSnapTargets(clip.id)) {
+        const distance = Math.abs(target.time - rawValue);
+        if (distance <= threshold && (!best || distance < best.distance)) {
+          best = {value: target.time, distance, label: target.label};
+        }
+      }
+      return best ? {value: best.value, snapped: true, label: best.label} : {value: rawValue, snapped: false, label: ""};
+    }
+
+    function timelineDropPlanFromX(clientX, canvas, pxPerSecond, dragId, freePlacement = false) {
+      const rect = canvas.getBoundingClientRect();
+      const unsnappedTime = clamp((clientX - rect.left - timelineTrackOffset), 0, canvas.scrollWidth) / pxPerSecond;
+      const snap = snapTimelineTime(unsnappedTime, dragId, pxPerSecond);
+      const rawTime = snap.time;
+      const index = timelineIndexFromTime(rawTime, dragId);
+      const naturalTime = timelineXForIndex(index, dragId, pxPerSecond) / pxPerSecond;
+      const gapBefore = freePlacement ? Math.max(0, rawTime - naturalTime) : 0;
+      return {index, rawTime, naturalTime, gapBefore, snapped: snap.snapped, snapLabel: snap.label};
+    }
+
+    function autoScrollTimelineDuringDrag(clientX, scroll) {
+      if (!scroll) return 0;
+      const rect = scroll.getBoundingClientRect();
+      const edge = 72;
+      let delta = 0;
+      scroll.classList.remove("auto-scroll-left", "auto-scroll-right");
+      if (clientX < rect.left + edge) {
+        delta = -Math.ceil((rect.left + edge - clientX) / 4);
+        scroll.classList.add("auto-scroll-left");
+      } else if (clientX > rect.right - edge) {
+        delta = Math.ceil((clientX - (rect.right - edge)) / 4);
+        scroll.classList.add("auto-scroll-right");
+      }
+      if (!delta) return 0;
+      const nextLeft = clamp(scroll.scrollLeft + delta, 0, Math.max(0, scroll.scrollWidth - scroll.clientWidth));
+      const moved = nextLeft - scroll.scrollLeft;
+      if (!moved) return 0;
+      scroll.scrollLeft = nextLeft;
+      timelineScrollLeft = nextLeft;
+      return moved;
+    }
+
+    function timelineXForIndex(index, dragId, pxPerSecond) {
+      let cursor = 0;
+      let visibleIndex = 0;
+      for (const sentence of activeTimelineSentences()) {
+        if (sentence.id === dragId) continue;
+        if (visibleIndex >= index) break;
+        cursor += clipDuration(sentence);
+        visibleIndex += 1;
+      }
+      return cursor * pxPerSecond;
+    }
+
+    function setPreviewText(element, value) {
+      const rawText = String(value || "").trim();
+      const text = element === subtitlePreview ? rawText.replace(/\s+/g, " ") : rawText;
+      element.textContent = text;
+      element.classList.toggle("is-empty", !text);
+      element.setAttribute("aria-hidden", text ? "false" : "true");
+    }
+
+    function seekToSentence(sentence) {
+      if (!sentence) return;
+      selectedId = sentence.id;
+      suppressTimeSyncUntil = performance.now() + 280;
+      if (!isGapSentence(sentence)) {
+        video.currentTime = Math.max(0, Number(sentence.start ?? sentence.clip_start ?? 0) + 0.001);
+      }
+      renderAll();
+    }
+
+    function sentenceAtTime(time) {
+      return project.sentences.find((sentence) => {
+        const start = Number(sentence.start || 0);
+        const end = Number(sentence.end || start);
+        return time >= start && time < end;
+      }) || null;
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, Number(value || 0)));
+    }
+
+    function hexToRgba(hex, opacity = 100) {
+      const value = String(hex || "#000000").replace("#", "");
+      const normalized = value.length === 3 ? value.split("").map((x) => x + x).join("") : value.padEnd(6, "0").slice(0, 6);
+      const r = parseInt(normalized.slice(0, 2), 16);
+      const g = parseInt(normalized.slice(2, 4), 16);
+      const b = parseInt(normalized.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${clamp(opacity, 0, 100) / 100})`;
+    }
+
+    function shadowValue(style, frameHeight) {
+      const outline = Number(style.outline_enabled === false ? 0 : style.outline_width || 0) * frameHeight / 1920;
+      const shadow = Number(style.shadow_enabled ? style.shadow_offset || 0 : 0) * frameHeight / 1920;
+      const outlineColor = style.glow_enabled ? style.glow_color : style.outline_color;
+      const outlinePx = Math.max(0, outline);
+      const shadowPx = Math.max(0, shadow);
+      const pieces = [];
+      if (outlinePx > 0) {
+        const c = outlineColor || "#000000";
+        pieces.push(`${outlinePx}px 0 0 ${c}`, `-${outlinePx}px 0 0 ${c}`, `0 ${outlinePx}px 0 ${c}`, `0 -${outlinePx}px 0 ${c}`);
+      }
+      if (shadowPx > 0) pieces.push(`${shadowPx}px ${shadowPx}px 0 ${style.shadow_color || "#000000"}`);
+      return pieces.join(", ") || "none";
+    }
+
+    function applyTextStyle(element, style, isTitle = false) {
+      const frameWidth = Math.max(1, videoFrame.clientWidth);
+      const frameHeight = Math.max(1, videoFrame.clientHeight);
+      const scale = Number(style.scale || 100) / 100;
+      const fontSize = Math.max(10, Number(style.font_size || (isTitle ? 76 : 64)) * frameHeight / 1920 * scale);
+      const x = frameWidth / 2 + Number(style.position_x || 0) * frameWidth / 1080;
+      const y = frameHeight / 2 + Number(style.position_y ?? (isTitle ? -520 : 650)) * frameHeight / 1920;
+      element.style.left = `${x}px`;
+      element.style.top = `${y}px`;
+      element.style.bottom = "auto";
+      element.style.transform = "translate(-50%, -50%)";
+      const maxWidth = Math.max(80, frameWidth - Number(style.margin_x || 80) * 2 * frameWidth / 1080);
+      element.dataset.maxWidth = String(maxWidth);
+      if (element === subtitlePreview) {
+        element.style.width = "max-content";
+        element.style.maxWidth = "none";
+      } else {
+        element.style.width = "auto";
+        element.style.maxWidth = `${maxWidth}px`;
+      }
+      element.style.fontFamily = style.font_family || "Microsoft YaHei";
+      element.style.fontSize = `${fontSize}px`;
+      element.dataset.baseFontSize = String(fontSize);
+      element.style.fontWeight = style.bold === false ? "700" : "950";
+      element.style.fontStyle = style.italic ? "italic" : "normal";
+      element.style.textDecoration = style.underline ? "underline" : "none";
+      element.style.color = hexToRgba(style.primary_color || "#ffffff", style.opacity ?? 100);
+      element.style.textAlign = style.text_align || "center";
+      element.style.letterSpacing = `${Number(style.letter_spacing || 0) * frameWidth / 1080}px`;
+      element.style.lineHeight = String(1.12 + Number(style.line_spacing || 0) / 100);
+      element.style.textShadow = shadowValue(style, frameHeight);
+      if (style.background_enabled) {
+        const pad = Math.max(0, Number(style.background_padding || 0) * frameHeight / 1920);
+        element.style.padding = `${Math.max(2, pad / 2)}px ${Math.max(4, pad)}px`;
+        element.style.background = hexToRgba(style.background_color || "#000000", style.background_opacity || 52);
+        element.style.borderRadius = "6px";
+      } else {
+        element.style.padding = "0";
+        element.style.background = "transparent";
+        element.style.borderRadius = "0";
+      }
+    }
+
+    function fitSingleLineText(element) {
+      if (!element.textContent.trim()) return;
+      const maxWidth = Number(element.dataset.maxWidth || 0);
+      const baseFontSize = Number(element.dataset.baseFontSize || 0);
+      if (!maxWidth || !baseFontSize) return;
+      element.style.fontSize = `${baseFontSize}px`;
+      const actualWidth = element.scrollWidth;
+      if (actualWidth <= maxWidth) return;
+      const nextSize = Math.max(10, Math.floor(baseFontSize * maxWidth / actualWidth));
+      element.style.fontSize = `${nextSize}px`;
+    }
+
+    function setDirty(value = true, autosave = true) {
+      if (value && savedSnapshot && snapshotProject() === savedSnapshot) value = false;
       dirty = value;
       saveState.textContent = dirty ? "有未保存修改" : "已保存";
       saveState.classList.toggle("dirty", dirty);
+      if (dirty && autosave) {
+        clearTimeout(autosaveTimer);
+        autosaveTimer = setTimeout(saveProject, 1400);
+      }
+    }
+
+    function visibleSentences() {
+      const q = sentenceSearch.value.trim().toLowerCase();
+      return project.sentences.filter((sentence) => {
+        const text = `${sentence.text || ""} ${sentence.original_text || ""}`.toLowerCase();
+        if (q && !text.includes(q)) return false;
+        if (activeFilter === "edited") return sentence.edited;
+        if (activeFilter === "removed") return sentence.remove_video;
+        if (activeFilter === "hidden") return !sentence.enabled && !sentence.remove_video;
+        return true;
+      });
+    }
+
+    function activeFilterLabel() {
+      if (activeFilter === "edited") return "已改";
+      if (activeFilter === "removed") return "已删";
+      if (activeFilter === "hidden") return "隐藏";
+      return "全部";
+    }
+
+    function updateSentenceFilterState(rows) {
+      const q = sentenceSearch.value.trim();
+      const isFiltered = activeFilter !== "all" || Boolean(q);
+      sentenceFilterState.hidden = !isFiltered;
+      if (!isFiltered) return;
+      const selectedVisible = rows.some((sentence) => sentence.id === selectedId);
+      const parts = [`${activeFilterLabel()} ${rows.length}/${project.sentences.length}`];
+      if (q) parts.push(`搜索“${q.slice(0, 18)}”`);
+      if (!selectedVisible && selectedId) parts.push("当前句不在结果中");
+      sentenceFilterText.textContent = parts.join(" · ");
+    }
+
+    function updateFilterTabCounts() {
+      const counts = {
+        all: project.sentences.length,
+        edited: project.sentences.filter((sentence) => sentence.edited).length,
+        removed: project.sentences.filter((sentence) => sentence.remove_video).length,
+        hidden: project.sentences.filter((sentence) => !sentence.enabled && !sentence.remove_video).length,
+      };
+      document.querySelectorAll(".filter-tab").forEach((button) => {
+        const label = button.dataset.label || button.textContent.trim();
+        const key = button.dataset.filter || "all";
+        button.textContent = `${label} ${counts[key] ?? 0}`;
+      });
+    }
+
+    function sentenceCaretOffset(editable) {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return 0;
+      const range = selection.getRangeAt(0);
+      const prefix = range.cloneRange();
+      prefix.selectNodeContents(editable);
+      prefix.setEnd(range.endContainer, range.endOffset);
+      return prefix.toString().length;
+    }
+
+    function focusEditableText(editable, atEnd = true) {
+      editable.contentEditable = "true";
+      if (!editable.dataset.historyActive) {
+        pushHistory();
+        editable.dataset.historyActive = "1";
+      }
+      editable.focus();
+      const range = document.createRange();
+      range.selectNodeContents(editable);
+      range.collapse(!atEnd);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    function updateSelectedText(value) {
+      const sentence = selectedSentence();
+      if (!sentence) return;
+      sentence.text = String(value || "").replace(/\s+/g, " ").trim();
+      sentence.edited = sentence.text !== sentence.original_text;
+      setPreviewText(subtitlePreview, sentence.remove_video || !sentence.enabled ? "" : sentence.text);
+      applyTextStyle(subtitlePreview, subtitleStyle, false);
+      fitSingleLineText(subtitlePreview);
+      setDirty();
+    }
+
+    function keepActiveSentenceVisible() {
+      const row = list.querySelector(".sentence-item.active");
+      const shell = list.closest(".sentence-list-shell");
+      if (!row || !shell) return;
+      const padding = Math.min(16, Math.max(0, (shell.clientHeight - row.offsetHeight) / 2));
+      const rowTop = row.offsetTop;
+      const rowBottom = rowTop + row.offsetHeight;
+      if (rowTop < shell.scrollTop + padding) {
+        shell.scrollTop = Math.max(0, rowTop - padding);
+      } else if (rowBottom > shell.scrollTop + shell.clientHeight - padding) {
+        shell.scrollTop = rowBottom - shell.clientHeight + padding;
+      }
     }
 
     function renderList() {
+      const rows = visibleSentences();
       list.innerHTML = "";
-      document.getElementById("sentence-count").textContent = project.sentences.length;
-      project.sentences.forEach((sentence, index) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "sentence-item";
-        button.classList.toggle("active", sentence.id === selectedId);
-        button.classList.toggle("removed", sentence.remove_video);
-        button.innerHTML = `<span>${String(index + 1).padStart(2, "0")} · ${formatTime(sentence.start)}</span><strong></strong>`;
-        button.querySelector("strong").textContent = sentence.text || sentence.original_text || "空字幕";
-        button.addEventListener("click", () => {
-          selectedId = sentence.id;
-          video.currentTime = sentence.start;
+      document.getElementById("sentence-count").textContent = `${rows.length}/${project.sentences.length}`;
+      updateFilterTabCounts();
+      updateSentenceFilterState(rows);
+      updateSelectionTools();
+      if (!rows.length) {
+        const empty = document.createElement("div");
+        empty.className = "sentence-empty";
+        empty.textContent = "没有匹配的字幕";
+        list.appendChild(empty);
+        return;
+      }
+      rows.forEach((sentence) => {
+        const index = project.sentences.indexOf(sentence);
+        const row = document.createElement("div");
+        row.className = "sentence-item";
+        row.tabIndex = 0;
+        row.draggable = false;
+        row.dataset.clipId = sentence.id;
+        row.classList.toggle("active", sentence.id === selectedId);
+        row.classList.toggle("selected", selectedIds.has(sentence.id));
+        row.classList.toggle("removed", sentence.remove_video);
+        row.classList.toggle("gap", isGapSentence(sentence));
+        row.classList.toggle("hidden", !sentence.enabled && !sentence.remove_video);
+        row.innerHTML = `<span class="sentence-index">${String(index + 1).padStart(2, "0")}</span><strong class="sentence-edit" contenteditable="false" spellcheck="false"></strong><span class="sentence-time">${isGapSentence(sentence) ? "空隙" : ""} ${formatTime(clipStart(sentence))} - ${formatTime(clipEnd(sentence))}</span>`;
+        const editable = row.querySelector(".sentence-edit");
+        editable.textContent = sentence.text || sentence.original_text || "空字幕";
+        row.addEventListener("click", (event) => {
+          if (event.target === editable && editable.isContentEditable) return;
+          if (sentence.id === selectedId && event.target === editable) {
+            focusEditableText(editable, true);
+            return;
+          }
+          selectSentenceFromEvent(event, sentence, !(event.ctrlKey || event.metaKey || event.shiftKey));
+        });
+        row.addEventListener("dblclick", (event) => {
+          event.preventDefault();
+          setSingleSelection(sentence.id);
+          renderAll();
+          const activeEditable = list.querySelector(".sentence-item.active .sentence-edit");
+          if (activeEditable) focusEditableText(activeEditable, true);
+        });
+        row.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          if (!selectedIds.has(sentence.id)) setSingleSelection(sentence.id);
+          renderAll();
+          openContextMenu("sentence", event.clientX, event.clientY, sentence.id);
+        });
+        editable.addEventListener("input", () => updateSelectedText(editable.textContent));
+        editable.addEventListener("keydown", (event) => handleEditableEnter(event, editable));
+        editable.addEventListener("blur", () => {
+          delete editable.dataset.historyActive;
+          editable.contentEditable = "false";
           renderAll();
         });
-        list.appendChild(button);
+        list.appendChild(row);
+      });
+      keepActiveSentenceVisible();
+    }
+
+    function handleSentenceListPress(event) {
+      if (event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const row = event.target.closest(".sentence-item");
+      if (!row || !list.contains(row)) return;
+      const editable = row.querySelector(".sentence-edit");
+      if (event.target === editable && editable.isContentEditable) return;
+      const sentence = project.sentences.find((item) => item.id === row.dataset.clipId);
+      if (!sentence) return;
+      if (event.target === editable && sentence.id === selectedId) return;
+      selectedId = sentence.id;
+      suppressTimeSyncUntil = performance.now() + 280;
+      try {
+        video.currentTime = Math.max(0, Number(sentence.start ?? sentence.clip_start ?? 0) + 0.001);
+      } catch {
+        // Some test environments expose media time as readonly; selection still updates.
+      }
+      renderAll();
+    }
+
+    function timelineBlock(sentence, row, className, leftPx, widthPx, draggable = true) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = className;
+      item.draggable = false;
+      item.dataset.clipId = sentence.id;
+      item.style.left = `${leftPx}px`;
+      item.style.width = `${Math.max(8, widthPx)}px`;
+      item.title = sentence.text || sentence.original_text || "";
+      row.appendChild(item);
+      return item;
+    }
+
+    function closestThumb(time) {
+      const thumbs = editorAssets.thumbs || [];
+      if (!thumbs.length) return null;
+      return thumbs.reduce((best, item) => (
+        Math.abs(Number(item.time || 0) - time) < Math.abs(Number(best.time || 0) - time) ? item : best
+      ), thumbs[0]);
+    }
+
+    function mediaThumbsFor(sentence, widthPx) {
+      const thumbs = editorAssets.thumbs || [];
+      if (!thumbs.length) return [];
+      const start = clipStart(sentence);
+      const end = Math.max(start + 0.05, clipEnd(sentence));
+      const count = clamp(Math.ceil(widthPx / 36), 1, 18);
+      const picked = [];
+      const used = new Set();
+      for (let index = 0; index < count; index += 1) {
+        const ratio = count === 1 ? 0.5 : index / (count - 1);
+        const target = start + (end - start) * ratio;
+        const thumb = closestThumb(target);
+        if (thumb && !used.has(thumb.url)) {
+          picked.push(thumb);
+          used.add(thumb.url);
+        }
+      }
+      if (!picked.length) {
+        const fallback = closestThumb(start);
+        if (fallback) picked.push(fallback);
+      }
+      return picked;
+    }
+
+    function waveformFor(sentence, widthPx) {
+      const values = editorAssets.waveform || [];
+      const duration = Number(editorAssets.duration || project.duration || 0);
+      if (!values.length || duration <= 0) return [];
+      const start = clamp(clipStart(sentence), 0, duration);
+      const end = clamp(clipEnd(sentence), start + 0.05, duration);
+      const from = clamp(Math.floor((start / duration) * values.length), 0, values.length - 1);
+      const to = clamp(Math.ceil((end / duration) * values.length), from + 1, values.length);
+      const slice = values.slice(from, to);
+      const barCount = clamp(Math.floor(widthPx / 3), 8, 96);
+      const step = Math.max(1, slice.length / barCount);
+      const sampled = [];
+      for (let index = 0; index < barCount; index += 1) {
+        const sample = slice[Math.min(slice.length - 1, Math.floor(index * step))] || 0.04;
+        sampled.push(sample);
+      }
+      return sampled;
+    }
+
+    function hydrateMediaBlock(block, sentence, widthPx) {
+      const thumbStrip = document.createElement("span");
+      const waveStrip = document.createElement("span");
+      thumbStrip.className = "thumb-strip";
+      waveStrip.className = "wave-strip";
+      thumbStrip.setAttribute("aria-hidden", "true");
+      waveStrip.setAttribute("aria-hidden", "true");
+      const thumbs = mediaThumbsFor(sentence, widthPx);
+      if (thumbs.length) {
+        thumbs.forEach((thumb) => {
+          const img = document.createElement("img");
+          img.src = thumb.url;
+          img.alt = "";
+          img.loading = "lazy";
+          thumbStrip.appendChild(img);
+        });
+      } else {
+        thumbStrip.classList.add("is-placeholder");
+      }
+      const waveform = waveformFor(sentence, widthPx);
+      if (waveform.length) {
+        waveform.forEach((value) => {
+          const bar = document.createElement("span");
+          bar.style.height = `${Math.max(10, Math.round(Number(value || 0.04) * 100))}%`;
+          waveStrip.appendChild(bar);
+        });
+      } else {
+        waveStrip.classList.add("is-placeholder");
+      }
+      block.replaceChildren(thumbStrip, waveStrip);
+    }
+
+    function addTimelineDnD(block, sentence) {
+      const startDrag = (event, pointerMode = false) => {
+        if (event.button !== 0 || event.target.closest(".trim-handle")) return;
+        if (block.dataset.draggingActive === "1") return;
+        event.preventDefault();
+        block.dataset.draggingActive = "1";
+        const canvas = block.closest(".timeline-canvas");
+        const marker = canvas?.querySelector(".timeline-insert-marker");
+        const dropZone = canvas?.querySelector(".timeline-drop-zone");
+        if (!canvas || !marker || !dropZone) {
+          delete block.dataset.draggingActive;
+          return;
+        }
+        const pxPerSecond = Number(timelineZoom.value || 58);
+        const originX = event.clientX;
+        const originRect = block.getBoundingClientRect();
+        const ghost = block.cloneNode(true);
+        let moved = false;
+        let targetIndex = null;
+        let targetGapBefore = 0;
+        let cancelled = false;
+        ghost.classList.add("timeline-drag-ghost");
+        ghost.style.left = `${originRect.left}px`;
+        ghost.style.top = `${originRect.top}px`;
+        ghost.style.width = `${originRect.width}px`;
+        ghost.style.height = `${originRect.height}px`;
+        document.body.appendChild(ghost);
+        if (pointerMode && block.setPointerCapture) block.setPointerCapture(event.pointerId);
+        const onMove = (moveEvent) => {
+          const delta = moveEvent.clientX - originX;
+          if (!moved && Math.abs(delta) < 4) return;
+          moved = true;
+          const scroll = canvas.closest(".timeline-scroll");
+          autoScrollTimelineDuringDrag(moveEvent.clientX, scroll);
+          block.classList.add("dragging");
+          ghost.classList.add("is-visible");
+          ghost.style.transform = `translate3d(${delta}px, 0, 0)`;
+          const freePlacement = freeDropEnabled || moveEvent.altKey;
+          const dropPlan = timelineDropPlanFromX(moveEvent.clientX, canvas, pxPerSecond, sentence.id, freePlacement);
+          targetIndex = dropPlan.index;
+          targetGapBefore = dropPlan.gapBefore;
+          const dropX = (dropPlan.naturalTime + targetGapBefore) * pxPerSecond;
+          const nextX = timelineXForIndex(targetIndex + 1, sentence.id, pxPerSecond);
+          marker.style.left = `${dropX + timelineTrackOffset}px`;
+          dropZone.style.left = `${dropX + timelineTrackOffset}px`;
+          dropZone.style.width = `${Math.max(18, nextX - dropX)}px`;
+          dropZone.classList.toggle("is-gap-drop", targetGapBefore >= 0.18);
+          marker.classList.toggle("is-snap-target", dropPlan.snapped);
+          marker.classList.add("is-visible");
+          dropZone.classList.add("is-visible");
+          const baseLabel = targetGapBefore >= 0.18
+            ? `留空 ${formatPreciseTime(targetGapBefore)} 后插入`
+            : `插入到第 ${targetIndex + 1} 段`;
+          const label = dropPlan.snapped ? `吸附 ${dropPlan.snapLabel} · ${baseLabel}` : baseLabel;
+          setTimelineStatus(label);
+          showTrimTooltip(moveEvent.clientX, moveEvent.clientY - 28, label);
+        };
+        const cleanupDrag = () => {
+          document.removeEventListener(pointerMode ? "pointermove" : "mousemove", onMove);
+          document.removeEventListener(pointerMode ? "pointerup" : "mouseup", onUp);
+          document.removeEventListener("keydown", onKeyDown, true);
+          hideTrimTooltip();
+          marker.classList.remove("is-visible", "is-snap-target");
+          dropZone.classList.remove("is-visible", "is-gap-drop");
+          canvas.closest(".timeline-scroll")?.classList.remove("auto-scroll-left", "auto-scroll-right");
+          block.classList.remove("dragging");
+          ghost.remove();
+          delete block.dataset.draggingActive;
+        };
+        const onUp = () => {
+          cleanupDrag();
+          if (!cancelled && moved && targetIndex !== null) {
+            const result = moveSentenceToTimelineIndexWithGap(sentence.id, targetIndex, targetGapBefore);
+            if (result?.changed) {
+              const message = result.gap
+                ? `已留空 ${formatPreciseTime(result.gapDuration)} 后插入`
+                : `已移动到第 ${Number(result.index || 0) + 1} 段`;
+              setTimelineStatus(message, 1400);
+              showTrimTooltip(originRect.left + originRect.width / 2, originRect.top - 6, message);
+              setTimeout(hideTrimTooltip, 850);
+            }
+          } else if (!cancelled) {
+            seekToSentence(sentence);
+          }
+        };
+        const onKeyDown = (keyEvent) => {
+          if (keyEvent.key !== "Escape") return;
+          keyEvent.preventDefault();
+          keyEvent.stopPropagation();
+          cancelled = true;
+          cleanupDrag();
+          showTrimTooltip(originRect.left + originRect.width / 2, originRect.top - 6, "已取消拖动");
+          setTimeout(hideTrimTooltip, 650);
+        };
+        document.addEventListener(pointerMode ? "pointermove" : "mousemove", onMove);
+        document.addEventListener(pointerMode ? "pointerup" : "mouseup", onUp);
+        document.addEventListener("keydown", onKeyDown, true);
+      };
+      block.addEventListener("pointerdown", (event) => startDrag(event, true));
+      if (!window.PointerEvent) {
+        block.addEventListener("mousedown", (event) => startDrag(event, false));
+      }
+    }
+
+    function adjacentSourceBounds(sentence) {
+      const bySource = activeTimelineSentences().slice().sort((a, b) => clipStart(a) - clipStart(b));
+      const index = bySource.findIndex((item) => item.id === sentence.id);
+      return {
+        previousEnd: index > 0 ? clipEnd(bySource[index - 1]) : 0,
+        nextStart: index >= 0 && index + 1 < bySource.length ? clipStart(bySource[index + 1]) : Number(project.duration || video.duration || 1),
+      };
+    }
+
+    function showTrimTooltip(x, y, label) {
+      if (!trimTooltip) {
+        trimTooltip = document.createElement("div");
+        trimTooltip.className = "timeline-float-tip";
+        document.body.appendChild(trimTooltip);
+      }
+      trimTooltip.textContent = label;
+      trimTooltip.style.left = `${x}px`;
+      trimTooltip.style.top = `${y}px`;
+      trimTooltip.classList.add("is-visible");
+    }
+
+    function hideTrimTooltip() {
+      if (trimTooltip) trimTooltip.classList.remove("is-visible");
+    }
+
+    function showSplitPreview(block, sentence, event) {
+      if (timelineTool !== "split" || !sentence || isGapSentence(sentence)) {
+        hideSplitPreview(block);
+        return;
+      }
+      const rect = block.getBoundingClientRect();
+      const pxPerSecond = Number(timelineZoom.value || 58);
+      const local = clamp((event.clientX - rect.left) / pxPerSecond, 0, clipDuration(sentence));
+      const x = clamp(event.clientX - rect.left, 0, rect.width);
+      block.style.setProperty("--split-x", `${x}px`);
+      block.classList.add("split-preview");
+      showTrimTooltip(event.clientX, rect.top - 6, `切割 ${formatPreciseTime(clipStart(sentence) + local)}`);
+    }
+
+    function hideSplitPreview(block) {
+      block.classList.remove("split-preview");
+      block.style.removeProperty("--split-x");
+      hideTrimTooltip();
+    }
+
+    function splitTimelineSentenceAtPointer(sentence, event) {
+      if (!sentence || isGapSentence(sentence)) return false;
+      const block = event.currentTarget;
+      const rect = block.getBoundingClientRect();
+      const pxPerSecond = Number(timelineZoom.value || 58);
+      const local = clamp((event.clientX - rect.left) / pxPerSecond, 0, clipDuration(sentence));
+      splitAtSourceTime(sentence, clipStart(sentence) + local);
+      return true;
+    }
+
+    function ensureContextMenu() {
+      if (contextMenu) return contextMenu;
+      contextMenu = document.createElement("div");
+      contextMenu.className = "editor-context-menu";
+      contextMenu.setAttribute("role", "menu");
+      document.body.appendChild(contextMenu);
+      contextMenu.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-action]");
+        if (!button) return;
+        event.preventDefault();
+        runContextAction(button.dataset.action);
+      });
+      return contextMenu;
+    }
+
+    function hideContextMenu() {
+      if (contextMenu) contextMenu.classList.remove("is-open");
+      contextTarget = null;
+    }
+
+    function menuButton(action, label, shortcut = "") {
+      return `<button type="button" role="menuitem" data-action="${action}"><span>${label}</span><kbd>${shortcut}</kbd></button>`;
+    }
+
+    function openContextMenu(kind, x, y, targetId = "") {
+      const menu = ensureContextMenu();
+      contextTarget = {kind, targetId};
+      let items = "";
+      if (kind === "sentence") {
+        const count = selectedSentences().length;
+        const suffix = count > 1 ? ` ${count} 个片段` : "";
+        items = [
+          menuButton("split", "在播放头切割", "B"),
+          menuButton("hide-subtitle", `只隐藏字幕${suffix}`, "H"),
+          menuButton("delete-segment", rippleDelete ? `删除${suffix || "片段"}` : `留空隐藏${suffix}`, "Del"),
+          menuButton("recover-segment", `恢复${suffix || "片段"}`, "R"),
+          "<hr>",
+          menuButton("insert-gap-after", "在后面插入空隙", "G"),
+          menuButton("add-title", "在此处添加标题", "T"),
+        ].join("");
+      } else if (kind === "title") {
+        const clip = titleClip();
+        items = [
+          menuButton("toggle-title", clip?.enabled ? "隐藏标题" : "显示标题", ""),
+          menuButton("duplicate-title", "复制标题", ""),
+          menuButton("delete-title", "删除标题", ""),
+        ].join("");
+      } else {
+        items = [
+          menuButton("insert-gap", "插入空隙", "G"),
+          menuButton("add-title", "添加标题", "T"),
+          menuButton("split", "在播放头切割", "B"),
+        ].join("");
+      }
+      menu.innerHTML = items;
+      const margin = 10;
+      menu.style.left = `${Math.min(x, window.innerWidth - 230 - margin)}px`;
+      menu.style.top = `${Math.min(y, window.innerHeight - 220 - margin)}px`;
+      menu.classList.add("is-open");
+    }
+
+    function runContextAction(action) {
+      if (contextTarget?.kind === "sentence" && contextTarget.targetId) {
+        selectedId = contextTarget.targetId;
+      }
+      if (contextTarget?.kind === "title" && contextTarget.targetId) {
+        selectedTitleId = contextTarget.targetId;
+      }
+      hideContextMenu();
+      if (action === "split") splitAtPlayhead();
+      if (action === "hide-subtitle") hideSelectedSubtitle();
+      if (action === "delete-segment") deleteSelectedSegment();
+      if (action === "recover-segment") recoverSelectedSegment();
+      if (action === "insert-gap" || action === "insert-gap-after") insertTimelineGap();
+      if (action === "add-title") addTitleClip();
+      if (action === "toggle-title") toggleSelectedTitle();
+      if (action === "duplicate-title") duplicateTitleClip();
+      if (action === "delete-title") deleteTitleClip();
+    }
+
+    function addTrimHandles(block, sentence) {
+      ["left", "right"].forEach((side) => {
+        const handle = document.createElement("span");
+        handle.className = `trim-handle ${side}`;
+        handle.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          pushHistory();
+          trimmingClipId = sentence.id;
+          trimmingSide = side;
+          selectedId = sentence.id;
+          block.draggable = false;
+          const originX = event.clientX;
+          const originStart = clipStart(sentence);
+          const originEnd = clipEnd(sentence);
+          const duration = Number(project.duration || video.duration || 1);
+          const isSyntheticGap = Boolean(sentence.synthetic_gap);
+          const bounds = isSyntheticGap ? {previousEnd: 0, nextStart: 3600} : snapEnabled ? adjacentSourceBounds(sentence) : {previousEnd: 0, nextStart: duration};
+          const pixelsToSeconds = 1 / Number(timelineZoom.value || 58);
+          handle.setPointerCapture(event.pointerId);
+          const onMove = (moveEvent) => {
+            const delta = (moveEvent.clientX - originX) * pixelsToSeconds;
+            if (side === "left") {
+              sentence.clip_start = clamp(originStart + delta, bounds.previousEnd, originEnd - 0.08);
+              sentence.start = isSyntheticGap ? sentence.clip_start : clamp(sentence.start, sentence.clip_start, sentence.clip_end);
+              const message = `入点 ${formatPreciseTime(sentence.clip_start)}`;
+              setTimelineStatus(message);
+              showTrimTooltip(moveEvent.clientX, moveEvent.clientY - 28, message);
+            } else {
+              sentence.clip_end = clamp(originEnd + delta, originStart + 0.08, Math.min(bounds.nextStart, duration));
+              if (isSyntheticGap) {
+                sentence.clip_end = clamp(originEnd + delta, originStart + 0.08, bounds.nextStart);
+                sentence.end = sentence.clip_end;
+              } else {
+                sentence.end = clamp(sentence.end, sentence.clip_start, sentence.clip_end);
+              }
+              const message = `出点 ${formatPreciseTime(sentence.clip_end)}`;
+              setTimelineStatus(message);
+              showTrimTooltip(moveEvent.clientX, moveEvent.clientY - 28, message);
+            }
+            setDirty();
+            renderTimeline();
+            renderList();
+          };
+          const onUp = () => {
+            block.draggable = true;
+            trimmingClipId = null;
+            trimmingSide = null;
+            hideTrimTooltip();
+            document.removeEventListener("pointermove", onMove);
+            document.removeEventListener("pointerup", onUp);
+            setTimelineStatus(`片段范围 ${clipTrimLabel(sentence)}`, 1400);
+            renderAll();
+          };
+          document.addEventListener("pointermove", onMove);
+          document.addEventListener("pointerup", onUp);
+        });
+        block.appendChild(handle);
+      });
+    }
+
+    function addTitleTimelineControls(block, clip) {
+      block.addEventListener("click", (event) => {
+        event.stopPropagation();
+        selectedTitleId = clip.id;
+        renderAll();
+      });
+      block.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        selectedTitleId = clip.id;
+        renderAll();
+        openContextMenu("title", event.clientX, event.clientY, clip.id);
+      });
+      block.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0 || event.target.closest(".trim-handle")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        pushHistory();
+        selectedTitleId = clip.id;
+        const pxPerSecond = Number(timelineZoom.value || 58);
+        const originX = event.clientX;
+        const scroll = block.closest(".timeline-scroll");
+        const originScrollLeft = scroll?.scrollLeft || 0;
+        const originStart = titleClipStart(clip);
+        const duration = titleClipDuration(clip);
+        const maxStart = Math.max(0, activeTimelineDuration() - duration);
+        block.setPointerCapture(event.pointerId);
+        const onMove = (moveEvent) => {
+          if (scroll) autoScrollTimelineDuringDrag(moveEvent.clientX, scroll);
+          const scrollDelta = (scroll?.scrollLeft || 0) - originScrollLeft;
+          const delta = (moveEvent.clientX - originX + scrollDelta) / pxPerSecond;
+          const rawStart = clamp(originStart + delta, 0, maxStart);
+          const snap = snapTitleClipStart(rawStart, duration, clip.id, pxPerSecond);
+          const nextStart = clamp(snap.start, 0, maxStart);
+          clip.start = Number(nextStart.toFixed(3));
+          clip.end = Number((nextStart + duration).toFixed(3));
+          block.classList.add("dragging");
+          setDirty();
+          renderTimeline();
+          renderInspector();
+          const message = snap.snapped ? `磁吸到${snap.label} · ${titleTrimLabel(clip)}` : titleTrimLabel(clip);
+          setTimelineStatus(message);
+          showTrimTooltip(moveEvent.clientX, moveEvent.clientY - 28, message);
+        };
+        const onUp = () => {
+          scroll?.classList.remove("auto-scroll-left", "auto-scroll-right");
+          hideTrimTooltip();
+          block.classList.remove("dragging");
+          document.removeEventListener("pointermove", onMove);
+          document.removeEventListener("pointerup", onUp);
+          setTimelineStatus(`标题范围 ${titleTrimLabel(clip)}`, 1400);
+          renderAll();
+        };
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
+      });
+      ["left", "right"].forEach((side) => {
+        const handle = document.createElement("span");
+        handle.className = `trim-handle ${side}`;
+        handle.addEventListener("pointerdown", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          pushHistory();
+          selectedTitleId = clip.id;
+          trimmingClipId = clip.id;
+          trimmingSide = side;
+          trimmingKind = "title";
+          const originX = event.clientX;
+          const scroll = block.closest(".timeline-scroll");
+          const originScrollLeft = scroll?.scrollLeft || 0;
+          const originStart = titleClipStart(clip);
+          const originEnd = titleClipEnd(clip);
+          const duration = activeTimelineDuration();
+          const pixelsToSeconds = 1 / Number(timelineZoom.value || 58);
+          handle.setPointerCapture(event.pointerId);
+          const onMove = (moveEvent) => {
+            if (scroll) autoScrollTimelineDuringDrag(moveEvent.clientX, scroll);
+            const scrollDelta = (scroll?.scrollLeft || 0) - originScrollLeft;
+            const delta = (moveEvent.clientX - originX + scrollDelta) * pixelsToSeconds;
+            let snap = {snapped: false, label: ""};
+            if (side === "left") {
+              const rawStart = clamp(originStart + delta, 0, originEnd - 0.08);
+              snap = snapTitleClipEdge(rawStart, side, clip, Number(timelineZoom.value || 58));
+              clip.start = Number(clamp(snap.value, 0, originEnd - 0.08).toFixed(3));
+            } else {
+              const rawEnd = clamp(originEnd + delta, originStart + 0.08, duration);
+              snap = snapTitleClipEdge(rawEnd, side, clip, Number(timelineZoom.value || 58));
+              clip.end = Number(clamp(snap.value, originStart + 0.08, duration).toFixed(3));
+            }
+            setDirty();
+            renderTimeline();
+            renderInspector();
+            const message = snap.snapped ? `磁吸到${snap.label} · ${titleTrimLabel(clip)}` : titleTrimLabel(clip);
+            setTimelineStatus(message);
+            showTrimTooltip(moveEvent.clientX, moveEvent.clientY - 28, message);
+          };
+          const onUp = () => {
+            scroll?.classList.remove("auto-scroll-left", "auto-scroll-right");
+            trimmingClipId = null;
+            trimmingSide = null;
+            trimmingKind = "";
+            hideTrimTooltip();
+            document.removeEventListener("pointermove", onMove);
+            document.removeEventListener("pointerup", onUp);
+            setTimelineStatus(`标题范围 ${titleTrimLabel(clip)}`, 1400);
+            renderAll();
+          };
+          document.addEventListener("pointermove", onMove);
+          document.addEventListener("pointerup", onUp);
+        });
+        block.appendChild(handle);
       });
     }
 
     function renderTimeline() {
       timeline.innerHTML = "";
-      const duration = Math.max(0.1, Number(project.duration || video.duration || 1));
-      project.sentences.forEach((sentence) => {
-        const item = document.createElement("button");
-        const start = Math.max(0, Number(sentence.start || 0));
-        const end = Math.max(start + 0.1, Number(sentence.end || start + 0.1));
-        item.type = "button";
-        item.className = "timeline-segment";
-        item.classList.toggle("active", sentence.id === selectedId);
-        item.classList.toggle("removed", sentence.remove_video);
-        item.style.left = `${Math.min(99, (start / duration) * 100)}%`;
-        item.style.width = `${Math.max(0.8, ((end - start) / duration) * 100)}%`;
-        item.title = sentence.text || sentence.original_text;
-        item.addEventListener("click", () => {
-          selectedId = sentence.id;
-          video.currentTime = sentence.start;
-          renderAll();
-        });
-        timeline.appendChild(item);
+      const pxPerSecond = Number(timelineZoom.value || 58);
+      const timelineDuration = activeTimelineDuration();
+      const canvasWidth = Math.max(timeline.clientWidth - 64, timelineDuration * pxPerSecond);
+      const ruler = document.createElement("div");
+      const scroll = document.createElement("div");
+      const canvas = document.createElement("div");
+      const playhead = document.createElement("div");
+      const insertMarker = document.createElement("div");
+      const dropZone = document.createElement("div");
+      const videoRow = document.createElement("div");
+      const subtitleRow = document.createElement("div");
+      const titleRow = document.createElement("div");
+      ruler.className = "timeline-ruler";
+      scroll.className = "timeline-scroll";
+      canvas.className = "timeline-canvas";
+      canvas.style.width = `${canvasWidth}px`;
+      playhead.className = "timeline-playhead";
+      insertMarker.className = "timeline-insert-marker";
+      dropZone.className = "timeline-drop-zone";
+      playhead.style.left = `${Math.min(canvasWidth, timelineTrackOffset + timelineTimeForPlayback() * pxPerSecond)}px`;
+      playhead.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        playhead.setPointerCapture(event.pointerId);
+        const onMove = (moveEvent) => {
+          const rect = canvas.getBoundingClientRect();
+          const time = clamp((moveEvent.clientX - rect.left - timelineTrackOffset), 0, canvasWidth) / pxPerSecond;
+          const hit = timelineLookup(time);
+          if (!hit) return;
+          selectedId = hit.sentence.id;
+          suppressTimeSyncUntil = performance.now() + 280;
+          if (!isGapSentence(hit.sentence)) {
+            video.currentTime = hit.sourceTime;
+          }
+          playhead.style.left = `${timelineTrackOffset + time * pxPerSecond}px`;
+          if (timelineTime) timelineTime.textContent = formatPreciseTime(time);
+          renderInspector();
+        };
+        const onUp = (upEvent) => {
+          document.removeEventListener("pointermove", onMove);
+          document.removeEventListener("pointerup", onUp);
+          const rect = canvas.getBoundingClientRect();
+          seekTimelineTime((upEvent.clientX - rect.left - timelineTrackOffset) / pxPerSecond);
+        };
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
       });
+      const tickStep = timelineDuration > 90 ? 10 : timelineDuration > 35 ? 5 : 2;
+      for (let value = 0; value <= timelineDuration + 0.001; value += tickStep) {
+        const tick = document.createElement("span");
+        tick.className = "timeline-tick";
+        tick.style.left = `${value * pxPerSecond}px`;
+        tick.textContent = formatTime(value);
+        ruler.appendChild(tick);
+      }
+      videoRow.className = "timeline-row video-row";
+      subtitleRow.className = "timeline-row subtitle-row";
+      titleRow.className = "timeline-row title-row";
+      videoRow.dataset.label = "1.mp4";
+      subtitleRow.dataset.label = "A字幕";
+      titleRow.dataset.label = "标题";
+      const active = activeTimelineSentences();
+      let cursor = 0;
+      active.forEach((sentence) => {
+        const width = clipDuration(sentence) * pxPerSecond;
+        const left = cursor * pxPerSecond;
+        const videoBlock = timelineBlock(sentence, videoRow, "timeline-segment video-block", left, width);
+        const subtitleBlock = timelineBlock(sentence, subtitleRow, "timeline-segment subtitle-block", left, width);
+        if (isGapSentence(sentence)) {
+          videoBlock.classList.add("gap-block");
+          videoBlock.replaceChildren(
+            Object.assign(document.createElement("span"), {className: "gap-label", textContent: "空隙"}),
+            Object.assign(document.createElement("span"), {className: "gap-duration", textContent: formatPreciseTime(clipDuration(sentence))})
+          );
+          videoBlock.title = `空隙 ${formatPreciseTime(clipDuration(sentence))}`;
+        } else {
+          hydrateMediaBlock(videoBlock, sentence, width);
+          videoBlock.title = clipTrimLabel(sentence);
+        }
+        if (sentence.id === trimmingClipId) {
+          [videoBlock, subtitleBlock].forEach((block) => {
+            block.classList.add("trimming", trimmingSide === "left" ? "trim-left" : "trim-right");
+            block.dataset.trimLabel = clipTrimLabel(sentence);
+          });
+        }
+        subtitleBlock.textContent = sentence.text || sentence.original_text || "";
+        subtitleBlock.title = `${sentence.text || sentence.original_text || ""}\n${clipTrimLabel(sentence)}`;
+        [videoBlock, subtitleBlock].forEach((block) => {
+          block.classList.toggle("active", sentence.id === selectedId);
+          block.classList.toggle("selected", selectedIds.has(sentence.id));
+          block.classList.toggle("gap-block", isGapSentence(sentence));
+          block.classList.toggle("hidden", !sentence.enabled && !sentence.remove_video);
+          addTimelineDnD(block, sentence);
+          block.addEventListener("pointermove", (event) => {
+            if (event.target.closest(".trim-handle") || block.classList.contains("dragging")) return;
+            showSplitPreview(block, sentence, event);
+          });
+          block.addEventListener("pointerleave", () => hideSplitPreview(block));
+          block.addEventListener("click", (event) => {
+            if (timelineTool === "split") {
+              event.preventDefault();
+              event.stopPropagation();
+              splitTimelineSentenceAtPointer(sentence, event);
+              return;
+            }
+            selectSentenceFromEvent(event, sentence, !(event.ctrlKey || event.metaKey || event.shiftKey));
+          });
+          block.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!selectedIds.has(sentence.id)) setSingleSelection(sentence.id);
+            renderAll();
+            openContextMenu("sentence", event.clientX, event.clientY, sentence.id);
+          });
+        });
+        addTrimHandles(videoBlock, sentence);
+        addTrimHandles(subtitleBlock, sentence);
+        cursor += clipDuration(sentence);
+      });
+      project.title_clips.forEach((clip) => {
+        const start = titleClipStart(clip);
+        const end = titleClipEnd(clip);
+        const block = timelineBlock(clip, titleRow, "timeline-segment title-block", start * pxPerSecond, Math.max(8, (end - start) * pxPerSecond), false);
+        block.textContent = clip.text || "标题";
+        block.classList.toggle("active", clip.id === selectedTitleId);
+        block.classList.toggle("hidden", !clip.enabled);
+        if (clip.id === trimmingClipId && trimmingKind === "title") {
+          block.classList.add("trimming", trimmingSide === "left" ? "trim-left" : "trim-right");
+          block.dataset.trimLabel = titleTrimLabel(clip);
+        }
+        addTitleTimelineControls(block, clip);
+      });
+      canvas.append(ruler, subtitleRow, videoRow, titleRow, dropZone, insertMarker, playhead);
+      scroll.appendChild(canvas);
+      timeline.appendChild(scroll);
+      scroll.scrollLeft = timelineScrollLeft;
+      scroll.addEventListener("click", (event) => {
+        if (event.target.closest(".timeline-segment")) return;
+        const rect = canvas.getBoundingClientRect();
+        const time = clamp((event.clientX - rect.left - timelineTrackOffset) / pxPerSecond, 0, timelineDuration);
+        if (timelineTool === "split") {
+          const hit = timelineLookup(time);
+          if (hit && !isGapSentence(hit.sentence)) splitAtSourceTime(hit.sentence, hit.sourceTime);
+          return;
+        }
+        seekTimelineTime(time);
+      });
+      scroll.addEventListener("contextmenu", (event) => {
+        if (event.target.closest(".timeline-segment")) return;
+        event.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const time = clamp((event.clientX - rect.left - timelineTrackOffset) / pxPerSecond, 0, timelineDuration);
+        seekTimelineTime(time);
+        openContextMenu("timeline", event.clientX, event.clientY, "");
+      });
+      scroll.addEventListener("scroll", () => {
+        timelineScrollLeft = scroll.scrollLeft;
+      }, {passive: true});
+      scroll.addEventListener("wheel", (event) => {
+        if (event.ctrlKey || event.metaKey) {
+          event.preventDefault();
+          const direction = event.deltaY > 0 ? -1 : 1;
+          setTimelineZoomAroundPoint(Number(timelineZoom.value || 58) + direction * 10, event.clientX);
+          return;
+        }
+        const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+        if (!horizontal) return;
+        event.preventDefault();
+        scroll.scrollLeft = clamp(
+          scroll.scrollLeft + horizontal,
+          0,
+          Math.max(0, scroll.scrollWidth - scroll.clientWidth)
+        );
+        timelineScrollLeft = scroll.scrollLeft;
+      }, {passive: false});
+      updateTimelinePlayhead();
+      keepSelectedClipVisible(false);
     }
 
     function renderInspector() {
       const sentence = selectedSentence();
-      coverTitle.value = project.title?.cover_text || "";
-      showVideoTitle.checked = Boolean(project.title?.show_video_title);
+      const clip = titleClip();
+      coverTitle.value = project.title.cover_text || "";
+      titleText.value = clip.text || project.title.video_text || "";
+      showVideoTitle.checked = Boolean(clip.enabled);
+      titleStart.value = Number(clip.start || 0).toFixed(2);
+      titleEnd.value = Number(clip.end || 0).toFixed(2);
+      titleRange.textContent = `${formatTime(clip.start)} - ${formatTime(clip.end)}`;
+      subtitleOffset.value = Number(project.settings.subtitle_offset || 0).toFixed(2);
+      updateClipInspector(sentence);
       if (!sentence) {
-        subtitleText.value = "";
-        subtitleText.disabled = true;
-        currentRange.textContent = "--";
-        subtitlePreview.textContent = "";
+        setPreviewText(subtitlePreview, "");
+        setPreviewText(titlePreview, clip.enabled ? (clip.text || "") : "");
+        applyTextStyle(titlePreview, {...titleStyle, position_y: titleStyle.position_y ?? -520}, true);
         return;
       }
-      subtitleText.disabled = false;
-      subtitleText.value = sentence.text || "";
-      currentRange.textContent = `${formatTime(sentence.start)} - ${formatTime(sentence.end)}`;
-      subtitlePreview.textContent = sentence.remove_video ? "" : (sentence.text || sentence.original_text || "");
+      setPreviewText(subtitlePreview, sentence.remove_video || !sentence.enabled ? "" : (sentence.text || sentence.original_text || ""));
+      setPreviewText(titlePreview, clip.enabled ? (clip.text || "") : "");
+      applyTextStyle(subtitlePreview, subtitleStyle, false);
+      applyTextStyle(titlePreview, {...titleStyle, position_y: titleStyle.position_y ?? -520}, true);
+      fitSingleLineText(subtitlePreview);
     }
 
     function renderOutputs() {
+      const files = Array.isArray(project.output_files) ? project.output_files : [];
+      renderFiles.innerHTML = "";
+      if (files.length) {
+        renderStatus.textContent = "精修版已生成";
+        files.forEach((file) => {
+          const link = document.createElement("a");
+          link.className = "render-file-link";
+          link.href = `/jobs/{{ job.id }}/download/${String(file.name || "").split("/").map(encodeURIComponent).join("/")}`;
+          link.textContent = `${file.description || "输出文件"} · ${file.display_name || file.download_name || file.name}`;
+          if (file.size) {
+            const size = document.createElement("span");
+            size.textContent = file.size;
+            link.appendChild(size);
+          }
+          renderFiles.appendChild(link);
+        });
+        return;
+      }
       const outputs = project.outputs || {};
       const entries = Object.entries(outputs);
-      renderFiles.innerHTML = "";
       if (!entries.length) return;
       renderStatus.textContent = "精修版已生成";
       entries.forEach(([key, value]) => {
@@ -191,79 +2225,455 @@
     }
 
     function renderAll() {
+      normalizeTimelineOrders();
+      ensureSelectionState();
       renderList();
       renderTimeline();
       renderInspector();
       renderOutputs();
     }
 
-    subtitleText.addEventListener("input", () => {
+    function splitSentenceAt(cursor) {
       const sentence = selectedSentence();
       if (!sentence) return;
-      sentence.text = subtitleText.value;
-      sentence.edited = sentence.text !== sentence.original_text;
-      subtitlePreview.textContent = sentence.remove_video ? "" : sentence.text;
+      const text = sentence.text || "";
+      if (cursor <= 0) {
+        mergeSentence("prev");
+        return;
+      }
+      const leftText = text.slice(0, cursor).trim();
+      const rightText = text.slice(cursor).trim();
+      if (!leftText || !rightText) return;
+      const index = selectedIndex();
+      const splitAt = sentence.start + (sentence.end - sentence.start) * (cursor / Math.max(1, text.length));
+      sentence.text = leftText;
+      sentence.end = splitAt;
+      sentence.edited = true;
+      const next = {
+        ...sentence,
+        id: `s${Date.now().toString(36)}`,
+        start: splitAt,
+        end: Number(project.sentences[index + 1]?.start || sentence.end + 0.8),
+        clip_start: splitAt,
+        clip_end: Number(project.sentences[index + 1]?.clip_start || sentence.clip_end || sentence.end + 0.8),
+        timeline_order: Number(sentence.timeline_order || index + 1) + 0.5,
+        original_text: rightText,
+        text: rightText,
+        edited: true,
+      };
+      sentence.clip_end = splitAt;
+      project.sentences.splice(index + 1, 0, next);
+      selectedId = next.id;
+      normalizeTimelineOrders();
       setDirty();
+      renderAll();
+    }
+
+    function splitSentence() {
+      const activeEditable = list.querySelector(".sentence-item.active .sentence-edit[contenteditable='true']");
+      pushHistory();
+      splitSentenceAt(activeEditable ? sentenceCaretOffset(activeEditable) : Math.floor((selectedSentence()?.text || "").length / 2));
+    }
+
+    function splitAtSourceTime(sentence, sourceTime) {
+      if (!sentence) return;
+      const start = clipStart(sentence);
+      const end = clipEnd(sentence);
+      const splitAt = clamp(sourceTime, start + 0.08, end - 0.08);
+      if (splitAt <= start + 0.079 || splitAt >= end - 0.079) return;
+      pushHistory();
+      const index = selectedIndex();
+      const oldClipEnd = clipEnd(sentence);
+      const oldEnd = Number(sentence.end || oldClipEnd);
+      const text = sentence.text || sentence.original_text || "";
+      const ratio = clamp((splitAt - start) / Math.max(0.08, end - start), 0.08, 0.92);
+      let cut = Math.round(text.length * ratio);
+      cut = clamp(cut, 1, Math.max(1, text.length - 1));
+      const leftText = text.slice(0, cut).trim() || text;
+      const rightText = text.slice(cut).trim() || text;
+      sentence.text = leftText;
+      sentence.original_text = sentence.original_text || text;
+      sentence.clip_end = splitAt;
+      sentence.end = clamp(Math.min(oldEnd, splitAt), sentence.start || start, splitAt);
+      sentence.edited = true;
+      const next = {
+        ...sentence,
+        id: `s${Date.now().toString(36)}`,
+        start: clamp(Math.max(Number(sentence.start || start), splitAt), splitAt, oldClipEnd),
+        end: oldEnd,
+        clip_start: splitAt,
+        clip_end: oldClipEnd,
+        timeline_order: Number(sentence.timeline_order || index + 1) + 0.5,
+        original_text: rightText,
+        text: rightText,
+        edited: true,
+      };
+      project.sentences.splice(index + 1, 0, next);
+      selectedId = next.id;
+      normalizeTimelineOrders();
+      setDirty();
+      renderAll();
+    }
+
+    function splitAtPlayhead() {
+      const hit = timelineLookup(timelineTimeForPlayback());
+      splitAtSourceTime(hit?.sentence || selectedSentence(), video.currentTime);
+    }
+
+    function mergeSentence(direction) {
+      const index = selectedIndex();
+      const targetIndex = direction === "prev" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= project.sentences.length) return;
+      pushHistory();
+      const current = project.sentences[index];
+      const target = project.sentences[targetIndex];
+      const first = targetIndex < index ? target : current;
+      const second = targetIndex < index ? current : target;
+      first.text = `${first.text || ""}${second.text || ""}`.trim();
+      first.original_text = `${first.original_text || first.text}${second.original_text || second.text}`.trim();
+      first.start = Math.min(first.start, second.start);
+      first.end = Math.max(first.end, second.end);
+      first.clip_start = Math.min(clipStart(first), clipStart(second));
+      first.clip_end = Math.max(clipEnd(first), clipEnd(second));
+      first.enabled = first.enabled || second.enabled;
+      first.remove_video = first.remove_video && second.remove_video;
+      first.edited = true;
+      project.sentences.splice(project.sentences.indexOf(second), 1);
+      selectedId = first.id;
+      normalizeTimelineOrders();
+      setDirty();
+      renderAll();
+    }
+
+    function handleEditableEnter(event, editable) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      updateSelectedText(editable.textContent);
+      splitSentenceAt(sentenceCaretOffset(editable));
+    }
+
+    function insertTimelineGap() {
+      pushHistory();
+      const active = activeTimelineSentences();
+      const current = selectedSentence();
+      const currentOrder = current?.timeline_order ?? active.at(-1)?.timeline_order ?? project.sentences.length;
+      const gap = createSyntheticGap(1, Number(currentOrder) + 0.5);
+      project.sentences.push(gap);
+      selectedId = gap.id;
+      selectedIds = new Set([gap.id]);
+      lastSelectedId = gap.id;
+      normalizeTimelineOrders();
+      setDirty();
+      renderAll();
+    }
+
+    function addTitleClip() {
+      pushHistory();
+      const start = clamp(timelineTimeForPlayback(), 0, activeTimelineDuration());
+      const end = clamp(start + 3, start + 0.2, activeTimelineDuration());
+      const clip = {
+        id: `t${Date.now().toString(36)}`,
+        start,
+        end,
+        text: project.title.cover_text || "标题",
+        enabled: true,
+        use_for_cover: false,
+      };
+      project.title_clips.push(clip);
+      selectedTitleId = clip.id;
+      syncTitleGlobalState();
+      setDirty();
+      renderAll();
+    }
+
+    function deleteTitleClip() {
+      const clip = titleClip();
+      if (!clip) return;
+      pushHistory();
+      if (project.title_clips.length <= 1) {
+        clip.enabled = false;
+        clip.text = "";
+      } else {
+        project.title_clips = project.title_clips.filter((item) => item.id !== clip.id);
+        selectedTitleId = project.title_clips[0]?.id || "t001";
+      }
+      syncTitleGlobalState();
+      setDirty();
+      renderAll();
+    }
+
+    function duplicateTitleClip() {
+      const clip = titleClip();
+      if (!clip) return;
+      pushHistory();
+      const duration = activeTimelineDuration();
+      const offset = 0.25;
+      const next = {
+        ...clip,
+        id: `t${Date.now().toString(36)}`,
+        start: clamp(titleClipStart(clip) + offset, 0, duration),
+        end: clamp(titleClipEnd(clip) + offset, 0.2, duration),
+        enabled: true,
+        use_for_cover: false,
+      };
+      if (next.end <= next.start) next.end = clamp(next.start + titleClipDuration(clip), next.start + 0.2, duration);
+      project.title_clips.push(next);
+      selectedTitleId = next.id;
+      syncTitleGlobalState();
+      setDirty();
+      renderAll();
+    }
+
+    function toggleSelectedTitle() {
+      const clip = titleClip();
+      if (!clip) return;
+      pushHistory();
+      clip.enabled = !clip.enabled;
+      syncTitleGlobalState();
+      setDirty();
+      renderAll();
+    }
+
+    function hideSelectedSubtitle() {
+      const batch = selectedSentences();
+      if (!batch.length) return;
+      pushHistory();
+      batch.forEach((sentence) => {
+        sentence.enabled = false;
+        sentence.remove_video = false;
+        sentence.gap = Boolean(sentence.synthetic_gap) ? true : false;
+      });
+      setDirty();
+      renderAll();
+    }
+
+    function deleteSelectedSegment() {
+      const batch = selectedSentences();
+      if (!batch.length) return;
+      pushHistory();
+      batch.forEach((sentence) => {
+        sentence.enabled = false;
+        sentence.remove_video = rippleDelete;
+        sentence.gap = Boolean(sentence.synthetic_gap) || !rippleDelete;
+      });
+      setDirty();
+      renderAll();
+    }
+
+    function recoverSelectedSegment() {
+      const batch = selectedSentences();
+      if (!batch.length) return;
+      pushHistory();
+      batch.forEach((sentence) => {
+        sentence.remove_video = false;
+        if (sentence.synthetic_gap) {
+          sentence.enabled = false;
+          sentence.gap = true;
+        } else {
+          sentence.enabled = true;
+          sentence.gap = false;
+        }
+      });
+      setDirty();
+      renderAll();
+    }
+
+    async function responseErrorMessage(response) {
+      try {
+        const data = await response.json();
+        if (data && data.detail) return String(data.detail);
+        return JSON.stringify(data);
+      } catch {
+        const text = await response.text();
+        return text.trim() || response.statusText || "请求失败";
+      }
+    }
+
+    async function saveProject() {
+      clearTimeout(autosaveTimer);
+      saveState.textContent = "保存中";
+      try {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(project),
+        });
+        if (!response.ok) throw new Error(await responseErrorMessage(response));
+        const data = await response.json();
+        Object.assign(project, data.project);
+        savedSnapshot = snapshotProject();
+        setDirty(false, false);
+        renderAll();
+        saveState.title = "";
+        return true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        saveState.textContent = "保存失败";
+        saveState.title = message;
+        return false;
+      }
+    }
+
+    subtitlePreview.addEventListener("input", () => {
+      updateSelectedText(subtitlePreview.textContent || "");
       renderList();
       renderTimeline();
     });
 
+    subtitlePreview.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      updateSelectedText(subtitlePreview.textContent || "");
+      splitSentenceAt(sentenceCaretOffset(subtitlePreview));
+    });
+
+    subtitlePreview.addEventListener("focus", () => {
+      const sentence = selectedSentence();
+      if (!subtitlePreview.dataset.historyActive) {
+        pushHistory();
+        subtitlePreview.dataset.historyActive = "1";
+      }
+      if (sentence) subtitlePreview.textContent = sentence.text || "";
+    });
+
+    subtitlePreview.addEventListener("blur", () => {
+      delete subtitlePreview.dataset.historyActive;
+      renderAll();
+    });
+
+    list.addEventListener("mousedown", handleSentenceListPress, true);
+    sentenceSearch.addEventListener("input", renderList);
+    clearSentenceFilterBtn.addEventListener("click", () => {
+      sentenceSearch.value = "";
+      activeFilter = "all";
+      document.querySelectorAll(".filter-tab").forEach((item) => item.classList.toggle("active", item.dataset.filter === "all"));
+      renderList();
+    });
+    document.querySelectorAll(".filter-tab").forEach((button) => {
+      button.addEventListener("click", () => {
+        activeFilter = button.dataset.filter;
+        document.querySelectorAll(".filter-tab").forEach((item) => item.classList.toggle("active", item === button));
+        renderList();
+      });
+    });
+    document.getElementById("move-selection-left-btn").addEventListener("click", () => moveSelectedClipByOffset(-1));
+    document.getElementById("move-selection-right-btn").addEventListener("click", () => moveSelectedClipByOffset(1));
+    document.getElementById("select-visible-btn").addEventListener("click", selectVisibleSentences);
+    document.getElementById("clear-selection-btn").addEventListener("click", clearMultiSelection);
+
     coverTitle.addEventListener("input", () => {
-      project.title = project.title || {};
       project.title.cover_text = coverTitle.value;
+      const clip = titleClip();
+      if (clip.use_for_cover && !clip.text.trim()) clip.text = coverTitle.value;
       setDirty();
+    });
+
+    titleText.addEventListener("input", () => {
+      const clip = titleClip();
+      clip.text = titleText.value;
+      project.title.video_text = titleText.value;
+      syncTitleGlobalState();
+      setDirty();
+      renderAll();
     });
 
     showVideoTitle.addEventListener("change", () => {
-      project.title = project.title || {};
-      project.title.show_video_title = showVideoTitle.checked;
-      setDirty();
-    });
-
-    document.getElementById("delete-btn").addEventListener("click", () => {
-      const sentence = selectedSentence();
-      if (!sentence) return;
-      sentence.remove_video = true;
-      sentence.enabled = false;
+      const clip = titleClip();
+      clip.enabled = showVideoTitle.checked;
+      syncTitleGlobalState();
       setDirty();
       renderAll();
     });
 
-    document.getElementById("recover-btn").addEventListener("click", () => {
-      const sentence = selectedSentence();
-      if (!sentence) return;
-      sentence.remove_video = false;
-      sentence.enabled = true;
+    [titleStart, titleEnd].forEach((input) => input.addEventListener("change", () => {
+      const clip = titleClip();
+      const duration = activeTimelineDuration();
+      clip.start = clamp(titleStart.value, 0, duration);
+      clip.end = clamp(titleEnd.value, clip.start + 0.05, duration);
       setDirty();
       renderAll();
-    });
+    }));
 
-    document.getElementById("save-btn").addEventListener("click", async () => {
-      saveState.textContent = "保存中";
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify(project),
+    document.getElementById("add-title-clip-btn").addEventListener("click", addTitleClip);
+    document.getElementById("delete-title-clip-btn").addEventListener("click", deleteTitleClip);
+    document.getElementById("title-nudge-left-btn").addEventListener("click", () => nudgeSelectedTitleClip(-0.05));
+    document.getElementById("title-nudge-right-btn").addEventListener("click", () => nudgeSelectedTitleClip(0.05));
+
+    bindClipInspectorInput(clipStartInput, "start");
+    bindClipInspectorInput(clipEndInput, "end");
+    bindClipInspectorInput(clipDurationInput, "duration");
+    clipNudgeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const [edge, delta] = String(button.dataset.clipNudge || "").split(":");
+        nudgeSelectedClip(edge, Number(delta || 0));
       });
-      if (!response.ok) {
-        saveState.textContent = "保存失败";
+    });
+
+    subtitleOffset.addEventListener("change", () => {
+      project.settings.subtitle_offset = clamp(subtitleOffset.value, -5, 5);
+      setDirty();
+      renderAll();
+    });
+
+    splitBtn.addEventListener("click", splitSentence);
+    mergePrevBtn.addEventListener("click", () => mergeSentence("prev"));
+    mergeNextBtn.addEventListener("click", () => mergeSentence("next"));
+    hideSubtitleBtn.addEventListener("click", hideSelectedSubtitle);
+    deleteBtn.addEventListener("click", deleteSelectedSegment);
+    recoverBtn.addEventListener("click", recoverSelectedSegment);
+
+    document.getElementById("save-btn").addEventListener("click", saveProject);
+    shortcutHelpBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      setShortcutPanel(shortcutPanel.hidden);
+    });
+    shortcutCloseBtn.addEventListener("click", () => setShortcutPanel(false));
+    document.getElementById("split-playhead-btn").addEventListener("click", splitAtPlayhead);
+    document.getElementById("insert-gap-btn").addEventListener("click", insertTimelineGap);
+    document.getElementById("zoom-out-btn").addEventListener("click", () => setTimelineZoom(Number(timelineZoom.value || 58) - 12));
+    document.getElementById("zoom-in-btn").addEventListener("click", () => setTimelineZoom(Number(timelineZoom.value || 58) + 12));
+    document.getElementById("zoom-fit-btn").addEventListener("click", fitTimelineToWindow);
+    document.getElementById("locate-selected-btn").addEventListener("click", () => keepSelectedClipVisible(true));
+    snapToggleBtn.addEventListener("click", () => {
+      snapEnabled = !snapEnabled;
+      updateModeButtons();
+    });
+    rippleToggleBtn.addEventListener("click", () => {
+      rippleDelete = !rippleDelete;
+      updateModeButtons();
+    });
+    freeDropToggleBtn.addEventListener("click", () => {
+      freeDropEnabled = !freeDropEnabled;
+      updateModeButtons();
+    });
+    selectToolBtn.addEventListener("click", () => {
+      timelineTool = "select";
+      updateModeButtons();
+    });
+    splitToolBtn.addEventListener("click", () => {
+      timelineTool = "split";
+      updateModeButtons();
+    });
+    undoBtn.addEventListener("click", undoEdit);
+    redoBtn.addEventListener("click", redoEdit);
+    renderBtn.addEventListener("click", async () => {
+      if (project.preview_source !== "clean-no-subtitles") {
+        renderStatus.textContent = "当前任务没有无字幕精修源，请重新处理一次视频后再导出精修版。";
         return;
       }
-      const data = await response.json();
-      Object.assign(project, data.project);
-      setDirty(false);
-      renderAll();
-    });
-
-    document.getElementById("render-btn").addEventListener("click", async () => {
       renderStatus.textContent = "正在导出";
+      const saved = await saveProject();
+      if (!saved) {
+        renderStatus.textContent = "导出已停止：请先处理保存失败";
+        return;
+      }
       const response = await fetch(renderUrl, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify(project),
       });
       if (!response.ok) {
-        const text = await response.text();
+        const text = await responseErrorMessage(response);
         renderStatus.textContent = `导出失败：${text.slice(0, 120)}`;
         return;
       }
@@ -272,15 +2682,140 @@
       (data.outputs || []).forEach((file) => {
         project.outputs[file.description] = file.path;
       });
-      setDirty(false);
+      project.output_files = data.outputs || data.files || [];
+      setDirty(false, false);
       renderAll();
     });
 
+    function selectByOffset(offset) {
+      const index = selectedIndex();
+      const next = project.sentences[clamp(index + offset, 0, project.sentences.length - 1)];
+      seekToSentence(next);
+    }
+
+    document.getElementById("prev-btn").addEventListener("click", () => selectByOffset(-1));
+    document.getElementById("next-btn").addEventListener("click", () => selectByOffset(1));
+    document.getElementById("play-btn").addEventListener("click", () => video.paused ? video.play() : video.pause());
+
     video.addEventListener("timeupdate", () => {
-      const current = project.sentences.find((sentence) => video.currentTime >= sentence.start && video.currentTime <= sentence.end);
-      if (current && current.id !== selectedId) {
+      if (performance.now() < suppressTimeSyncUntil) return;
+      const current = sentenceAtTime(video.currentTime);
+      if (current && current.id !== selectedId && document.activeElement !== subtitlePreview && !document.activeElement?.isContentEditable) {
         selectedId = current.id;
         renderAll();
+      } else {
+        updateTimelinePlayhead();
+      }
+    });
+
+    window.addEventListener("resize", renderAll);
+    document.addEventListener("click", (event) => {
+      if (!contextMenu || !contextMenu.classList.contains("is-open")) return;
+      if (event.target.closest(".editor-context-menu")) return;
+      hideContextMenu();
+    });
+    document.addEventListener("click", (event) => {
+      if (shortcutPanel.hidden) return;
+      if (event.target.closest("#shortcut-panel") || event.target.closest("#shortcut-help-btn")) return;
+      setShortcutPanel(false);
+    });
+    document.addEventListener("scroll", hideContextMenu, true);
+    timelineZoom.addEventListener("input", () => {
+      renderTimeline();
+      keepSelectedClipVisible(true);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      const typing = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName || "") || document.activeElement?.isContentEditable;
+      if (event.ctrlKey && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        saveProject();
+        return;
+      }
+      if (event.ctrlKey && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        undoEdit();
+        return;
+      }
+      if ((event.ctrlKey && event.key.toLowerCase() === "y") || (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "z")) {
+        event.preventDefault();
+        redoEdit();
+        return;
+      }
+      if (event.key === "Escape") {
+        hideContextMenu();
+        setShortcutPanel(false);
+        return;
+      }
+      if (typing) return;
+      if (event.ctrlKey && event.key.toLowerCase() === "a") {
+        event.preventDefault();
+        selectVisibleSentences();
+        return;
+      }
+      if (event.altKey && event.key === "ArrowLeft") {
+        event.preventDefault();
+        if (event.shiftKey) nudgeSelectedTitleClip(-0.05);
+        else moveSelectedClipByOffset(-1);
+        return;
+      }
+      if (event.altKey && event.key === "ArrowRight") {
+        event.preventDefault();
+        if (event.shiftKey) nudgeSelectedTitleClip(0.05);
+        else moveSelectedClipByOffset(1);
+        return;
+      }
+      if (event.altKey && event.key === "[") {
+        event.preventDefault();
+        nudgeSelectedClip("start", -0.05);
+        return;
+      }
+      if (event.altKey && event.key === "]") {
+        event.preventDefault();
+        nudgeSelectedClip("start", 0.05);
+        return;
+      }
+      if (event.altKey && event.key === ",") {
+        event.preventDefault();
+        nudgeSelectedClip("end", -0.05);
+        return;
+      }
+      if (event.altKey && event.key === ".") {
+        event.preventDefault();
+        nudgeSelectedClip("end", 0.05);
+        return;
+      }
+      if (event.code === "Space") {
+        event.preventDefault();
+        video.paused ? video.play() : video.pause();
+      } else if (event.key.toLowerCase() === "v") {
+        timelineTool = "select";
+        updateModeButtons();
+      } else if (event.key.toLowerCase() === "c") {
+        timelineTool = "split";
+        updateModeButtons();
+      } else if (event.key.toLowerCase() === "b") {
+        splitAtPlayhead();
+      } else if (event.key.toLowerCase() === "h") {
+        hideSelectedSubtitle();
+      } else if (event.key.toLowerCase() === "r") {
+        recoverSelectedSegment();
+      } else if (event.key.toLowerCase() === "t") {
+        addTitleClip();
+      } else if (event.key.toLowerCase() === "g") {
+        insertTimelineGap();
+      } else if (event.key === "=" || event.key === "+") {
+        event.preventDefault();
+        setTimelineZoom(Number(timelineZoom.value || 58) + 12);
+      } else if (event.key === "-" || event.key === "_") {
+        event.preventDefault();
+        setTimelineZoom(Number(timelineZoom.value || 58) - 12);
+      } else if (event.key === "Delete") {
+        deleteSelectedSegment();
+      } else if (event.key === "ArrowLeft") {
+        video.currentTime = Math.max(0, video.currentTime - (event.shiftKey ? 2 : 0.2));
+      } else if (event.key === "ArrowRight") {
+        video.currentTime = Math.min(Number(project.duration || video.duration || 0), video.currentTime + (event.shiftKey ? 2 : 0.2));
       }
     });
 
@@ -290,6 +2825,42 @@
       event.returnValue = "";
     });
 
+    window.__aiCuttingEditor = {
+      state: () => ({
+        selectedId,
+        selectedIds: [...selectedIds],
+        dirty,
+        snapEnabled,
+        rippleDelete,
+        freeDropEnabled,
+        timelineTool,
+        order: orderedSentences().map((item) => item.id),
+        activeOrder: activeTimelineSentences().map((item) => item.id),
+      }),
+      moveSentenceToTimelineIndex,
+      moveSentenceToTimelineIndexWithGap,
+      moveSelectedGroupByOffset,
+      moveSelectedClipByOffset,
+      nudgeSelectedTitleClip,
+      createSyntheticGap,
+      setTimelineZoomAroundPoint,
+      snapTimelineTime,
+      snapTitleClipStart,
+      snapTitleClipEdge,
+      timelineSnapTargets,
+      undoEdit,
+      redoEdit,
+      splitAtPlayhead,
+      insertTimelineGap,
+      hideSelectedSubtitle,
+      deleteSelectedSegment,
+      recoverSelectedSegment,
+    };
+
+    ensureProjectShape();
+    savedSnapshot = snapshotProject();
+    updateHistoryButtons();
+    updateModeButtons();
     renderAll();
   </script>
 </body>

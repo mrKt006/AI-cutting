@@ -301,6 +301,8 @@ def subtitle_override(style: dict[str, Any], start: float, end: float, width: in
     animation_in = style.get("animation_in", "none")
     animation_out = style.get("animation_out", "none")
     anchor = _text_anchor(style)
+    if style.get("no_wrap", True):
+        tags.append(r"\q2")
     if animation_in == "fade" or animation_out in {"fade", "pop"}:
         tags.append(r"\fad(180,180)")
     if animation_in == "slide_up":
@@ -311,7 +313,7 @@ def subtitle_override(style: dict[str, Any], start: float, end: float, width: in
         tags.append(rf"\an{anchor}\pos({x},{y})")
     if int(style.get("blur", 0)) > 0:
         tags.append(rf"\blur{int(style.get('blur', 0))}")
-    if float(style.get("line_spacing", 0)) != 0:
+    if float(style.get("line_spacing", 0)) != 0 and not any(tag.startswith(r"\q") for tag in tags):
         tags.append(rf"\q2")
     if not tags:
         return ""
