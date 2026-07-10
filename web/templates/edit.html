@@ -42,6 +42,7 @@
       </div>
       <div class="shortcut-grid">
         <span>播放 / 暂停</span><kbd>Space</kbd>
+        <span>后退 / 停播 / 前进</span><kbd>J / K / L</kbd>
         <span>预览当前片段</span><kbd>P</kbd>
         <span>选择工具</span><kbd>V</kbd>
         <span>切割工具</span><kbd>C</kbd>
@@ -864,6 +865,19 @@
       updatePlaybackButton();
     }
 
+    function stepPlayback(seconds) {
+      cancelPreviewClip();
+      const duration = Number(project.duration || video.duration || 0);
+      const nextTime = clamp(video.currentTime + Number(seconds || 0), 0, duration || video.currentTime);
+      video.currentTime = nextTime;
+      const current = sentenceAtTime(nextTime);
+      if (current) selectedId = current.id;
+      lockManualTimeSync(700);
+      renderAll();
+      const direction = Number(seconds || 0) < 0 ? "后退" : "前进";
+      setTimelineStatus(`${direction} ${Math.abs(Number(seconds || 0)).toFixed(1)} 秒 · ${formatPreciseTime(nextTime)}`, 700);
+    }
+
     function activeTimelineSentences() {
       return orderedSentences().filter((sentence) => !sentence.remove_video && clipDuration(sentence) > 0.05);
     }
@@ -1386,9 +1400,10 @@
     }
 
     function sentenceAtTime(time) {
-      return project.sentences.find((sentence) => {
-        const start = Number(sentence.start || 0);
-        const end = Number(sentence.end || start);
+      return activeTimelineSentences().find((sentence) => {
+        if (isGapSentence(sentence)) return false;
+        const start = clipStart(sentence);
+        const end = clipEnd(sentence);
         return time >= start && time < end;
       }) || null;
     }
@@ -3065,6 +3080,15 @@
       if (event.code === "Space") {
         event.preventDefault();
         togglePlayback();
+      } else if (event.key.toLowerCase() === "j") {
+        event.preventDefault();
+        stepPlayback(event.shiftKey ? -5 : -1);
+      } else if (event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        togglePlayback();
+      } else if (event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        stepPlayback(event.shiftKey ? 5 : 1);
       } else if (event.key.toLowerCase() === "v") {
         timelineTool = "select";
         updateModeButtons();
