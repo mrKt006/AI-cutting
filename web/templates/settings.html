@@ -43,6 +43,22 @@
       <section class="surface task-surface">
         <form action="/settings" method="post" enctype="multipart/form-data" class="job-form">
           <fieldset>
+            <legend>运行环境</legend>
+            <div class="runtime-grid">
+              <div class="runtime-item {{ 'ok' if env.ffmpeg_ready else 'warn' }}">
+                <span>FFmpeg / FFprobe</span>
+                <strong>{{ '可用' if env.ffmpeg_ready else '未检测到' }}</strong>
+                <small>{{ env.ffmpeg_path if env.ffmpeg_ready else '请先安装 FFmpeg，并确保命令行可运行。' }}</small>
+              </div>
+              <div class="runtime-item {{ 'ok' if env.volc_ready else 'warn' }}">
+                <span>火山引擎凭证</span>
+                <strong>{{ '已配置' if env.volc_ready else '未配置' }}</strong>
+                <small>{{ '可以创建识别任务。' if env.volc_ready else '填写 APP ID 和 Access Token 后才能开始处理。' }}</small>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset>
             <legend>火山引擎 API</legend>
             <div class="credential-grid">
               <label class="field">

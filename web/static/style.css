@@ -389,6 +389,49 @@ legend {
   line-height: 1.5;
 }
 
+.runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.runtime-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.runtime-item span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.runtime-item strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.runtime-item small {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.runtime-item.ok {
+  border-color: #abefc6;
+}
+
+.runtime-item.warn {
+  border-color: #fedf89;
+  background: #fffaeb;
+}
+
 input[type="text"],
 input[type="password"],
 input[type="number"],
@@ -2713,6 +2756,10 @@ legend {
 
   .filter-tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .runtime-grid {
+    grid-template-columns: 1fr;
   }
 
   .sentence-panel {

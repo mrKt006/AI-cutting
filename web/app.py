@@ -110,6 +110,7 @@ def settings_page(request: Request) -> HTMLResponse:
         context={
             "request": request,
             "settings": _public_settings(settings),
+            "env": _runtime_status(settings),
             "saved": request.query_params.get("saved") == "1",
         },
     )

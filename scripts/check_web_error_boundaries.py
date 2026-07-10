@@ -61,6 +61,13 @@ def main() -> int:
     if index_response.status_code != 200 or missing:
         print(f"Index page environment status check failed; missing: {', '.join(missing)}")
         return 1
+    settings_response = client.get("/settings")
+    print(f"settings page: {settings_response.status_code}")
+    settings_required_fragments = ["运行环境", "FFmpeg / FFprobe", "火山引擎凭证"]
+    missing = [fragment for fragment in settings_required_fragments if fragment not in settings_response.text]
+    if settings_response.status_code != 200 or missing:
+        print(f"Settings page runtime status check failed; missing: {', '.join(missing)}")
+        return 1
 
     cases = [
         ("empty save body", "post", f"/api/jobs/{job_id}/edit-project?item=001", {}, 400),
