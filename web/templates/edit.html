@@ -19,7 +19,7 @@
       </a>
       <div class="editor-transport" aria-label="播放控制">
         <button id="prev-btn" class="tool-button" type="button">上一句</button>
-        <button id="play-btn" class="tool-button" type="button">播放</button>
+        <button id="play-btn" class="tool-button" type="button" aria-pressed="false">播放</button>
         <button id="play-selection-btn" class="tool-button" type="button" aria-pressed="false">预览本句</button>
         <button id="next-btn" class="tool-button" type="button">下一句</button>
         <button id="split-playhead-btn" class="tool-button" type="button">播放头切割</button>
@@ -254,6 +254,7 @@
     const renderStatus = document.getElementById("render-status");
     const renderFiles = document.getElementById("render-files");
     const renderBtn = document.getElementById("render-btn");
+    const playBtn = document.getElementById("play-btn");
     const playSelectionBtn = document.getElementById("play-selection-btn");
     const timelineZoom = document.getElementById("timeline-zoom");
     const timelineTime = document.getElementById("timeline-time");
@@ -787,10 +788,18 @@
       playSelectionBtn.textContent = active ? "停止预览" : "预览本句";
     }
 
+    function updatePlaybackButton() {
+      const active = !video.paused && !video.ended;
+      playBtn.classList.toggle("is-on", active);
+      playBtn.setAttribute("aria-pressed", active ? "true" : "false");
+      playBtn.textContent = active ? "暂停" : "播放";
+    }
+
     function cancelPreviewClip(message = "") {
       if (previewClipEndTime === null) return false;
       previewClipEndTime = null;
       video.pause();
+      updatePlaybackButton();
       setPreviewClipActive(false);
       if (message) setTimelineStatus(message, 1200);
       updateTimelinePlayhead();
@@ -834,10 +843,25 @@
       previewClipEndTime = null;
       video.pause();
       video.currentTime = endedAt;
+      updatePlaybackButton();
       setPreviewClipActive(false);
       setTimelineStatus(`片段预览结束 ${formatPreciseTime(endedAt)}`, 1200);
       updateTimelinePlayhead();
       return true;
+    }
+
+    async function togglePlayback() {
+      cancelPreviewClip();
+      if (video.paused || video.ended) {
+        try {
+          await video.play();
+        } catch {
+          setTimelineStatus("浏览器阻止自动播放，请手动点击播放", 1600);
+        }
+      } else {
+        video.pause();
+      }
+      updatePlaybackButton();
     }
 
     function activeTimelineSentences() {
@@ -2939,11 +2963,12 @@
 
     document.getElementById("prev-btn").addEventListener("click", () => selectByOffset(-1));
     document.getElementById("next-btn").addEventListener("click", () => selectByOffset(1));
-    document.getElementById("play-btn").addEventListener("click", () => {
-      cancelPreviewClip();
-      video.paused ? video.play() : video.pause();
-    });
+    playBtn.addEventListener("click", togglePlayback);
     playSelectionBtn.addEventListener("click", previewSelectedClip);
+
+    video.addEventListener("play", updatePlaybackButton);
+    video.addEventListener("pause", updatePlaybackButton);
+    video.addEventListener("ended", updatePlaybackButton);
 
     video.addEventListener("timeupdate", () => {
       if (stopPreviewClipIfNeeded()) return;
@@ -3039,8 +3064,7 @@
       }
       if (event.code === "Space") {
         event.preventDefault();
-        cancelPreviewClip();
-        video.paused ? video.play() : video.pause();
+        togglePlayback();
       } else if (event.key.toLowerCase() === "v") {
         timelineTool = "select";
         updateModeButtons();
@@ -3122,6 +3146,7 @@
     savedSnapshot = snapshotProject();
     updateHistoryButtons();
     updateModeButtons();
+    updatePlaybackButton();
     renderAll();
   </script>
 </body>
