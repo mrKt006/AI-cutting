@@ -62,7 +62,7 @@
     </div>
 
     <main class="edit-workspace roadmap-editor">
-      <aside class="sentence-panel">
+      <aside id="sentence-panel" class="sentence-panel">
         <div class="panel-head">
           <span>字幕</span>
           <strong id="sentence-count">0</strong>
@@ -103,6 +103,7 @@
         </div>
         <div class="sentence-list-shell">
           <div id="sentence-list" class="sentence-list"></div>
+          <div id="full-transcript" class="full-transcript" hidden></div>
         </div>
       </aside>
 
@@ -246,19 +247,6 @@
       </aside>
     </main>
 
-    <section id="transcript-workspace" class="transcript-workspace" aria-label="全文逐字稿" hidden>
-      <header class="transcript-workspace-head">
-        <div>
-          <strong>全文逐字稿</strong>
-          <span>点击跳转，双击编辑</span>
-        </div>
-        <div class="transcript-workspace-actions">
-          <input id="full-transcript-search" class="compact-input" type="search" placeholder="搜索全文">
-          <button id="close-full-transcript" class="tool-button" type="button">返回精修台</button>
-        </div>
-      </header>
-      <div id="full-transcript" class="full-transcript"></div>
-    </section>
   </div>
 
   <script>
@@ -277,11 +265,9 @@
     const video = document.getElementById("edit-video");
     const timelinePreviewVideo = document.getElementById("timeline-preview-video");
     const videoFrame = document.getElementById("video-frame");
+    const sentencePanel = document.getElementById("sentence-panel");
     const list = document.getElementById("sentence-list");
     const fullTranscript = document.getElementById("full-transcript");
-    const transcriptWorkspace = document.getElementById("transcript-workspace");
-    const fullTranscriptSearch = document.getElementById("full-transcript-search");
-    const closeFullTranscript = document.getElementById("close-full-transcript");
     const sentenceSearch = document.getElementById("sentence-search");
     const sentenceFilterState = document.getElementById("sentence-filter-state");
     const sentenceFilterText = document.getElementById("sentence-filter-text");
@@ -2849,15 +2835,12 @@
 
     function setTranscriptMode(mode) {
       transcriptMode = mode === "full" ? "full" : "sentences";
-      transcriptWorkspace.hidden = transcriptMode !== "full";
-      document.body.classList.toggle("transcript-workspace-open", transcriptMode === "full");
+      list.hidden = transcriptMode !== "sentences";
+      fullTranscript.hidden = transcriptMode !== "full";
+      sentencePanel.classList.toggle("full-mode", transcriptMode === "full");
       document.querySelectorAll("[data-transcript-mode]").forEach((button) => {
         button.classList.toggle("is-on", button.dataset.transcriptMode === transcriptMode);
       });
-      if (transcriptMode === "full") {
-        fullTranscriptSearch.value = sentenceSearch.value;
-        requestAnimationFrame(() => fullTranscriptSearch.focus());
-      }
       renderAll();
     }
 
@@ -3471,11 +3454,6 @@
 
     document.getElementById("save-btn").addEventListener("click", saveProject);
     document.querySelectorAll("[data-transcript-mode]").forEach((button) => button.addEventListener("click", () => setTranscriptMode(button.dataset.transcriptMode)));
-    closeFullTranscript.addEventListener("click", () => setTranscriptMode("sentences"));
-    fullTranscriptSearch.addEventListener("input", () => {
-      sentenceSearch.value = fullTranscriptSearch.value;
-      renderFullTranscript();
-    });
     document.querySelectorAll("[data-stage-mode]").forEach((button) => button.addEventListener("click", () => setStageMode(button.dataset.stageMode)));
     document.getElementById("reanalyze-btn").addEventListener("click", reanalyzeTranscript);
     document.getElementById("reflow-btn").addEventListener("click", reflowTranscript);
