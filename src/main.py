@@ -34,7 +34,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--style-preset", default=None, help="subtitle/title style preset id")
     parser.add_argument("--style-presets-file", default=None, help="style preset JSON path")
     parser.add_argument("--subtitle-source", choices=["volcengine"], default="volcengine", help="subtitle text source")
-    parser.add_argument("--chinese-script", choices=["simplified", "original"], default="simplified", help="Chinese subtitle script")
     parser.add_argument("--volc-appid", default=None, help="Volcengine APP ID, or env VOLC_APP_ID")
     parser.add_argument("--volc-token", default=None, help="Volcengine Access Token, or env VOLC_ACCESS_TOKEN")
     parser.add_argument("--volc-words-per-line", type=int, default=15, help="Volc subtitle words_per_line parameter")
@@ -95,7 +94,6 @@ def main() -> int:
                 words_per_line=args.volc_words_per_line,
                 max_lines=args.volc_max_lines,
                 timeout=args.volc_timeout,
-                chinese_script=args.chinese_script,
             )
             if args.editor_work_dir:
                 editor_work_dir = Path(args.editor_work_dir)
@@ -158,7 +156,6 @@ def main() -> int:
                 "output_basename": output_basename,
                 "style_preset": style_preset.get("id"),
                 "style_preset_name": style_preset.get("name"),
-                "chinese_script": args.chinese_script,
                 "volc_words_per_line": args.volc_words_per_line,
                 "volc_max_lines": args.volc_max_lines,
                 "volc_timeout": args.volc_timeout,
@@ -274,7 +271,6 @@ def _transcribe_cut_video_with_volcengine(
     words_per_line: int,
     max_lines: int,
     timeout: float,
-    chinese_script: str,
 ) -> list[TimingSegment]:
     import os
 
@@ -302,7 +298,7 @@ def _transcribe_cut_video_with_volcengine(
         poll_interval=2.0,
         timeout=timeout,
     )
-    items = convert_utterances(result, chinese_script=chinese_script)
+    items = convert_utterances(result)
     return [
         TimingSegment(
             start=float(item["start_ms"]) / 1000,

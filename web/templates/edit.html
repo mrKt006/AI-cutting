@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>精修台 {{ job.id }}</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-43">
+  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-44">
 </head>
 <body class="editor-body">
   <div class="editor-shell">
@@ -107,6 +107,7 @@
         <div class="video-stage">
           <div class="video-frame" id="video-frame">
             <video id="edit-video" src="{{ video_url }}" controls preload="metadata"></video>
+            <video id="timeline-preview-video" class="timeline-preview-video" preload="auto" playsinline></video>
             <div id="title-preview" class="edit-title-preview" contenteditable="true" spellcheck="false" aria-label="直接编辑画面标题"></div>
             <div id="subtitle-preview" class="edit-subtitle-preview" contenteditable="true" spellcheck="false" aria-label="直接编辑预览字幕"></div>
           </div>
@@ -215,8 +216,10 @@
     const subtitleStyle = {{ subtitle_style|tojson }};
     const titleStyle = {{ title_style|tojson }};
     const apiUrl = `/api/jobs/{{ job.id }}/edit-project?item={{ item_id }}`;
+    const previewApiUrl = `/api/jobs/{{ job.id }}/edit-preview?item={{ item_id }}`;
     const renderUrl = `/jobs/{{ job.id }}/render-edited?item={{ item_id }}`;
     const video = document.getElementById("edit-video");
+    const timelinePreviewVideo = document.getElementById("timeline-preview-video");
     const videoFrame = document.getElementById("video-frame");
     const list = document.getElementById("sentence-list");
     const sentenceSearch = document.getElementById("sentence-search");
@@ -295,6 +298,13 @@
     let contextMenu = null;
     let contextTarget = null;
     let timelineStatusTimer = null;
+    let timelinePreviewTimer = null;
+    let timelinePreviewSignature = "";
+    let timelinePreviewReady = false;
+    let timelinePreviewRendering = false;
+    let timelinePreviewPromise = null;
+    let usingTimelinePreview = false;
+    let allowSourceClipPlayback = false;
     const manualSelectionLockMs = 1800;
     const timelineTrackOffset = 44;
     const defaultTimelineStatus = "拖动片段调整顺序，拖两端裁切；按 Alt 拖动可留空。";
@@ -790,7 +800,9 @@
     }
 
     function updatePlaybackButton() {
-      const active = !video.paused && !video.ended;
+      const active = usingTimelinePreview
+        ? !timelinePreviewVideo.paused && !timelinePreviewVideo.ended
+        : !video.paused && !video.ended;
       playBtn.classList.toggle("is-on", active);
       playBtn.setAttribute("aria-pressed", active ? "true" : "false");
       playBtn.textContent = active ? "暂停" : "播放";
@@ -809,6 +821,7 @@
 
     async function previewSelectedClip() {
       if (cancelPreviewClip("已停止片段预览")) return false;
+      stopTimelinePreviewPlayback();
       const sentence = selectedSentence();
       if (!sentence || isGapSentence(sentence)) {
         setTimelineStatus("请选择视频片段后再预览", 1400);
@@ -827,9 +840,11 @@
       setPreviewClipActive(true);
       setTimelineStatus(`预览当前片段 ${formatPreciseTime(start)} - ${formatPreciseTime(end)}`);
       try {
+        allowSourceClipPlayback = true;
         await video.play();
         return true;
       } catch {
+        allowSourceClipPlayback = false;
         previewClipEndTime = null;
         setPreviewClipActive(false);
         setTimelineStatus("浏览器阻止自动播放，请手动点击播放", 1600);
@@ -853,14 +868,14 @@
 
     async function togglePlayback() {
       cancelPreviewClip();
-      if (video.paused || video.ended) {
+      if (!usingTimelinePreview || timelinePreviewVideo.paused || timelinePreviewVideo.ended) {
         try {
-          await video.play();
+          await startTimelinePreviewPlayback();
         } catch {
           setTimelineStatus("浏览器阻止自动播放，请手动点击播放", 1600);
         }
       } else {
-        video.pause();
+        stopTimelinePreviewPlayback();
       }
       updatePlaybackButton();
     }
@@ -882,45 +897,136 @@
       return orderedSentences().filter((sentence) => !sentence.remove_video && clipDuration(sentence) > 0.05);
     }
 
-    function activeSourceSentences() {
-      return activeTimelineSentences()
-        .filter((sentence) => !isGapSentence(sentence))
-        .sort((a, b) => clipStart(a) - clipStart(b));
-    }
-
-    function removedSentenceAtTime(time) {
-      return orderedSentences().find((sentence) => {
-        if (isGapSentence(sentence) || (!sentence.remove_video && sentence.enabled)) return false;
-        return time >= clipStart(sentence) && time < clipEnd(sentence);
-      }) || null;
-    }
-
-    function nextActiveSourceSentenceAfter(time) {
-      return activeSourceSentences().find((sentence) => clipEnd(sentence) > time + 0.01) || null;
-    }
-
-    function skipRemovedPlaybackIfNeeded() {
-      if (video.paused || isManualTimeSyncLocked()) return false;
-      const time = Number(video.currentTime || 0);
-      if (!removedSentenceAtTime(time)) return false;
-      const next = nextActiveSourceSentenceAfter(time);
-      if (next) {
-        selectedId = next.id;
-        video.currentTime = Math.max(0, clipStart(next) + 0.001);
-        renderAll();
-      } else {
-        video.pause();
-        updatePlaybackButton();
-      }
-      return true;
-    }
-
     function isGapSentence(sentence) {
       return Boolean(sentence.gap) && !sentence.remove_video;
     }
 
     function activeTimelineDuration() {
       return activeTimelineSentences().reduce((sum, sentence) => sum + clipDuration(sentence), 0) || 1;
+    }
+
+    function timelineStructureSignature() {
+      return JSON.stringify(orderedSentences().map((sentence) => ({
+        id: sentence.id,
+        order: Number(sentence.timeline_order || 0),
+        start: Number(clipStart(sentence).toFixed(3)),
+        end: Number(clipEnd(sentence).toFixed(3)),
+        removed: Boolean(sentence.remove_video),
+        gap: Boolean(sentence.gap),
+        syntheticGap: Boolean(sentence.synthetic_gap),
+      })));
+    }
+
+    function waitForPreviewMetadata() {
+      if (timelinePreviewVideo.readyState >= 1) return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const onReady = () => {
+          cleanup();
+          resolve();
+        };
+        const onError = () => {
+          cleanup();
+          reject(new Error("时间线预览加载失败"));
+        };
+        const cleanup = () => {
+          timelinePreviewVideo.removeEventListener("loadedmetadata", onReady);
+          timelinePreviewVideo.removeEventListener("error", onError);
+        };
+        timelinePreviewVideo.addEventListener("loadedmetadata", onReady, {once: true});
+        timelinePreviewVideo.addEventListener("error", onError, {once: true});
+      });
+    }
+
+    async function ensureTimelinePreview() {
+      const requestedSignature = timelineStructureSignature();
+      if (timelinePreviewReady && timelinePreviewSignature === requestedSignature) return true;
+      if (timelinePreviewPromise) return timelinePreviewPromise;
+      timelinePreviewRendering = true;
+      timelinePreviewReady = false;
+      playBtn.disabled = true;
+      setTimelineStatus("正在更新连续预览…");
+      timelinePreviewPromise = (async () => {
+        try {
+          const response = await fetch(previewApiUrl, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(project),
+          });
+          if (!response.ok) throw new Error(await responseErrorMessage(response));
+          const data = await response.json();
+          if (requestedSignature !== timelineStructureSignature()) return false;
+          timelinePreviewVideo.src = `${data.url}?v=${encodeURIComponent(data.signature)}`;
+          timelinePreviewVideo.load();
+          await waitForPreviewMetadata();
+          timelinePreviewSignature = requestedSignature;
+          timelinePreviewReady = true;
+          setTimelineStatus("连续预览已更新", 900);
+          return true;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          setTimelineStatus(`连续预览生成失败：${message.slice(0, 80)}`, 2400);
+          return false;
+        } finally {
+          timelinePreviewRendering = false;
+          timelinePreviewPromise = null;
+          playBtn.disabled = false;
+          if (requestedSignature !== timelineStructureSignature()) scheduleTimelinePreview(120);
+        }
+      })();
+      return timelinePreviewPromise;
+    }
+
+    function scheduleTimelinePreview(delay = 500) {
+      const nextSignature = timelineStructureSignature();
+      if (timelinePreviewReady && timelinePreviewSignature === nextSignature) return;
+      timelinePreviewReady = false;
+      if (usingTimelinePreview) stopTimelinePreviewPlayback();
+      clearTimeout(timelinePreviewTimer);
+      timelinePreviewTimer = setTimeout(ensureTimelinePreview, delay);
+    }
+
+    async function startTimelinePreviewPlayback() {
+      const startAt = clamp(timelineTimeForPlayback(), 0, activeTimelineDuration());
+      const currentSignature = timelineStructureSignature();
+      const ready = timelinePreviewReady && timelinePreviewSignature === currentSignature;
+      if (!ready) {
+        const prepared = await ensureTimelinePreview();
+        if (prepared) setTimelineStatus("连续预览已就绪，请再次点击播放", 1800);
+        return false;
+      }
+      video.pause();
+      allowSourceClipPlayback = false;
+      timelinePreviewVideo.currentTime = startAt >= activeTimelineDuration() - 0.02 ? 0 : startAt;
+      timelinePreviewVideo.volume = video.volume;
+      timelinePreviewVideo.muted = video.muted;
+      usingTimelinePreview = true;
+      videoFrame.classList.add("timeline-preview-active");
+      try {
+        await timelinePreviewVideo.play();
+        updatePlaybackButton();
+        return true;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        stopTimelinePreviewPlayback();
+        setTimelineStatus(`无法播放连续预览：${message.slice(0, 80)}`, 2200);
+        return false;
+      }
+    }
+
+    function stopTimelinePreviewPlayback() {
+      if (!usingTimelinePreview) return false;
+      const timelineTime = Number(timelinePreviewVideo.currentTime || 0);
+      timelinePreviewVideo.pause();
+      const hit = timelineLookup(timelineTime);
+      if (hit) {
+        selectedId = hit.sentence.id;
+        if (!isGapSentence(hit.sentence)) video.currentTime = hit.sourceTime;
+      }
+      usingTimelinePreview = false;
+      videoFrame.classList.remove("timeline-preview-active");
+      updatePlaybackButton();
+      renderAll();
+      return true;
     }
 
     function timelinePositionForSentence(sentence) {
@@ -933,6 +1039,7 @@
     }
 
     function timelineTimeForPlayback() {
+      if (usingTimelinePreview) return Number(timelinePreviewVideo.currentTime || 0);
       const sentence = selectedSentence();
       if (!sentence) return 0;
       if (isGapSentence(sentence)) return timelinePositionForSentence(sentence);
@@ -1532,6 +1639,7 @@
       dirty = value;
       saveState.textContent = dirty ? "有未保存修改" : "已保存";
       saveState.classList.toggle("dirty", dirty);
+      if (dirty) scheduleTimelinePreview();
       if (dirty && autosave) {
         clearTimeout(autosaveTimer);
         autosaveTimer = setTimeout(saveProject, 1400);
@@ -3022,18 +3130,42 @@
     playBtn.addEventListener("click", togglePlayback);
     playSelectionBtn.addEventListener("click", previewSelectedClip);
 
-    video.addEventListener("play", updatePlaybackButton);
-    video.addEventListener("pause", updatePlaybackButton);
+    video.addEventListener("play", () => {
+      if (!allowSourceClipPlayback && previewClipEndTime === null) {
+        video.pause();
+        startTimelinePreviewPlayback();
+        return;
+      }
+      updatePlaybackButton();
+    });
+    video.addEventListener("pause", () => {
+      if (previewClipEndTime === null) allowSourceClipPlayback = false;
+      updatePlaybackButton();
+    });
     video.addEventListener("ended", updatePlaybackButton);
 
     video.addEventListener("timeupdate", () => {
       if (stopPreviewClipIfNeeded()) return;
-      if (skipRemovedPlaybackIfNeeded()) return;
       if (isManualTimeSyncLocked()) {
         updateTimelinePlayhead();
         return;
       }
       const current = sentenceAtTime(video.currentTime);
+      if (current && current.id !== selectedId && document.activeElement !== subtitlePreview && !document.activeElement?.isContentEditable) {
+        selectedId = current.id;
+        renderAll();
+      } else {
+        updateTimelinePlayhead();
+      }
+    });
+
+    timelinePreviewVideo.addEventListener("play", updatePlaybackButton);
+    timelinePreviewVideo.addEventListener("pause", updatePlaybackButton);
+    timelinePreviewVideo.addEventListener("ended", stopTimelinePreviewPlayback);
+    timelinePreviewVideo.addEventListener("timeupdate", () => {
+      if (!usingTimelinePreview) return;
+      const hit = timelineLookup(timelinePreviewVideo.currentTime);
+      const current = hit?.sentence || null;
       if (current && current.id !== selectedId && document.activeElement !== subtitlePreview && !document.activeElement?.isContentEditable) {
         selectedId = current.id;
         renderAll();
@@ -3214,6 +3346,7 @@
     updateModeButtons();
     updatePlaybackButton();
     renderAll();
+    scheduleTimelinePreview(0);
   </script>
 </body>
 </html>

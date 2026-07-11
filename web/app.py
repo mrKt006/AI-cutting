@@ -1,5 +1,7 @@
 ﻿from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
 import math
 import os
@@ -528,6 +530,45 @@ async def api_save_edit_project(job_id: str, request: Request, item: str = "001"
     except Exception as exc:
         _write_web_traceback(job_dir, "save-edit-project", exc)
         raise HTTPException(status_code=500, detail="保存精修项目失败，诊断信息已写入任务目录") from exc
+
+
+@app.post("/api/jobs/{job_id}/edit-preview")
+async def api_render_edit_preview(job_id: str, request: Request, item: str = "001") -> dict[str, Any]:
+    job_dir = _job_path(job_id)
+    try:
+        job = _read_job(job_id)
+        existing = _load_or_create_edit_project(job_dir, job, item)
+        payload = await _read_json_object(request, source="生成时间线预览", required=True)
+        project = _sanitize_edit_project({**existing, **payload}, existing)
+        source = Path(project.get("render_source_video") or project.get("current_video") or "")
+        if not source.exists():
+            raise HTTPException(status_code=400, detail="找不到时间线预览源视频")
+
+        clips = _timeline_clips(project, float(project.get("duration") or media_duration(source)))
+        signature = _timeline_preview_signature(project)
+        safe_item = _safe_path_segment(project.get("item_id") or item) or "001"
+        preview_dir = job_dir / "work" / "editor_previews" / safe_item
+        preview_dir.mkdir(parents=True, exist_ok=True)
+        output = preview_dir / f"timeline-{signature}.mp4"
+        if not output.exists() or output.stat().st_size < 1024:
+            temporary = preview_dir / f".{output.stem}-{uuid.uuid4().hex}.mp4"
+            try:
+                await asyncio.to_thread(_render_timeline_preview, source, temporary, clips)
+                temporary.replace(output)
+            finally:
+                temporary.unlink(missing_ok=True)
+        _prune_timeline_previews(preview_dir, keep=output)
+        return {
+            "ok": True,
+            "signature": signature,
+            "url": _media_url_for_path(job_dir, output),
+            "duration": round(sum(float(clip["segment"].duration) for clip in clips), 3),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _write_web_traceback(job_dir, "render-edit-preview", exc)
+        raise HTTPException(status_code=500, detail="生成时间线预览失败，诊断信息已写入任务目录") from exc
 
 
 @app.post("/jobs/{job_id}/render-edited")
@@ -1192,7 +1233,25 @@ def _clip_is_gap(clip: dict[str, Any]) -> bool:
     return bool(sentence.get("gap")) and not bool(sentence.get("remove_video"))
 
 
+def _coalesced_render_clips(clips: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    for clip in clips:
+        segment = clip["segment"]
+        current = {"sentence": clip.get("sentence") or {}, "segment": Segment(segment.start, segment.end)}
+        if not merged or _clip_is_gap(current) or _clip_is_gap(merged[-1]):
+            merged.append(current)
+            continue
+        previous = merged[-1]
+        previous_segment = previous["segment"]
+        if abs(float(previous_segment.end) - float(segment.start)) <= 0.04:
+            previous["segment"] = Segment(previous_segment.start, max(previous_segment.end, segment.end))
+        else:
+            merged.append(current)
+    return merged
+
+
 def _render_timeline_video(source: Path, output: Path, clips: list[dict[str, Any]]) -> None:
+    clips = _coalesced_render_clips(clips)
     output.parent.mkdir(parents=True, exist_ok=True)
     if not any(_clip_is_gap(clip) for clip in clips):
         cut_video(source, output, [clip["segment"] for clip in clips])
@@ -1253,6 +1312,102 @@ def _render_timeline_video(source: Path, output: Path, clips: list[dict[str, Any
             str(output),
         ]
     )
+
+
+def _timeline_preview_signature(project: dict[str, Any]) -> str:
+    timeline = []
+    for sentence in sorted(
+        project.get("sentences", []),
+        key=lambda item: (float(item.get("timeline_order", 0)), str(item.get("id") or "")),
+    ):
+        timeline.append(
+            {
+                "id": str(sentence.get("id") or ""),
+                "order": round(float(sentence.get("timeline_order", 0)), 4),
+                "start": round(float(sentence.get("clip_start", sentence.get("start", 0))), 3),
+                "end": round(float(sentence.get("clip_end", sentence.get("end", 0))), 3),
+                "removed": bool(sentence.get("remove_video")),
+                "gap": bool(sentence.get("gap")),
+                "synthetic_gap": bool(sentence.get("synthetic_gap")),
+            }
+        )
+    payload = "v2:" + json.dumps(timeline, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _render_timeline_preview(source: Path, output: Path, clips: list[dict[str, Any]]) -> None:
+    clips = _coalesced_render_clips(clips)
+    width, height = video_size(source)
+    target_width = max(2, min(width, 720))
+    target_width -= target_width % 2
+    target_height = max(2, round(height * target_width / max(width, 1)))
+    target_height -= target_height % 2
+    parts: list[str] = []
+    labels: list[str] = []
+    for index, clip in enumerate(clips):
+        segment = clip["segment"]
+        duration = max(0.05, float(segment.duration))
+        if _clip_is_gap(clip):
+            parts.append(
+                f"color=c=black:s={target_width}x{target_height}:r=30:d={duration:.3f},"
+                f"format=yuv420p,setsar=1[v{index}]"
+            )
+            parts.append(
+                f"anullsrc=channel_layout=stereo:sample_rate=44100:d={duration:.3f},"
+                f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a{index}]"
+            )
+        else:
+            parts.append(
+                f"[0:v]trim=start={segment.start:.3f}:end={segment.end:.3f},"
+                f"setpts=PTS-STARTPTS,scale={target_width}:{target_height},fps=30,format=yuv420p,setsar=1[v{index}]"
+            )
+            parts.append(
+                f"[0:a]atrim=start={segment.start:.3f}:end={segment.end:.3f},"
+                f"asetpts=PTS-STARTPTS,"
+                f"aformat=sample_fmts=fltp:sample_rates=44100:channel_layouts=stereo[a{index}]"
+            )
+        labels.append(f"[v{index}][a{index}]")
+
+    filter_complex = ";".join(parts) + ";" + "".join(labels) + f"concat=n={len(clips)}:v=1:a=1[v][a]"
+    ffmpeg_run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(source),
+            "-filter_complex",
+            filter_complex,
+            "-map",
+            "[v]",
+            "-map",
+            "[a]",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "27",
+            "-g",
+            "30",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+            str(output),
+        ]
+    )
+
+
+def _prune_timeline_previews(preview_dir: Path, keep: Path) -> None:
+    candidates = sorted(
+        (path for path in preview_dir.glob("timeline-*.mp4") if path != keep),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
+    )
+    for path in candidates[2:]:
+        path.unlink(missing_ok=True)
 
 
 def _timeline_subtitle_cues(project: dict[str, Any], clips: list[dict[str, Any]], duration: float) -> list[SubtitleCue]:

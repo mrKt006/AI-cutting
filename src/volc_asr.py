@@ -13,7 +13,6 @@ from pathlib import Path
 
 from ffmpeg_utils import require_tool, run
 from safe_json import loads_json
-from text_utils import to_simplified
 
 
 SUBMIT_URL = "https://openspeech.bytedance.com/api/v1/vc/submit"
@@ -32,7 +31,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--poll-interval", type=float, default=2.0, help="seconds between non-blocking polls")
     parser.add_argument("--timeout", type=float, default=600.0, help="max seconds to wait")
     parser.add_argument("--keep-audio", default=None, help="optional path to keep extracted wav")
-    parser.add_argument("--chinese-script", choices=["simplified", "original"], default="simplified")
     return parser.parse_args()
 
 
@@ -67,7 +65,7 @@ def main() -> int:
                 poll_interval=args.poll_interval,
                 timeout=args.timeout,
             )
-            segments = convert_utterances(result, chinese_script=args.chinese_script)
+            segments = convert_utterances(result)
             output = Path(args.output)
             output.parent.mkdir(parents=True, exist_ok=True)
             output.write_text(json.dumps(segments, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -155,14 +153,12 @@ def query_until_done(
         time.sleep(poll_interval)
 
 
-def convert_utterances(response: dict, chinese_script: str = "simplified") -> list[dict]:
+def convert_utterances(response: dict) -> list[dict]:
     result: list[dict] = []
     for item in response.get("utterances", []):
         text = str(item.get("text", "")).strip()
         if not text:
             continue
-        if chinese_script == "simplified":
-            text = to_simplified(text)
         result.append(
             {
                 "start_ms": int(item.get("start_time", 0)),

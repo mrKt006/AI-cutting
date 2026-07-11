@@ -1,5 +1,4 @@
 Pillow>=10.0
-opencc-python-reimplemented>=0.1.7
 fastapi>=0.139
 uvicorn>=0.50
 python-multipart>=0.0.32

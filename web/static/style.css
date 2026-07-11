@@ -1825,6 +1825,20 @@ legend {
   background: #050814;
 }
 
+.timeline-preview-video {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+.video-frame.timeline-preview-active #edit-video {
+  visibility: hidden;
+}
+
+.video-frame.timeline-preview-active .timeline-preview-video {
+  display: block;
+}
+
 .edit-subtitle-preview {
   position: absolute;
   left: 50%;
@@ -2281,38 +2295,12 @@ legend {
   z-index: 5;
 }
 
-.trim-handle::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: rgba(191, 219, 254, 0.72);
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
 .trim-handle.left {
-  left: 0;
-}
-
-.trim-handle.left::before {
   left: 0;
 }
 
 .trim-handle.right {
   right: 0;
-}
-
-.trim-handle.right::before {
-  right: 0;
-}
-
-.timeline-segment:hover .trim-handle::before,
-.timeline-segment.active .trim-handle::before,
-.timeline-segment.gap-block .trim-handle::before,
-.trim-handle:hover::before {
-  opacity: 1;
 }
 
 .timeline-float-tip {

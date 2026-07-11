@@ -13,6 +13,7 @@ from fastapi import HTTPException  # noqa: E402
 
 from app import (  # noqa: E402
     _build_edit_plan,
+    _coalesced_render_clips,
     _is_clean_editor_source,
     _render_edit_project,
     _render_timeline_video,
@@ -90,6 +91,14 @@ def main() -> int:
         ],
     }
     clips = _timeline_clips(project, 10.0)
+    merged = _coalesced_render_clips(
+        [
+            {"sentence": {"id": "a"}, "segment": Segment(0.0, 1.0)},
+            {"sentence": {"id": "b"}, "segment": Segment(1.0, 2.0)},
+            {"sentence": {"id": "c"}, "segment": Segment(3.0, 4.0)},
+        ]
+    )
+    assert [(clip["segment"].start, clip["segment"].end) for clip in merged] == [(0.0, 2.0), (3.0, 4.0)]
     plan = _build_edit_plan(project, clips, [], [], sum(clip["segment"].duration for clip in clips))
     segments = plan["timeline_segments"]
 

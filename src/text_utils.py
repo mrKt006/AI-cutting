@@ -10,19 +10,6 @@ def strip_keyword_marks(text: str) -> str:
     return MARK_RE.sub(r"\1", text)
 
 
-def to_simplified(text: str) -> str:
-    try:
-        from opencc import OpenCC
-    except ImportError as exc:
-        raise RuntimeError(
-            "opencc-python-reimplemented is required for simplified Chinese subtitles. "
-            "Run: pip install opencc-python-reimplemented"
-        ) from exc
-
-    converter = OpenCC("t2s")
-    return converter.convert(text)
-
-
 def read_text(path) -> str:
     for encoding in ("utf-8-sig", "utf-8", "gb18030"):
         try:

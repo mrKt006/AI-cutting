@@ -85,6 +85,13 @@ def main() -> int:
             {"content": "{bad", "headers": {"content-type": "application/json"}},
             400,
         ),
+        (
+            "bad timeline preview json",
+            "post",
+            f"/api/jobs/{job_id}/edit-preview?item=001",
+            {"content": "{bad", "headers": {"content-type": "application/json"}},
+            400,
+        ),
     ]
 
     failed = False
