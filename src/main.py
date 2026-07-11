@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -13,9 +14,11 @@ from cut_silence import Segment, auto_cut
 from disfluency import detect_repeated_utterances
 from ffmpeg_utils import media_duration, require_tool, video_size
 from make_cover import make_cover
-from make_subtitle import TimingSegment, make_cues_from_timing_text, write_ass, write_srt
+from llm_analysis import analyze_transcript, apply_high_confidence_corrections
+from make_subtitle import TimingSegment, make_cues_from_segmented_timings, write_ass, write_srt
 from render_video import burn_subtitles
 from style_presets import get_style_preset
+from subtitle_layout import flatten_segment_tokens, segment_tokens
 from text_utils import read_text, strip_keyword_marks
 from volc_asr import convert_utterances, extract_wav, query_until_done, submit_audio
 
@@ -39,6 +42,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--volc-words-per-line", type=int, default=15, help="Volc subtitle words_per_line parameter")
     parser.add_argument("--volc-max-lines", type=int, default=1, help="Volc subtitle max_lines parameter")
     parser.add_argument("--volc-timeout", type=float, default=600.0, help="max seconds to wait for Volcengine ASR")
+    parser.add_argument("--llm-enabled", action="store_true", help="analyze transcript with an OpenAI-compatible model")
+    parser.add_argument("--llm-base-url", default=None, help="OpenAI-compatible API base URL")
+    parser.add_argument("--llm-model", default=None, help="OpenAI-compatible model name")
+    parser.add_argument("--llm-timeout", type=float, default=60.0, help="LLM request timeout")
     parser.add_argument("--export-subtitles", action="store_true", help="keep subtitle.ass and subtitle.srt in output")
     parser.add_argument("--export-asr-json", action="store_true", help="keep Volcengine segment JSON in output")
     parser.add_argument("--export-report", action="store_true", help="keep edit_report.json in output")
@@ -85,8 +92,7 @@ def main() -> int:
 
             width, height = video_size(working_video)
             subtitle_duration = max(0.2, output_duration - 0.08)
-            external_segments = []
-            external_segments = _transcribe_cut_video_with_volcengine(
+            external_segments, raw_asr = _transcribe_cut_video_with_volcengine(
                 working_video=working_video,
                 tmp_dir=Path(tmp),
                 appid=args.volc_appid,
@@ -95,20 +101,28 @@ def main() -> int:
                 max_lines=args.volc_max_lines,
                 timeout=args.volc_timeout,
             )
+            analysis = _run_transcript_analysis(external_segments, args)
+            external_segments = _intelligent_segments(
+                external_segments,
+                subtitle_style,
+                width,
+                height,
+                analysis,
+            )
             if args.editor_work_dir:
                 editor_work_dir = Path(args.editor_work_dir)
                 editor_work_dir.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(working_video, editor_work_dir / "cut_no_subtitles.mp4")
                 _write_timing_segments(external_segments, editor_work_dir / "volcengine_segments.json")
+                (editor_work_dir / "volcengine_response.json").write_text(
+                    json.dumps(raw_asr, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                (editor_work_dir / "transcript_analysis.json").write_text(
+                    json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
             if args.export_asr_json:
                 _write_timing_segments(external_segments, output_dir / "volcengine_segments.json")
-            cues = make_cues_from_timing_text(
-                external_segments,
-                subtitle_duration,
-                delay=args.subtitle_delay,
-                target_len=int(subtitle_style.get("target_len", 12)),
-                max_len=int(subtitle_style.get("max_len", 18)),
-            )
+            cues = make_cues_from_segmented_timings(external_segments, subtitle_duration, delay=args.subtitle_delay)
             subtitle_srt = output_dir / "subtitle.srt"
             subtitle_ass = output_dir / "subtitle.ass" if args.export_subtitles else Path(tmp) / "subtitle.ass"
             if args.export_subtitles:
@@ -166,10 +180,13 @@ def main() -> int:
                 "no_cut": args.no_cut,
                 "detect_disfluency": args.detect_disfluency,
                 "timing_strategy": "cut video transcribed by Volcengine ASR",
+                "llm_enabled": bool(args.llm_enabled),
+                "llm_status": analysis.get("status"),
             },
             "disfluency": {
                 "repeat_candidates": disfluency_findings,
             },
+            "analysis": analysis,
         }
         if args.export_report:
             (output_dir / "edit_report.json").write_text(
@@ -224,6 +241,7 @@ def _write_timing_segments(segments: list[TimingSegment], path: Path) -> None:
             "start_ms": round(segment.start * 1000),
             "end_ms": round(segment.end * 1000),
             "text": segment.text,
+            "tokens": list(segment.tokens),
         }
         for segment in segments
     ]
@@ -271,8 +289,7 @@ def _transcribe_cut_video_with_volcengine(
     words_per_line: int,
     max_lines: int,
     timeout: float,
-) -> list[TimingSegment]:
-    import os
+) -> tuple[list[TimingSegment], dict]:
 
     appid = appid or os.environ.get("VOLC_APP_ID")
     token = token or os.environ.get("VOLC_ACCESS_TOKEN")
@@ -299,15 +316,60 @@ def _transcribe_cut_video_with_volcengine(
         timeout=timeout,
     )
     items = convert_utterances(result)
-    return [
+    segments = [
         TimingSegment(
             start=float(item["start_ms"]) / 1000,
             end=float(item["end_ms"]) / 1000,
             text=str(item["text"]),
+            tokens=tuple(item.get("tokens") or ()),
         )
         for item in items
         if item.get("text")
     ]
+    return segments, result
+
+
+def _run_transcript_analysis(segments: list[TimingSegment], args: argparse.Namespace) -> dict:
+    if not args.llm_enabled:
+        return {"status": "skipped", "reason": "disabled", "corrections": [], "break_hints": [], "repeat_candidates": []}
+    return analyze_transcript(
+        flatten_segment_tokens(segments),
+        base_url=str(args.llm_base_url or os.environ.get("AI_CUTTING_LLM_BASE_URL") or ""),
+        model=str(args.llm_model or os.environ.get("AI_CUTTING_LLM_MODEL") or ""),
+        api_key=str(os.environ.get("AI_CUTTING_LLM_API_KEY") or ""),
+        timeout=float(args.llm_timeout),
+    )
+
+
+def _intelligent_segments(
+    segments: list[TimingSegment],
+    style: dict,
+    width: int,
+    height: int,
+    analysis: dict,
+) -> list[TimingSegment]:
+    tokens = flatten_segment_tokens(segments)
+    apply_high_confidence_corrections(tokens, analysis)
+    hints = [
+        str(item.get("after_token_id"))
+        for item in analysis.get("break_hints", [])
+        if float(item.get("confidence", 0)) >= 0.6
+    ]
+    groups = segment_tokens(tokens, style, width, height, hints)
+    result: list[TimingSegment] = []
+    for group in groups:
+        visible = [token for token in group if str(token.get("text") or "")]
+        if not visible:
+            continue
+        result.append(
+            TimingSegment(
+                start=float(visible[0].get("start", 0)),
+                end=float(visible[-1].get("end", visible[0].get("start", 0))),
+                text="".join(str(token.get("text") or "") for token in visible).strip(),
+                tokens=tuple(visible),
+            )
+        )
+    return result or segments
 
 
 if __name__ == "__main__":

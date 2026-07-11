@@ -50,6 +50,7 @@ def main() -> int:
         ("Encoding scan", [py, "scripts/check_encoding.py"]),
         ("Web port helper", [py, "scripts/find_web_port.py"]),
         ("Editor timeline plan", [py, "scripts/check_editor_timeline.py"]),
+        ("Subtitle intelligence", [py, "scripts/check_subtitle_intelligence.py"]),
         ("Web error boundaries", [py, "scripts/check_web_error_boundaries.py"]),
         ("Edit page JS", [py, "scripts/check_edit_page_js.py"]),
         (

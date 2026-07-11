@@ -9,13 +9,15 @@ from ffmpeg_utils import run
 from style_presets import DEFAULT_STYLE_PRESETS, hex_to_rgba
 
 
-def make_cover(video: Path, title: str, output: Path, style: dict | None = None) -> None:
+def make_cover(video: Path, title: str, output: Path, style: dict | None = None, frame_time: float = 0.0) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         frame = Path(tmp) / "frame.jpg"
-        run(
-            ["ffmpeg", "-y", "-i", str(video), "-frames:v", "1", "-q:v", "2", str(frame)],
-        )
+        command = ["ffmpeg", "-y"]
+        if frame_time > 0:
+            command.extend(["-ss", f"{float(frame_time):.3f}"])
+        command.extend(["-i", str(video), "-frames:v", "1", "-q:v", "2", str(frame)])
+        run(command)
         try:
             _draw_title(frame, title, output, style=style)
         except Exception:

@@ -40,6 +40,8 @@ from style_presets import (  # noqa: E402
     subtitle_override,
     subtitle_to_ass_style,
 )
+from subtitle_layout import segment_tokens, text_overflows, tokens_from_text  # noqa: E402
+from llm_analysis import analyze_transcript, apply_high_confidence_corrections  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -124,18 +126,43 @@ async def save_settings(
     volc_access_token: str = Form(""),
     subtitle_delay: float = Form(0.0),
     detect_disfluency: str | None = Form(None),
+    llm_enabled: str | None = Form(None),
+    llm_base_url: str = Form(""),
+    llm_model: str = Form(""),
+    llm_api_key: str = Form(""),
 ) -> RedirectResponse:
     existing = _load_settings()
     token = volc_access_token.strip() or existing.get("volc_access_token", "")
+    llm_key = llm_api_key.strip() or existing.get("llm_api_key", "")
     _save_settings(
         {
             "volc_app_id": volc_app_id.strip(),
             "volc_access_token": token,
             "subtitle_delay": subtitle_delay,
             "detect_disfluency": bool(detect_disfluency),
+            "llm_enabled": bool(llm_enabled),
+            "llm_base_url": llm_base_url.strip(),
+            "llm_model": llm_model.strip(),
+            "llm_api_key": llm_key,
         }
     )
     return RedirectResponse("/settings?saved=1", status_code=303)
+
+
+@app.post("/api/settings/test-llm")
+async def api_test_llm() -> dict[str, Any]:
+    settings = _load_settings()
+    result = await asyncio.to_thread(
+        analyze_transcript,
+        [{"id": "test-1", "text": "测试"}],
+        base_url=str(settings.get("llm_base_url") or ""),
+        model=str(settings.get("llm_model") or ""),
+        api_key=str(settings.get("llm_api_key") or ""),
+        timeout=20.0,
+    )
+    if result.get("status") != "ok":
+        raise HTTPException(status_code=400, detail="模型连接失败，请检查 Base URL、Model 和 API Key")
+    return {"ok": True, "message": "模型连接正常"}
 
 
 @app.get("/style-presets", response_class=HTMLResponse)
@@ -145,7 +172,7 @@ def style_presets_page(request: Request) -> HTMLResponse:
     selected = get_style_preset(selected_id, STYLE_PRESETS_PATH)
     preview = request.query_params.get("preview") or ""
     active_style = request.query_params.get("active") or "subtitle"
-    if active_style not in {"subtitle", "cover"}:
+    if active_style not in {"subtitle", "video", "cover"}:
         active_style = "subtitle"
     preview_text = request.query_params.get("text") or "默认文本"
     preview_aspect = _preview_aspect(request.query_params.get("aspect"))
@@ -291,7 +318,7 @@ async def api_render_preview(request: Request) -> JSONResponse:
 
     preset = _preset_from_form(form, str(form.get("preset_id") or "preview"))
     active_style = str(form.get("active_text_style") or "subtitle")
-    render_style = preset["cover_title"] if active_style == "cover" else preset["subtitle"]
+    render_style = preset["cover_title"] if active_style == "cover" else preset["video_title"] if active_style == "video" else preset["subtitle"]
     text = str(form.get("preview_text") or "默认文本")
     preview_aspect = _preview_aspect(str(form.get("preview_aspect") or "9:16"))
     width, height = _preview_dimensions(preview_aspect)
@@ -426,6 +453,9 @@ async def create_job(
         "style_preset_name": style_preset["name"],
         "subtitle_delay": float(settings.get("subtitle_delay", 0.0)),
         "detect_disfluency": bool(settings.get("detect_disfluency", False)),
+        "llm_enabled": bool(settings.get("llm_enabled", False)),
+        "llm_base_url": str(settings.get("llm_base_url") or ""),
+        "llm_model": str(settings.get("llm_model") or ""),
         "export_subtitles": bool(export_subtitles),
         "export_asr_json": bool(export_asr_json),
         "export_report": bool(export_report),
@@ -448,10 +478,11 @@ async def create_job(
             "log": [],
         },
     )
-    if settings.get("volc_app_id") or settings.get("volc_access_token"):
+    if settings.get("volc_app_id") or settings.get("volc_access_token") or settings.get("llm_api_key"):
         JOB_SECRETS[job_id] = {
             "VOLC_APP_ID": settings.get("volc_app_id", ""),
             "VOLC_ACCESS_TOKEN": settings.get("volc_access_token", ""),
+            "AI_CUTTING_LLM_API_KEY": settings.get("llm_api_key", ""),
         }
 
     thread = threading.Thread(target=_run_job, args=(job_id,), daemon=True)
@@ -490,6 +521,14 @@ def edit_page(request: Request, job_id: str, item: str = "001") -> HTMLResponse:
     style_preset = get_style_preset(project.get("style_preset_id") or "default-white", STYLE_PRESETS_PATH)
     editor_assets = _safe_editor_assets(job_dir, project)
     project = dict(project)
+    video_info = _editor_video_info(video_path)
+    for sentence in project.get("sentences", []):
+        sentence["overlong"] = text_overflows(
+            str(sentence.get("text") or ""),
+            style_preset.get("subtitle") or {},
+            int(video_info.get("width") or 1080),
+            int(video_info.get("height") or 1920),
+        )
     project["output_files"] = [file for file in _output_files(job_id) if file["name"].startswith(f"edited/{project['item_id']}/")]
     return templates.TemplateResponse(
         request=request,
@@ -501,10 +540,11 @@ def edit_page(request: Request, job_id: str, item: str = "001") -> HTMLResponse:
             "project": project,
             "project_json": json.dumps(project, ensure_ascii=False),
             "video_url": _media_url_for_path(job_dir, video_path),
-            "video_info": _editor_video_info(video_path),
+            "video_info": video_info,
             "editor_assets": editor_assets,
+            "style_presets": load_style_presets(STYLE_PRESETS_PATH),
             "subtitle_style": style_preset.get("subtitle") or {},
-            "title_style": style_preset.get("cover_title") or {},
+            "title_style": style_preset.get("video_title") or style_preset.get("cover_title") or {},
         },
     )
 
@@ -569,6 +609,115 @@ async def api_render_edit_preview(job_id: str, request: Request, item: str = "00
     except Exception as exc:
         _write_web_traceback(job_dir, "render-edit-preview", exc)
         raise HTTPException(status_code=500, detail="生成时间线预览失败，诊断信息已写入任务目录") from exc
+
+
+@app.post("/api/jobs/{job_id}/reanalyze-subtitles")
+async def api_reanalyze_subtitles(job_id: str, request: Request, item: str = "001") -> dict[str, Any]:
+    job_dir = _job_path(job_id)
+    try:
+        existing = _load_or_create_edit_project(job_dir, _read_job(job_id), item)
+        payload = await _read_json_object(request, source="重新智能分析", required=False)
+        project = _sanitize_edit_project({**existing, **payload}, existing) if payload else existing
+        settings = _load_settings()
+        tokens = [token for sentence in project.get("sentences", []) for token in sentence.get("tokens", [])]
+        analysis = await asyncio.to_thread(
+            analyze_transcript,
+            tokens,
+            base_url=str(settings.get("llm_base_url") or ""),
+            model=str(settings.get("llm_model") or ""),
+            api_key=str(settings.get("llm_api_key") or ""),
+            timeout=60.0,
+        )
+        apply_high_confidence_corrections(tokens, analysis)
+        repeat_ids = {
+            str(token_id)
+            for candidate in analysis.get("repeat_candidates", [])
+            for token_id in candidate.get("token_ids", [])
+        }
+        for sentence in project.get("sentences", []):
+            sentence["text"] = "".join(str(token.get("text") or "") for token in sentence.get("tokens", [])).strip()
+            sentence["review_flags"] = ["repeat_candidate"] if any(str(token.get("id")) in repeat_ids for token in sentence.get("tokens", [])) else []
+        project["analysis"] = analysis
+        _write_edit_project(job_dir, project)
+        return {"ok": True, "analysis": analysis, "project": project}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _write_web_traceback(job_dir, "reanalyze-subtitles", exc)
+        raise HTTPException(status_code=500, detail="重新智能分析失败，诊断信息已写入任务目录") from exc
+
+
+@app.post("/api/jobs/{job_id}/reflow-subtitles")
+async def api_reflow_subtitles(job_id: str, request: Request, item: str = "001") -> dict[str, Any]:
+    job_dir = _job_path(job_id)
+    try:
+        existing = _load_or_create_edit_project(job_dir, _read_job(job_id), item)
+        payload = await _read_json_object(request, source="按预设重新断句", required=False)
+        project = _sanitize_edit_project({**existing, **payload}, existing) if payload else existing
+        source = Path(project.get("render_source_video") or project.get("current_video") or "")
+        width, height = video_size(source)
+        preset = get_style_preset(project.get("style_preset_id") or "default-white", STYLE_PRESETS_PATH)
+        project["sentences"] = _reflow_project_sentences(project, preset.get("subtitle") or {}, width, height)
+        _write_edit_project(job_dir, project)
+        return {"ok": True, "project": project}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _write_web_traceback(job_dir, "reflow-subtitles", exc)
+        raise HTTPException(status_code=500, detail="按预设重新断句失败，诊断信息已写入任务目录") from exc
+
+
+@app.post("/api/jobs/{job_id}/cover-preview")
+async def api_cover_preview(job_id: str, request: Request, item: str = "001") -> dict[str, Any]:
+    job_dir = _job_path(job_id)
+    try:
+        existing = _load_or_create_edit_project(job_dir, _read_job(job_id), item)
+        payload = await _read_json_object(request, source="生成封面预览", required=True)
+        project = _sanitize_edit_project({**existing, **payload}, existing)
+        source = Path(project.get("render_source_video") or project.get("current_video") or "")
+        if not source.exists():
+            raise HTTPException(status_code=400, detail="找不到封面预览源视频")
+        cover = project.get("cover") or {}
+        preset = get_style_preset(cover.get("style_preset_id") or project.get("style_preset_id") or "default-white", STYLE_PRESETS_PATH)
+        style = dict(preset.get("cover_title") or {})
+        if isinstance(cover.get("style_override"), dict):
+            style.update(cover["style_override"])
+        signature_payload = json.dumps({"cover": cover, "sentences": project.get("sentences", [])}, ensure_ascii=True, sort_keys=True)
+        signature = hashlib.sha256(signature_payload.encode("utf-8")).hexdigest()[:16]
+        safe_item = _safe_path_segment(project.get("item_id") or item) or "001"
+        output = job_dir / "work" / "cover_previews" / safe_item / f"cover-{signature}.jpg"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        clips = _timeline_clips(project, float(project.get("duration") or media_duration(source)))
+        source_time = _timeline_source_time(clips, float(cover.get("frame_time") or 0.0))
+        if not output.exists():
+            await asyncio.to_thread(make_cover, source, str(cover.get("text") or ""), output, style, source_time)
+        return {"ok": True, "url": _media_url_for_path(job_dir, output), "signature": signature}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _write_web_traceback(job_dir, "cover-preview", exc)
+        raise HTTPException(status_code=500, detail="生成封面预览失败，诊断信息已写入任务目录") from exc
+
+
+@app.post("/api/jobs/{job_id}/cover-style-preset")
+async def api_save_cover_style_preset(job_id: str, request: Request, item: str = "001") -> dict[str, Any]:
+    job_dir = _job_path(job_id)
+    existing = _load_or_create_edit_project(job_dir, _read_job(job_id), item)
+    payload = await _read_json_object(request, source="保存封面预设", required=True)
+    project = _sanitize_edit_project({**existing, **payload}, existing)
+    cover = project.get("cover") or {}
+    source_preset = get_style_preset(cover.get("style_preset_id") or project.get("style_preset_id") or "default-white", STYLE_PRESETS_PATH)
+    new_preset = dict(source_preset)
+    new_preset["id"] = f"cover-{uuid.uuid4().hex[:8]}"
+    new_preset["name"] = f"{str(cover.get('text') or '新封面')[:10]}封面"
+    new_preset["cover_title"] = {**source_preset.get("cover_title", {}), **(cover.get("style_override") or {})}
+    presets = load_style_presets(STYLE_PRESETS_PATH)
+    presets.append(new_preset)
+    save_style_presets(presets, STYLE_PRESETS_PATH)
+    project["cover"]["style_preset_id"] = new_preset["id"]
+    project["cover"]["style_override"] = {}
+    _write_edit_project(job_dir, project)
+    return {"ok": True, "preset": new_preset, "project": project}
 
 
 @app.post("/jobs/{job_id}/render-edited")
@@ -688,6 +837,16 @@ def _run_job(job_id: str) -> None:
             ]
             if params["detect_disfluency"]:
                 cmd.append("--detect-disfluency")
+            if params.get("llm_enabled"):
+                cmd.extend(
+                    [
+                        "--llm-enabled",
+                        "--llm-base-url",
+                        params.get("llm_base_url") or "",
+                        "--llm-model",
+                        params.get("llm_model") or "",
+                    ]
+                )
             if params.get("export_subtitles"):
                 cmd.append("--export-subtitles")
             if params.get("export_asr_json"):
@@ -871,6 +1030,12 @@ def _load_or_create_edit_project(job_dir: Path, job: dict[str, Any], item_id: st
             "enabled": True,
             "remove_video": False,
             "edited": False,
+            "tokens": list(segment.get("tokens") or tokens_from_text(
+                str(segment.get("text") or ""),
+                float(segment["start"]),
+                float(segment["end"]),
+                prefix=f"s{index:03d}",
+            )),
         }
         for index, segment in enumerate(segments, start=1)
         if float(segment.get("end", 0)) > float(segment.get("start", 0))
@@ -883,6 +1048,13 @@ def _load_or_create_edit_project(job_dir: Path, job: dict[str, Any], item_id: st
         else:
             sentence["clip_end"] = max(sentence["clip_end"], project["duration"] or sentence["clip_end"])
     project["sentences"] = sentences
+    repeat_ids = {
+        str(token_id)
+        for candidate in project.get("analysis", {}).get("repeat_candidates", [])
+        for token_id in candidate.get("token_ids", [])
+    }
+    for sentence in project["sentences"]:
+        sentence["review_flags"] = ["repeat_candidate"] if any(str(token.get("id")) in repeat_ids for token in sentence.get("tokens", [])) else []
     _write_edit_project(job_dir, project)
     return project
 
@@ -904,18 +1076,24 @@ def _blank_edit_project(job_dir: Path, job: dict[str, Any], item: dict[str, Any]
                 continue
     title = item.get("title") or params.get("title") or "未命名视频"
     return {
-        "version": 3,
+        "version": 4,
         "job_id": job.get("id"),
         "item_id": item["id"],
         "title": {"cover_text": title, "video_text": "", "show_video_title": False},
+        "cover": {
+            "text": title,
+            "frame_time": min(max(duration * 0.2, 0.0), max(0.0, duration - 0.05)),
+            "style_preset_id": params.get("style_preset_id") or "default-white",
+            "style_override": {},
+        },
         "title_clips": [
             {
                 "id": "t001",
                 "start": 0.0,
                 "end": min(max(duration, 0.2), 3.0),
-                "text": title,
+                "text": "",
                 "enabled": False,
-                "use_for_cover": True,
+                "use_for_cover": False,
             }
         ],
         "settings": {"subtitle_offset": 0.0},
@@ -926,6 +1104,7 @@ def _blank_edit_project(job_dir: Path, job: dict[str, Any], item: dict[str, Any]
         "preview_source": "clean-no-subtitles" if clean_source else "burned-output-fallback",
         "preview_warning": "" if clean_source else "这个任务没有无字幕精修源，预览可能出现双字幕。请重新处理一次视频后再精修。",
         "sentences": [],
+        "analysis": _load_transcript_analysis(job_dir, item["id"]),
         "outputs": {},
         "created_at": _now(),
         "updated_at": _now(),
@@ -935,7 +1114,7 @@ def _blank_edit_project(job_dir: Path, job: dict[str, Any], item: dict[str, Any]
 def _sanitize_edit_project(project: dict[str, Any], existing: dict[str, Any]) -> dict[str, Any]:
     cleaned = dict(existing)
     duration = max(0.0, float(project.get("duration") or existing.get("duration") or 0.0))
-    cleaned["version"] = 3
+    cleaned["version"] = 4
     cleaned["duration"] = duration
     title = project.get("title") if isinstance(project.get("title"), dict) else {}
     old_title = existing.get("title") if isinstance(existing.get("title"), dict) else {}
@@ -943,6 +1122,14 @@ def _sanitize_edit_project(project: dict[str, Any], existing: dict[str, Any]) ->
         "cover_text": str(title.get("cover_text", old_title.get("cover_text", "")))[:800],
         "video_text": str(title.get("video_text", old_title.get("video_text", "")))[:800],
         "show_video_title": bool(title.get("show_video_title", old_title.get("show_video_title", False))),
+    }
+    cover = project.get("cover") if isinstance(project.get("cover"), dict) else {}
+    old_cover = existing.get("cover") if isinstance(existing.get("cover"), dict) else {}
+    cleaned["cover"] = {
+        "text": str(cover.get("text", old_cover.get("text", cleaned["title"]["cover_text"])))[:800],
+        "frame_time": _clamp_float(cover.get("frame_time", old_cover.get("frame_time", 0.0)), 0.0, duration),
+        "style_preset_id": str(cover.get("style_preset_id") or old_cover.get("style_preset_id") or project.get("style_preset_id") or "default-white"),
+        "style_override": cover.get("style_override") if isinstance(cover.get("style_override"), dict) else old_cover.get("style_override", {}),
     }
     settings = project.get("settings") if isinstance(project.get("settings"), dict) else {}
     old_settings = existing.get("settings") if isinstance(existing.get("settings"), dict) else {}
@@ -966,6 +1153,8 @@ def _sanitize_edit_project(project: dict[str, Any], existing: dict[str, Any]) ->
     cleaned["title_clips"] = _sanitize_title_clips(incoming_titles, old_titles, duration, cleaned["title"])
     if isinstance(project.get("outputs"), dict):
         cleaned["outputs"] = project["outputs"]
+    if isinstance(project.get("analysis"), dict):
+        cleaned["analysis"] = project["analysis"]
     cleaned["updated_at"] = _now()
     return cleaned
 
@@ -995,6 +1184,8 @@ def _sanitize_sentences(items: list[Any], old_by_id: dict[str, dict[str, Any]], 
             clip_end = min(max_clip_end, clip_start + 0.05)
         text = str(item.get("text", original.get("text", ""))).strip()[:1000]
         original_text = str(item.get("original_text", original.get("original_text", text))).strip()[:1000]
+        incoming_tokens = item.get("tokens") if isinstance(item.get("tokens"), list) else original.get("tokens", [])
+        tokens = _sanitize_tokens(incoming_tokens, text, start, end, sentence_id)
         cleaned.append(
             {
                 "id": sentence_id,
@@ -1010,6 +1201,9 @@ def _sanitize_sentences(items: list[Any], old_by_id: dict[str, dict[str, Any]], 
                 "gap": bool(item.get("gap", original.get("gap", False))),
                 "synthetic_gap": synthetic_gap,
                 "edited": bool(item.get("edited", original.get("edited", False))) or text != original_text,
+                "tokens": tokens,
+                "timing_pending": bool(item.get("timing_pending", original.get("timing_pending", False))),
+                "review_flags": item.get("review_flags") if isinstance(item.get("review_flags"), list) else original.get("review_flags", []),
             }
         )
     cleaned.sort(key=lambda item: (item["timeline_order"], item["start"], item["end"], item["id"]))
@@ -1027,6 +1221,97 @@ def _sanitize_sentences(items: list[Any], old_by_id: dict[str, dict[str, Any]], 
     return cleaned
 
 
+def _sanitize_tokens(
+    items: list[Any], text: str, start: float, end: float, sentence_id: str
+) -> list[dict[str, Any]]:
+    tokens: list[dict[str, Any]] = []
+    for index, item in enumerate(items, start=1):
+        if not isinstance(item, dict) or not str(item.get("text") or ""):
+            continue
+        token_start = _clamp_float(item.get("start", start), start, end)
+        token_end = _clamp_float(item.get("end", token_start), token_start, end)
+        tokens.append(
+            {
+                "id": str(item.get("id") or f"{sentence_id}-w{index:04d}")[:80],
+                "text": str(item.get("text") or "")[:200],
+                "original_text": str(item.get("original_text") or item.get("text") or "")[:200],
+                "start": round(token_start, 3),
+                "end": round(max(token_start, token_end), 3),
+                "timing_source": str(item.get("timing_source") or "estimated")[:40],
+                "edited": bool(item.get("edited", False)),
+            }
+        )
+    joined = "".join(token["text"] for token in tokens).strip()
+    if not tokens or joined != text.replace(" ", "").strip():
+        return tokens_from_text(text, start, end, prefix=sentence_id)
+    return tokens
+
+
+def _reflow_project_sentences(
+    project: dict[str, Any], style: dict[str, Any], width: int, height: int
+) -> list[dict[str, Any]]:
+    hints = {
+        str(item.get("after_token_id"))
+        for item in project.get("analysis", {}).get("break_hints", [])
+        if float(item.get("confidence", 0)) >= 0.6
+    }
+    result: list[dict[str, Any]] = []
+    run: list[dict[str, Any]] = []
+
+    def flush() -> None:
+        if not run:
+            return
+        tokens = [dict(token) for sentence in run for token in sentence.get("tokens", [])]
+        groups = segment_tokens(tokens, style, width, height, hints)
+        run_start = float(run[0].get("clip_start", run[0].get("start", 0)))
+        run_end = float(run[-1].get("clip_end", run[-1].get("end", 0)))
+        for index, group in enumerate(groups):
+            visible = [token for token in group if str(token.get("text") or "")]
+            if not visible:
+                continue
+            next_start = float(groups[index + 1][0].get("start", run_end)) if index + 1 < len(groups) else run_end
+            sentence_id = f"r{hashlib.sha1('|'.join(str(token.get('id')) for token in visible).encode('utf-8')).hexdigest()[:10]}"
+            text = "".join(str(token.get("text") or "") for token in visible).strip()
+            result.append(
+                {
+                    "id": sentence_id,
+                    "start": round(float(visible[0].get("start", run_start)), 3),
+                    "end": round(float(visible[-1].get("end", next_start)), 3),
+                    "clip_start": round(run_start if index == 0 else float(visible[0].get("start", run_start)), 3),
+                    "clip_end": round(next_start, 3),
+                    "timeline_order": len(result) + 1,
+                    "original_text": text,
+                    "text": text,
+                    "enabled": True,
+                    "remove_video": False,
+                    "gap": False,
+                    "synthetic_gap": False,
+                    "edited": False,
+                    "tokens": visible,
+                    "timing_pending": False,
+                    "review_flags": [],
+                }
+            )
+        run.clear()
+
+    for sentence in project.get("sentences", []):
+        barrier = bool(
+            sentence.get("edited")
+            or sentence.get("timing_pending")
+            or sentence.get("remove_video")
+            or sentence.get("gap")
+        )
+        if barrier:
+            flush()
+            result.append(dict(sentence))
+        else:
+            run.append(sentence)
+    flush()
+    for index, sentence in enumerate(result, start=1):
+        sentence["timeline_order"] = index
+    return result
+
+
 def _sanitize_title_clips(
     items: list[Any],
     old_by_id: dict[str, dict[str, Any]],
@@ -1039,7 +1324,7 @@ def _sanitize_title_clips(
                 "id": "t001",
                 "start": 0.0,
                 "end": min(max(duration, 0.2), 3.0),
-                "text": title.get("video_text") or title.get("cover_text") or "",
+                "text": title.get("video_text") or "",
                 "enabled": bool(title.get("show_video_title")),
                 "use_for_cover": True,
             }
@@ -1060,7 +1345,7 @@ def _sanitize_title_clips(
                 "id": clip_id,
                 "start": round(start, 3),
                 "end": round(end, 3),
-                "text": str(item.get("text", original.get("text", title.get("cover_text", ""))))[:800],
+                "text": str(item.get("text", original.get("text", title.get("video_text", ""))))[:800],
                 "enabled": bool(item.get("enabled", original.get("enabled", False))),
                 "use_for_cover": bool(item.get("use_for_cover", original.get("use_for_cover", False))),
             }
@@ -1117,11 +1402,22 @@ def _render_edit_project(job_dir: Path, job: dict[str, Any], project: dict[str, 
     ass_path = edited_dir / "精修字幕.ass"
     title_cues = _timeline_title_cues(project, edited_duration)
     _write_edit_ass(cues, title_cues, ass_path, width=width, height=height, preset=preset)
-    video_title = project.get("title", {}).get("cover_text") or item.get("title") or "精修视频"
+    cover = project.get("cover") if isinstance(project.get("cover"), dict) else {}
+    video_title = cover.get("text") or project.get("title", {}).get("cover_text") or item.get("title") or "精修视频"
     output_video = edited_dir / f"{_safe_output_basename(video_title)}-精修.mp4"
     burn_subtitles(no_subtitle, ass_path, output_video)
     cover_path = edited_dir / f"{_safe_output_basename(video_title)}-精修封面.jpg"
-    make_cover(no_subtitle, video_title, cover_path, preset.get("cover_title"))
+    cover_preset = get_style_preset(cover.get("style_preset_id") or project.get("style_preset_id") or "default-white", STYLE_PRESETS_PATH)
+    cover_style = dict(cover_preset.get("cover_title") or {})
+    if isinstance(cover.get("style_override"), dict):
+        cover_style.update(cover["style_override"])
+    make_cover(
+        no_subtitle,
+        video_title,
+        cover_path,
+        cover_style,
+        frame_time=float(cover.get("frame_time") or 0.0),
+    )
     plan_path = edited_dir / "edit_plan.json"
     manifest_path = edited_dir / "render_manifest.json"
     plan = _build_edit_plan(project, timeline_clips, cues, title_cues, edited_duration)
@@ -1226,6 +1522,18 @@ def _timeline_clips(project: dict[str, Any], duration: float) -> list[dict[str, 
     if clips:
         return clips
     return [{"sentence": {}, "segment": Segment(0.0, duration)}]
+
+
+def _timeline_source_time(clips: list[dict[str, Any]], timeline_time: float) -> float:
+    cursor = 0.0
+    for clip in clips:
+        segment = clip["segment"]
+        if cursor <= timeline_time <= cursor + segment.duration:
+            if _clip_is_gap(clip):
+                return max(0.0, segment.start)
+            return max(segment.start, min(segment.end, segment.start + timeline_time - cursor))
+        cursor += segment.duration
+    return clips[-1]["segment"].end if clips else 0.0
 
 
 def _clip_is_gap(clip: dict[str, Any]) -> bool:
@@ -1456,7 +1764,7 @@ def _write_edit_ass(
     path.parent.mkdir(parents=True, exist_ok=True)
     subtitle_style = preset.get("subtitle") or DEFAULT_STYLE_PRESETS[0]["subtitle"]
     title_style = dict(DEFAULT_STYLE_PRESETS[0]["subtitle"])
-    title_style.update(preset.get("cover_title") or {})
+    title_style.update(preset.get("video_title") or preset.get("cover_title") or {})
     title_style.setdefault("position_x", 0)
     title_style.setdefault("position_y", -520)
     title_style.setdefault("text_align", "center")
@@ -1826,10 +2134,21 @@ def _load_editor_segments(job_dir: Path, item: dict[str, Any]) -> list[dict[str,
             end = row.get("end") if row.get("end") is not None else row.get("end_time", 0) / 1000
             text = str(row.get("text") or "").strip()
             if text:
-                segments.append({"start": float(start), "end": float(end), "text": text})
+                segments.append({"start": float(start), "end": float(end), "text": text, "tokens": row.get("tokens") or []})
         if segments:
             return segments
     return []
+
+
+def _load_transcript_analysis(job_dir: Path, item_id: str) -> dict[str, Any]:
+    path = job_dir / "work" / item_id / "transcript_analysis.json"
+    if not path.exists():
+        return {"status": "skipped", "corrections": [], "break_hints": [], "repeat_candidates": []}
+    try:
+        data = read_json_file(path)
+    except RuntimeError:
+        return {"status": "failed", "corrections": [], "break_hints": [], "repeat_candidates": []}
+    return data if isinstance(data, dict) else {"status": "failed", "corrections": [], "break_hints": [], "repeat_candidates": []}
 
 
 def _load_srt_segments(path: Path) -> list[dict[str, Any]]:
@@ -1987,11 +2306,18 @@ def _runtime_status(settings: dict[str, Any] | None = None) -> dict[str, Any]:
         (os.environ.get("VOLC_APP_ID") and os.environ.get("VOLC_ACCESS_TOKEN"))
         or (settings.get("volc_app_id") and settings.get("volc_access_token"))
     )
+    llm_ready = bool(
+        settings.get("llm_enabled")
+        and settings.get("llm_base_url")
+        and settings.get("llm_model")
+        and settings.get("llm_api_key")
+    )
     return {
         "ffmpeg_ready": bool(ffmpeg_path and ffprobe_path),
         "ffmpeg_path": ffmpeg_path or "",
         "ffprobe_path": ffprobe_path or "",
         "volc_ready": volc_ready,
+        "llm_ready": llm_ready,
     }
 
 
@@ -2022,27 +2348,37 @@ def _mask_secrets(text: str, secrets: dict[str, str]) -> str:
 
 def _public_settings(settings: dict[str, Any]) -> dict[str, Any]:
     token = settings.get("volc_access_token", "")
+    llm_key = settings.get("llm_api_key", "")
     return {
         "volc_app_id": settings.get("volc_app_id", ""),
         "has_volc_access_token": bool(token),
         "subtitle_delay": settings.get("subtitle_delay", 0.0),
         "detect_disfluency": bool(settings.get("detect_disfluency", False)),
+        "llm_enabled": bool(settings.get("llm_enabled", False)),
+        "llm_base_url": settings.get("llm_base_url", ""),
+        "llm_model": settings.get("llm_model", ""),
+        "has_llm_api_key": bool(llm_key),
     }
 
 
 def _preset_from_form(form: Any, preset_id: str) -> dict[str, Any]:
     subtitle = _style_from_form(form)
+    video_title = _cover_style_from_form(form)
     cover_title = _cover_style_from_form(form)
     subtitle_json = _form_json(form, "subtitle_style_json")
+    video_json = _form_json(form, "video_style_json")
     cover_json = _form_json(form, "cover_style_json")
     if subtitle_json:
         subtitle = _normalize_subtitle_style(subtitle_json)
     if cover_json:
         cover_title = _normalize_cover_style(cover_json)
+    if video_json:
+        video_title = _normalize_cover_style(video_json)
     return {
         "id": preset_id,
         "name": _form_str(form, "name", preset_id).strip() or preset_id,
         "subtitle": subtitle,
+        "video_title": video_title,
         "cover_title": cover_title,
     }
 
@@ -2214,7 +2550,7 @@ def _style_presets_url(
     parts = [f"preset={quote(preset_id)}"]
     if preview_path:
         parts.append(f"preview={quote(preview_path, safe='/')}")
-    if active in {"subtitle", "cover"}:
+    if active in {"subtitle", "video", "cover"}:
         parts.append(f"active={quote(active)}")
     if text:
         parts.append(f"text={quote(text)}")

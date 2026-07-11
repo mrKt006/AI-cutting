@@ -92,6 +92,27 @@ def main() -> int:
             {"content": "{bad", "headers": {"content-type": "application/json"}},
             400,
         ),
+        (
+            "bad subtitle analysis json",
+            "post",
+            f"/api/jobs/{job_id}/reanalyze-subtitles?item=001",
+            {"content": "{bad", "headers": {"content-type": "application/json"}},
+            400,
+        ),
+        (
+            "bad subtitle reflow json",
+            "post",
+            f"/api/jobs/{job_id}/reflow-subtitles?item=001",
+            {"content": "{bad", "headers": {"content-type": "application/json"}},
+            400,
+        ),
+        (
+            "bad cover preview json",
+            "post",
+            f"/api/jobs/{job_id}/cover-preview?item=001",
+            {"content": "{bad", "headers": {"content-type": "application/json"}},
+            400,
+        ),
     ]
 
     failed = False

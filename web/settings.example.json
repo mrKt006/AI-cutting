@@ -2,5 +2,9 @@
   "volc_app_id": "",
   "volc_access_token": "",
   "subtitle_delay": 0.0,
-  "detect_disfluency": false
+  "detect_disfluency": false,
+  "llm_enabled": false,
+  "llm_base_url": "",
+  "llm_model": "",
+  "llm_api_key": ""
 }

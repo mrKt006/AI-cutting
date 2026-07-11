@@ -55,6 +55,38 @@
                 <strong>{{ '已配置' if env.volc_ready else '未配置' }}</strong>
                 <small>{{ '可以创建识别任务。' if env.volc_ready else '填写 APP ID 和 Access Token 后才能开始处理。' }}</small>
               </div>
+              <div class="runtime-item {{ 'ok' if env.llm_ready else 'warn' }}">
+                <span>字幕语义模型</span>
+                <strong>{{ '已配置' if env.llm_ready else '未配置' }}</strong>
+                <small>{{ '新任务会自动分析字幕。' if env.llm_ready else '可选；未配置时使用本地断句算法。' }}</small>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>字幕语义分析</legend>
+            <label class="check block-check">
+              <input type="checkbox" name="llm_enabled" value="1" {{ 'checked' if settings.llm_enabled else '' }}>
+              <span>新任务自动分析错字、语义切点和重复内容</span>
+            </label>
+            <div class="credential-grid">
+              <label class="field">
+                <span>OpenAI-compatible Base URL</span>
+                <input type="url" name="llm_base_url" value="{{ settings.llm_base_url }}" placeholder="https://api.example.com/v1" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>Model</span>
+                <input type="text" name="llm_model" value="{{ settings.llm_model }}" placeholder="模型名称" autocomplete="off">
+              </label>
+              <label class="field">
+                <span>API Key</span>
+                <input type="password" name="llm_api_key" placeholder="{{ '已保存，留空则不修改' if settings.has_llm_api_key else '粘贴 API Key' }}" autocomplete="off">
+              </label>
+            </div>
+            <p class="field-note">只发送带编号的字幕文本，不上传音频或视频。纠错可自动生效，重复内容只标记等待确认。</p>
+            <div class="submit-row compact-submit-row">
+              <button id="test-llm-btn" class="secondary-action" type="button">测试已保存配置</button>
+              <span id="test-llm-status" class="field-note" aria-live="polite"></span>
             </div>
           </fieldset>
 
@@ -94,5 +126,23 @@
       </section>
     </main>
   </div>
+  <script>
+    const testLlmButton = document.getElementById("test-llm-btn");
+    const testLlmStatus = document.getElementById("test-llm-status");
+    testLlmButton?.addEventListener("click", async () => {
+      testLlmButton.disabled = true;
+      testLlmStatus.textContent = "正在连接";
+      try {
+        const response = await fetch("/api/settings/test-llm", {method: "POST"});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "连接失败");
+        testLlmStatus.textContent = data.message || "连接正常";
+      } catch (error) {
+        testLlmStatus.textContent = error.message || "连接失败";
+      } finally {
+        testLlmButton.disabled = false;
+      }
+    });
+  </script>
 </body>
 </html>

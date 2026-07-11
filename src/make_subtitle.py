@@ -20,6 +20,7 @@ class TimingSegment:
     start: float
     end: float
     text: str = ""
+    tokens: tuple[dict, ...] = ()
 
 
 def make_cues(script: str, duration: float, delay: float = 0.0) -> list[SubtitleCue]:
@@ -83,6 +84,20 @@ def make_cues_from_timing_text(
         end = max(start + 0.2, min(duration, timing.end + delay))
         chunks = split_script(timing.text, target_len=target_len, max_len=max_len) or [timing.text.strip()]
         cues.extend(_spread_chunks(chunks, start, end, start_index=len(cues) + 1))
+    return cues
+
+
+def make_cues_from_segmented_timings(
+    timings: list[TimingSegment], duration: float, delay: float = 0.0
+) -> list[SubtitleCue]:
+    cues: list[SubtitleCue] = []
+    for timing in timings:
+        text = timing.text.strip()
+        if not text or timing.end <= timing.start:
+            continue
+        start = max(0.0, min(duration, timing.start + delay))
+        end = max(start + 0.05, min(duration, timing.end + delay))
+        cues.append(SubtitleCue(index=len(cues) + 1, start=start, end=end, text=text))
     return cues
 
 

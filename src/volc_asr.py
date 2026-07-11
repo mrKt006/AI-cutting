@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ffmpeg_utils import require_tool, run
 from safe_json import loads_json
+from subtitle_layout import normalize_word_tokens
 
 
 SUBMIT_URL = "https://openspeech.bytedance.com/api/v1/vc/submit"
@@ -155,7 +156,7 @@ def query_until_done(
 
 def convert_utterances(response: dict) -> list[dict]:
     result: list[dict] = []
-    for item in response.get("utterances", []):
+    for index, item in enumerate(response.get("utterances", []), start=1):
         text = str(item.get("text", "")).strip()
         if not text:
             continue
@@ -164,6 +165,7 @@ def convert_utterances(response: dict) -> list[dict]:
                 "start_ms": int(item.get("start_time", 0)),
                 "end_ms": int(item.get("end_time", 0)),
                 "text": text,
+                "tokens": normalize_word_tokens(item, index),
             }
         )
     return result

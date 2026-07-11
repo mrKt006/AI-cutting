@@ -67,6 +67,12 @@
           <span>字幕</span>
           <strong id="sentence-count">0</strong>
         </div>
+        <div class="transcript-mode-tabs" role="group" aria-label="字幕查看方式">
+          <button class="tool-button is-on" type="button" data-transcript-mode="sentences">分句</button>
+          <button class="tool-button" type="button" data-transcript-mode="full">全文</button>
+          <button id="reflow-btn" class="tool-button transcript-analyze" type="button">重新断句</button>
+          <button id="reanalyze-btn" class="tool-button transcript-analyze" type="button">智能分析</button>
+        </div>
         <div class="sentence-tools">
           <input id="sentence-search" class="compact-input" type="search" placeholder="搜索字幕">
           <div class="filter-tabs" aria-label="句子筛选">
@@ -97,6 +103,7 @@
         </div>
         <div class="sentence-list-shell">
           <div id="sentence-list" class="sentence-list"></div>
+          <div id="full-transcript" class="full-transcript" hidden></div>
         </div>
       </aside>
 
@@ -104,10 +111,15 @@
         {% if project.preview_warning %}
         <div class="editor-warning">{{ project.preview_warning }} 当前页面仅供查看，不能导出精修版。</div>
         {% endif %}
+        <div class="stage-mode-tabs" role="group" aria-label="预览模式">
+          <button class="tool-button is-on" type="button" data-stage-mode="video">视频画面</button>
+          <button class="tool-button" type="button" data-stage-mode="cover">封面</button>
+        </div>
         <div class="video-stage">
           <div class="video-frame" id="video-frame">
             <video id="edit-video" src="{{ video_url }}" controls preload="metadata"></video>
             <video id="timeline-preview-video" class="timeline-preview-video" preload="auto" playsinline></video>
+            <img id="cover-preview-image" class="cover-preview-image" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="封面预览" hidden>
             <div id="title-preview" class="edit-title-preview" contenteditable="true" spellcheck="false" aria-label="直接编辑画面标题"></div>
             <div id="subtitle-preview" class="edit-subtitle-preview" contenteditable="true" spellcheck="false" aria-label="直接编辑预览字幕"></div>
           </div>
@@ -140,12 +152,38 @@
       </section>
 
       <aside class="edit-inspector">
-        <section class="inspector-section">
+        <section id="cover-inspector" class="inspector-section cover-inspector" hidden>
+          <div class="panel-head"><span>封面</span><strong id="cover-frame-time">0:00.00</strong></div>
+          <textarea id="cover-text" rows="4" placeholder="封面标题，可手动换行"></textarea>
+          <label class="full-field">封面标题预设
+            <select id="cover-style-preset">
+              {% for preset in style_presets %}<option value="{{ preset.id }}">{{ preset.name }}</option>{% endfor %}
+            </select>
+          </label>
+          <div class="field-pair dense">
+            <label>字号 <input id="cover-font-size" type="number" min="20" max="180"></label>
+            <label>颜色 <input id="cover-color" type="color"></label>
+          </div>
+          <div class="field-pair dense">
+            <label>X <input id="cover-position-x" type="number" step="1"></label>
+            <label>Y <input id="cover-position-y" type="number" step="1"></label>
+          </div>
+          <div class="field-pair dense">
+            <label>缩放 <input id="cover-scale" type="number" min="20" max="200"></label>
+            <label>描边 <input id="cover-outline-width" type="number" min="0" max="16"></label>
+          </div>
+          <div class="sentence-action-bar">
+            <button id="set-cover-frame-btn" class="primary-action" type="button">设为当前画面</button>
+            <button id="reset-cover-style-btn" class="tool-button" type="button">恢复预设</button>
+            <button id="save-cover-preset-btn" class="tool-button" type="button">保存为新预设</button>
+          </div>
+          <div id="cover-preview-status" class="clip-hint">选择时间线画面作为封面</div>
+        </section>
+        <section id="video-title-inspector" class="inspector-section">
           <div class="panel-head">
             <span>标题轨</span>
             <strong id="title-range">--</strong>
           </div>
-          <textarea id="cover-title" rows="3" placeholder="封面标题，可手动换行"></textarea>
           <textarea id="title-text" rows="3" placeholder="视频内标题文字"></textarea>
           <label class="check-line">
             <input id="show-video-title" type="checkbox">
@@ -215,13 +253,19 @@
     const editorAssets = {{ editor_assets|tojson }};
     const subtitleStyle = {{ subtitle_style|tojson }};
     const titleStyle = {{ title_style|tojson }};
+    const stylePresets = {{ style_presets|tojson }};
     const apiUrl = `/api/jobs/{{ job.id }}/edit-project?item={{ item_id }}`;
     const previewApiUrl = `/api/jobs/{{ job.id }}/edit-preview?item={{ item_id }}`;
+    const reanalyzeUrl = `/api/jobs/{{ job.id }}/reanalyze-subtitles?item={{ item_id }}`;
+    const reflowUrl = `/api/jobs/{{ job.id }}/reflow-subtitles?item={{ item_id }}`;
+    const coverPreviewUrl = `/api/jobs/{{ job.id }}/cover-preview?item={{ item_id }}`;
+    const coverPresetUrl = `/api/jobs/{{ job.id }}/cover-style-preset?item={{ item_id }}`;
     const renderUrl = `/jobs/{{ job.id }}/render-edited?item={{ item_id }}`;
     const video = document.getElementById("edit-video");
     const timelinePreviewVideo = document.getElementById("timeline-preview-video");
     const videoFrame = document.getElementById("video-frame");
     const list = document.getElementById("sentence-list");
+    const fullTranscript = document.getElementById("full-transcript");
     const sentenceSearch = document.getElementById("sentence-search");
     const sentenceFilterState = document.getElementById("sentence-filter-state");
     const sentenceFilterText = document.getElementById("sentence-filter-text");
@@ -238,7 +282,20 @@
     const subtitlePreview = document.getElementById("subtitle-preview");
     const titlePreview = document.getElementById("title-preview");
     const saveState = document.getElementById("save-state");
-    const coverTitle = document.getElementById("cover-title");
+    const coverTitle = document.getElementById("cover-text");
+    const coverPreviewImage = document.getElementById("cover-preview-image");
+    const coverInspector = document.getElementById("cover-inspector");
+    const coverStylePreset = document.getElementById("cover-style-preset");
+    const coverFrameTime = document.getElementById("cover-frame-time");
+    const coverPreviewStatus = document.getElementById("cover-preview-status");
+    const coverStyleFields = {
+      font_size: document.getElementById("cover-font-size"),
+      primary_color: document.getElementById("cover-color"),
+      position_x: document.getElementById("cover-position-x"),
+      position_y: document.getElementById("cover-position-y"),
+      scale: document.getElementById("cover-scale"),
+      outline_width: document.getElementById("cover-outline-width")
+    };
     const titleText = document.getElementById("title-text");
     const showVideoTitle = document.getElementById("show-video-title");
     const titleStart = document.getElementById("title-start");
@@ -279,6 +336,11 @@
     let selectedTitleId = project.title_clips?.[0]?.id || "t001";
     let dirty = false;
     let activeFilter = "all";
+    let transcriptMode = "sentences";
+    let stageMode = "video";
+    let activeTokenId = null;
+    let transcriptFrameRequest = null;
+    let coverPreviewTimer = null;
     let autosaveTimer = null;
     let suppressTimeSyncUntil = 0;
     let undoStack = [];
@@ -312,11 +374,18 @@
     function ensureProjectShape() {
       project.settings = project.settings || {subtitle_offset: 0};
       project.title = project.title || {cover_text: "", video_text: "", show_video_title: false};
+      project.cover = project.cover || {
+        text: project.title.cover_text || "",
+        frame_time: 0,
+        style_preset_id: project.style_preset_id || "default-white",
+        style_override: {}
+      };
+      project.analysis = project.analysis || {status: "skipped", corrections: [], break_hints: [], repeat_candidates: []};
       project.title_clips = project.title_clips?.length ? project.title_clips : [{
         id: "t001",
         start: 0,
         end: Math.min(Math.max(Number(project.duration || 0.2), 0.2), 3),
-        text: project.title.video_text || project.title.cover_text || "",
+        text: project.title.video_text || "",
         enabled: Boolean(project.title.show_video_title),
         use_for_cover: true,
       }];
@@ -334,6 +403,8 @@
         sentence.clip_end = Number(sentence.clip_end ?? sentence.end ?? sentence.clip_start + 0.2);
         sentence.gap = Boolean(sentence.gap);
         sentence.synthetic_gap = Boolean(sentence.synthetic_gap);
+        sentence.tokens = Array.isArray(sentence.tokens) ? sentence.tokens : [];
+        sentence.review_flags = Array.isArray(sentence.review_flags) ? sentence.review_flags : [];
       });
       normalizeTimelineOrders();
     }
@@ -1522,9 +1593,6 @@
       if (!clip) return;
       clip.text = String(value || "").trim();
       project.title.video_text = clip.text;
-      if (clip.use_for_cover && !project.title.cover_text.trim()) {
-        project.title.cover_text = clip.text;
-      }
       syncTitleGlobalState();
       lockManualTimeSync();
       titleText.value = clip.text;
@@ -1622,18 +1690,6 @@
       }
     }
 
-    function fitSingleLineText(element) {
-      if (!element.textContent.trim()) return;
-      const maxWidth = Number(element.dataset.maxWidth || 0);
-      const baseFontSize = Number(element.dataset.baseFontSize || 0);
-      if (!maxWidth || !baseFontSize) return;
-      element.style.fontSize = `${baseFontSize}px`;
-      const actualWidth = element.scrollWidth;
-      if (actualWidth <= maxWidth) return;
-      const nextSize = Math.max(10, Math.floor(baseFontSize * maxWidth / actualWidth));
-      element.style.fontSize = `${nextSize}px`;
-    }
-
     function setDirty(value = true, autosave = true) {
       if (value && savedSnapshot && snapshotProject() === savedSnapshot) value = false;
       dirty = value;
@@ -1723,7 +1779,6 @@
       requestAnimationFrame(() => {
         setPreviewText(subtitlePreview, sentence.text || sentence.original_text || "");
         applyTextStyle(subtitlePreview, subtitleStyle, false);
-        fitSingleLineText(subtitlePreview);
         focusEditableText(subtitlePreview, true);
         setTimelineStatus("正在编辑字幕文字", 1200);
       });
@@ -1757,7 +1812,7 @@
         subtitlePreview.setAttribute("aria-hidden", sentence.text ? "false" : "true");
       }
       applyTextStyle(subtitlePreview, subtitleStyle, false);
-      fitSingleLineText(subtitlePreview);
+      retimeSentenceTokens(sentence);
       setDirty();
     }
 
@@ -1801,9 +1856,11 @@
         row.classList.toggle("removed", sentence.remove_video);
         row.classList.toggle("gap", isGapSentence(sentence));
         row.classList.toggle("hidden", !sentence.enabled && !sentence.remove_video);
+        row.classList.toggle("overlong", Boolean(sentence.overlong));
         row.innerHTML = `<span class="sentence-index">${String(index + 1).padStart(2, "0")}</span><strong class="sentence-edit" contenteditable="false" spellcheck="false"></strong><span class="sentence-time">${isGapSentence(sentence) ? "空隙" : ""} ${formatTime(clipStart(sentence))} - ${formatTime(clipEnd(sentence))}</span>`;
         const editable = row.querySelector(".sentence-edit");
         editable.textContent = sentence.text || sentence.original_text || "空字幕";
+        if (sentence.overlong) row.title = "当前预设下字幕过长，请拆句或重新布局";
         row.addEventListener("click", (event) => {
           if (event.target === editable && editable.isContentEditable) return;
           if (sentence.id === selectedId && event.target === editable) {
@@ -1835,6 +1892,126 @@
         list.appendChild(row);
       });
       keepActiveSentenceVisible();
+    }
+
+    function retimeSentenceTokens(sentence) {
+      const text = String(sentence.text || "");
+      if (!text) {
+        sentence.tokens = [];
+        return;
+      }
+      const characters = Array.from(text);
+      const duration = Math.max(0.01, Number(sentence.end || 0) - Number(sentence.start || 0));
+      sentence.tokens = characters.map((character, index) => ({
+        id: `${sentence.id}-edit-${String(index + 1).padStart(4, "0")}`,
+        text: character,
+        original_text: character,
+        start: Number(sentence.start || 0) + duration * index / characters.length,
+        end: Number(sentence.start || 0) + duration * (index + 1) / characters.length,
+        timing_source: "estimated-after-edit",
+        edited: true
+      }));
+      sentence.timing_pending = true;
+    }
+
+    function renderFullTranscript() {
+      fullTranscript.innerHTML = "";
+      const rows = visibleSentences();
+      rows.forEach((sentence, rowIndex) => {
+        if (rowIndex > 0) {
+          const previous = rows[rowIndex - 1];
+          const pause = Math.max(0, Number(sentence.start || 0) - Number(previous.end || 0));
+          if (pause >= 0.3) {
+            const marker = document.createElement("button");
+            marker.type = "button";
+            marker.className = `transcript-pause${pause >= 0.8 ? " paragraph" : ""}`;
+            marker.textContent = `[${pause.toFixed(1)}s]`;
+            marker.addEventListener("click", () => seekToSentence(sentence));
+            fullTranscript.appendChild(marker);
+          }
+        }
+        const sentenceSpan = document.createElement("span");
+        sentenceSpan.className = "transcript-sentence";
+        sentenceSpan.dataset.clipId = sentence.id;
+        sentenceSpan.classList.toggle("active", sentence.id === selectedId);
+        sentenceSpan.classList.toggle("removed", sentence.remove_video);
+        sentenceSpan.classList.toggle("hidden", !sentence.enabled && !sentence.remove_video);
+        sentenceSpan.classList.toggle("review", sentence.review_flags?.length > 0);
+        sentenceSpan.classList.toggle("overlong", Boolean(sentence.overlong));
+        const tokens = sentence.tokens?.length ? sentence.tokens : [{id: `${sentence.id}-fallback`, text: sentence.text, start: sentence.start, end: sentence.end}];
+        tokens.forEach((token) => {
+          const tokenSpan = document.createElement("span");
+          tokenSpan.className = "transcript-token";
+          tokenSpan.dataset.tokenId = token.id;
+          tokenSpan.textContent = token.text || "";
+          sentenceSpan.appendChild(tokenSpan);
+        });
+        sentenceSpan.addEventListener("click", () => {
+          if (sentenceSpan.isContentEditable) return;
+          setSingleSelection(sentence.id);
+          seekToSentence(sentence);
+        });
+        sentenceSpan.addEventListener("dblclick", (event) => {
+          event.preventDefault();
+          setSingleSelection(sentence.id);
+          sentenceSpan.textContent = sentence.text || "";
+          focusEditableText(sentenceSpan, true);
+        });
+        sentenceSpan.addEventListener("input", () => updateSelectedText(sentenceSpan.textContent || ""));
+        sentenceSpan.addEventListener("keydown", (event) => handleEditableEnter(event, sentenceSpan));
+        sentenceSpan.addEventListener("blur", () => {
+          delete sentenceSpan.dataset.historyActive;
+          sentenceSpan.contentEditable = "false";
+          renderAll();
+        });
+        fullTranscript.appendChild(sentenceSpan);
+      });
+      updateTranscriptHighlight();
+    }
+
+    function tokenTimelineBounds(sentence, token) {
+      const base = timelinePositionForSentence(sentence);
+      const start = base + clamp(Number(token.start || sentence.start) - clipStart(sentence), 0, clipDuration(sentence));
+      const end = base + clamp(Number(token.end || sentence.end) - clipStart(sentence), 0, clipDuration(sentence));
+      return {start, end};
+    }
+
+    function updateTranscriptHighlight() {
+      if (transcriptMode !== "full") return;
+      const isPlaying = usingTimelinePreview ? !timelinePreviewVideo.paused : !video.paused;
+      const time = timelineTimeForPlayback();
+      let nextTokenId = null;
+      for (const sentence of isPlaying ? activeTimelineSentences() : []) {
+        for (const token of sentence.tokens || []) {
+          const bounds = tokenTimelineBounds(sentence, token);
+          if (time >= bounds.start && time < bounds.end) {
+            nextTokenId = token.id;
+            break;
+          }
+        }
+        if (nextTokenId) break;
+      }
+      if (nextTokenId === activeTokenId) return;
+      activeTokenId = nextTokenId;
+      fullTranscript.querySelectorAll(".transcript-token.is-speaking").forEach((node) => node.classList.remove("is-speaking"));
+      if (activeTokenId) {
+        const token = fullTranscript.querySelector(`[data-token-id="${CSS.escape(activeTokenId)}"]`);
+        token?.classList.add("is-speaking");
+        token?.scrollIntoView({block: "nearest"});
+      }
+    }
+
+    function startTranscriptFrameLoop() {
+      const player = usingTimelinePreview ? timelinePreviewVideo : video;
+      const next = () => {
+        updateTranscriptHighlight();
+        startTranscriptFrameLoop();
+      };
+      if (typeof player.requestVideoFrameCallback === "function" && !player.paused) {
+        transcriptFrameRequest = player.requestVideoFrameCallback(next);
+      } else {
+        transcriptFrameRequest = window.requestAnimationFrame(next);
+      }
     }
 
     function handleSentenceListPress(event) {
@@ -2568,7 +2745,15 @@
     function renderInspector() {
       const sentence = selectedSentence();
       const clip = titleClip();
-      coverTitle.value = project.title.cover_text || "";
+      coverTitle.value = project.cover.text || "";
+      coverStylePreset.value = project.cover.style_preset_id || project.style_preset_id || "default-white";
+      const resolvedCoverStyle = currentCoverStyle();
+      Object.entries(coverStyleFields).forEach(([key, input]) => {
+        if (input && document.activeElement !== input) input.value = resolvedCoverStyle[key] ?? "";
+      });
+      coverFrameTime.textContent = formatPreciseTime(project.cover.frame_time || 0);
+      coverInspector.hidden = stageMode !== "cover";
+      document.getElementById("video-title-inspector").hidden = stageMode === "cover";
       titleText.value = clip.text || project.title.video_text || "";
       showVideoTitle.checked = Boolean(clip.enabled);
       titleStart.value = Number(clip.start || 0).toFixed(2);
@@ -2586,7 +2771,110 @@
       setPreviewText(titlePreview, clip.enabled ? (clip.text || "") : "");
       applyTextStyle(subtitlePreview, subtitleStyle, false);
       applyTextStyle(titlePreview, {...titleStyle, position_y: titleStyle.position_y ?? -520}, true);
-      fitSingleLineText(subtitlePreview);
+    }
+
+    function currentCoverStyle() {
+      const preset = stylePresets.find((item) => item.id === (project.cover.style_preset_id || project.style_preset_id)) || stylePresets[0] || {};
+      return {...(preset.cover_title || {}), ...(project.cover.style_override || {})};
+    }
+
+    function setTranscriptMode(mode) {
+      transcriptMode = mode === "full" ? "full" : "sentences";
+      list.hidden = transcriptMode !== "sentences";
+      fullTranscript.hidden = transcriptMode !== "full";
+      document.querySelectorAll("[data-transcript-mode]").forEach((button) => {
+        button.classList.toggle("is-on", button.dataset.transcriptMode === transcriptMode);
+      });
+      renderAll();
+    }
+
+    function setStageMode(mode) {
+      stageMode = mode === "cover" ? "cover" : "video";
+      document.querySelectorAll("[data-stage-mode]").forEach((button) => {
+        button.classList.toggle("is-on", button.dataset.stageMode === stageMode);
+      });
+      videoFrame.classList.toggle("cover-mode", stageMode === "cover");
+      coverPreviewImage.hidden = stageMode !== "cover";
+      subtitlePreview.hidden = stageMode === "cover";
+      titlePreview.hidden = stageMode === "cover";
+      if (stageMode === "cover") scheduleCoverPreview(0);
+      renderInspector();
+    }
+
+    function scheduleCoverPreview(delay = 450) {
+      window.clearTimeout(coverPreviewTimer);
+      coverPreviewTimer = window.setTimeout(renderCoverPreview, delay);
+    }
+
+    async function renderCoverPreview() {
+      if (stageMode !== "cover") return;
+      coverPreviewStatus.textContent = "正在更新封面";
+      try {
+        const response = await fetch(coverPreviewUrl, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(project)
+        });
+        if (!response.ok) throw new Error(await responseErrorMessage(response));
+        const data = await response.json();
+        coverPreviewImage.src = `${data.url}?v=${encodeURIComponent(data.signature)}`;
+        coverPreviewStatus.textContent = "封面已更新";
+      } catch (error) {
+        coverPreviewStatus.textContent = `封面预览失败：${String(error.message || error).slice(0, 60)}`;
+      }
+    }
+
+    async function reanalyzeTranscript() {
+      const button = document.getElementById("reanalyze-btn");
+      button.disabled = true;
+      button.textContent = "分析中";
+      try {
+        const response = await fetch(reanalyzeUrl, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(project)
+        });
+        if (!response.ok) throw new Error(await responseErrorMessage(response));
+        const data = await response.json();
+        Object.assign(project, data.project);
+        savedSnapshot = snapshotProject();
+        setDirty(false, false);
+        renderAll();
+        setTimelineStatus(data.analysis?.status === "ok" ? "智能分析完成" : "未配置模型，保留本地分析结果", 1800);
+      } catch (error) {
+        setTimelineStatus(`智能分析失败：${String(error.message || error).slice(0, 80)}`, 2200);
+      } finally {
+        button.disabled = false;
+        button.textContent = "智能分析";
+      }
+    }
+
+    async function reflowTranscript() {
+      const button = document.getElementById("reflow-btn");
+      button.disabled = true;
+      button.textContent = "断句中";
+      try {
+        const response = await fetch(reflowUrl, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(project)
+        });
+        if (!response.ok) throw new Error(await responseErrorMessage(response));
+        const data = await response.json();
+        Object.assign(project, data.project);
+        selectedId = project.sentences[0]?.id || null;
+        selectedIds = new Set(selectedId ? [selectedId] : []);
+        savedSnapshot = snapshotProject();
+        setDirty(false, false);
+        renderAll();
+        scheduleTimelinePreview(0);
+        setTimelineStatus("已按当前预设重新断句；人工修改段保持不变", 1800);
+      } catch (error) {
+        setTimelineStatus(`重新断句失败：${String(error.message || error).slice(0, 80)}`, 2200);
+      } finally {
+        button.disabled = false;
+        button.textContent = "重新断句";
+      }
     }
 
     function renderOutputs() {
@@ -2625,6 +2913,7 @@
       normalizeTimelineOrders();
       ensureSelectionState();
       renderList();
+      renderFullTranscript();
       renderTimeline();
       renderInspector();
       renderOutputs();
@@ -2659,6 +2948,8 @@
         edited: true,
       };
       sentence.clip_end = splitAt;
+      retimeSentenceTokens(sentence);
+      retimeSentenceTokens(next);
       project.sentences.splice(index + 1, 0, next);
       selectedId = next.id;
       normalizeTimelineOrders();
@@ -2705,6 +2996,8 @@
         text: rightText,
         edited: true,
       };
+      retimeSentenceTokens(sentence);
+      retimeSentenceTokens(next);
       project.sentences.splice(index + 1, 0, next);
       selectedId = next.id;
       normalizeTimelineOrders();
@@ -2735,6 +3028,7 @@
       first.enabled = first.enabled || second.enabled;
       first.remove_video = first.remove_video && second.remove_video;
       first.edited = true;
+      first.tokens = [...(first.tokens || []), ...(second.tokens || [])];
       project.sentences.splice(project.sentences.indexOf(second), 1);
       selectedId = first.id;
       normalizeTimelineOrders();
@@ -2777,7 +3071,7 @@
         id: `t${Date.now().toString(36)}`,
         start,
         end,
-        text: project.title.cover_text || "标题",
+        text: project.title.video_text || "标题",
         enabled: true,
         use_for_cover: false,
       };
@@ -2990,10 +3284,62 @@
     document.getElementById("clear-selection-btn").addEventListener("click", clearMultiSelection);
 
     coverTitle.addEventListener("input", () => {
-      project.title.cover_text = coverTitle.value;
-      const clip = titleClip();
-      if (clip.use_for_cover && !clip.text.trim()) clip.text = coverTitle.value;
+      project.cover.text = coverTitle.value;
       setDirty();
+      scheduleCoverPreview();
+    });
+
+    coverStylePreset.addEventListener("change", () => {
+      project.cover.style_preset_id = coverStylePreset.value;
+      project.cover.style_override = {};
+      setDirty();
+      scheduleCoverPreview(0);
+    });
+
+    Object.entries(coverStyleFields).forEach(([key, input]) => input?.addEventListener("input", () => {
+      project.cover.style_override = {...(project.cover.style_override || {})};
+      const baseValue = currentCoverStyle()[key];
+      project.cover.style_override[key] = typeof baseValue === "number" ? Number(input.value || 0) : input.value;
+      setDirty();
+      scheduleCoverPreview();
+    }));
+
+    document.getElementById("set-cover-frame-btn").addEventListener("click", () => {
+      project.cover.frame_time = Number(timelineTimeForPlayback().toFixed(3));
+      setDirty();
+      renderInspector();
+      scheduleCoverPreview(0);
+    });
+
+    document.getElementById("reset-cover-style-btn").addEventListener("click", () => {
+      project.cover.style_override = {};
+      setDirty();
+      scheduleCoverPreview(0);
+    });
+
+    document.getElementById("save-cover-preset-btn").addEventListener("click", async () => {
+      try {
+        const response = await fetch(coverPresetUrl, {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(project)
+        });
+        if (!response.ok) throw new Error(await responseErrorMessage(response));
+        const data = await response.json();
+        Object.assign(project, data.project);
+        stylePresets.push(data.preset);
+        const option = document.createElement("option");
+        option.value = data.preset.id;
+        option.textContent = data.preset.name;
+        coverStylePreset.appendChild(option);
+        coverStylePreset.value = data.preset.id;
+        savedSnapshot = snapshotProject();
+        setDirty(false, false);
+        renderInspector();
+        setTimelineStatus("封面样式已保存为新预设", 1600);
+      } catch (error) {
+        setTimelineStatus(`保存封面预设失败：${String(error.message || error).slice(0, 80)}`, 2200);
+      }
     });
 
     titleText.addEventListener("input", () => {
@@ -3055,6 +3401,10 @@
     recoverBtn.addEventListener("click", recoverSelectedSegment);
 
     document.getElementById("save-btn").addEventListener("click", saveProject);
+    document.querySelectorAll("[data-transcript-mode]").forEach((button) => button.addEventListener("click", () => setTranscriptMode(button.dataset.transcriptMode)));
+    document.querySelectorAll("[data-stage-mode]").forEach((button) => button.addEventListener("click", () => setStageMode(button.dataset.stageMode)));
+    document.getElementById("reanalyze-btn").addEventListener("click", reanalyzeTranscript);
+    document.getElementById("reflow-btn").addEventListener("click", reflowTranscript);
     shortcutHelpBtn.addEventListener("click", (event) => {
       event.stopPropagation();
       setShortcutPanel(shortcutPanel.hidden);
@@ -3148,6 +3498,7 @@
       if (stopPreviewClipIfNeeded()) return;
       if (isManualTimeSyncLocked()) {
         updateTimelinePlayhead();
+        updateTranscriptHighlight();
         return;
       }
       const current = sentenceAtTime(video.currentTime);
@@ -3156,6 +3507,7 @@
         renderAll();
       } else {
         updateTimelinePlayhead();
+        updateTranscriptHighlight();
       }
     });
 
@@ -3171,6 +3523,7 @@
         renderAll();
       } else {
         updateTimelinePlayhead();
+        updateTranscriptHighlight();
       }
     });
 
@@ -3347,6 +3700,7 @@
     updatePlaybackButton();
     renderAll();
     scheduleTimelinePreview(0);
+    startTranscriptFrameLoop();
   </script>
 </body>
 </html>

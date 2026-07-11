@@ -113,6 +113,7 @@
             <input type="hidden" name="preview_text" id="preview-text-hidden" value="{{ preview_text }}">
             <input type="hidden" name="preview_aspect" id="preview-aspect-hidden" value="{{ preview_aspect }}">
             <input type="hidden" name="subtitle_style_json" id="subtitle-style-json">
+            <input type="hidden" name="video_style_json" id="video-style-json">
             <input type="hidden" name="cover_style_json" id="cover-style-json">
 
             <div class="editor-fixed-head">
@@ -122,6 +123,7 @@
               </div>
               <div class="style-mode-tabs" role="group" aria-label="文本样式类型">
                 <button class="style-mode-button is-active" type="button" data-style-mode="subtitle">字幕设置</button>
+                <button class="style-mode-button" type="button" data-style-mode="video">视频标题</button>
                 <button class="style-mode-button" type="button" data-style-mode="cover">封面设置</button>
               </div>
             </div>
@@ -247,9 +249,11 @@
     const previewAspectHidden = document.querySelector("#preview-aspect-hidden");
     const aspectInputs = document.querySelectorAll('input[name="preview_aspect_choice"]');
     const subtitleStyleInput = document.querySelector("#subtitle-style-json");
+    const videoStyleInput = document.querySelector("#video-style-json");
     const coverStyleInput = document.querySelector("#cover-style-json");
     const modeButtons = document.querySelectorAll("[data-style-mode]");
     const initialSubtitleStyle = {{ selected.subtitle | tojson }};
+    const initialVideoStyle = {{ selected.video_title | tojson }};
     const initialCoverStyle = {{ selected.cover_title | tojson }};
     const subtitleDefaults = {
       font_family: "Microsoft YaHei",
@@ -306,6 +310,7 @@
     let previewAspect = {{ preview_aspect | tojson }};
     const styleStates = {
       subtitle: { ...subtitleDefaults, ...initialSubtitleStyle },
+      video: { ...coverDefaults, ...initialVideoStyle },
       cover: { ...coverDefaults, ...initialCoverStyle }
     };
     let previewTimer = null;
@@ -348,7 +353,7 @@
         if (checkboxKeys.has(key)) {
           style[key] = data.get(key) != null;
         } else {
-          const fallback = activeStyleMode === "cover" ? coverDefaults[key] : subtitleDefaults[key];
+          const fallback = activeStyleMode === "subtitle" ? subtitleDefaults[key] : coverDefaults[key];
           const value = firstValue(data, key, fallback);
           style[key] = typeof fallback === "number" ? Number(value || fallback) : value;
         }
@@ -384,6 +389,7 @@
       if (previewTextHidden) previewTextHidden.value = textInput?.value || "默认文本";
       if (previewAspectHidden) previewAspectHidden.value = previewAspect;
       if (subtitleStyleInput) subtitleStyleInput.value = JSON.stringify(styleStates.subtitle);
+      if (videoStyleInput) videoStyleInput.value = JSON.stringify(styleStates.video);
       if (coverStyleInput) coverStyleInput.value = JSON.stringify(styleStates.cover);
       document.querySelectorAll('input[name="active"], input[name="active_text_style"]').forEach((input) => {
         if (input !== activeStyleInput) input.value = activeStyleMode;
