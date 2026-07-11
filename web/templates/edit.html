@@ -103,7 +103,6 @@
         </div>
         <div class="sentence-list-shell">
           <div id="sentence-list" class="sentence-list"></div>
-          <div id="full-transcript" class="full-transcript" hidden></div>
         </div>
       </aside>
 
@@ -181,7 +180,7 @@
         </section>
         <section id="video-title-inspector" class="inspector-section">
           <div class="panel-head">
-            <span>标题轨</span>
+            <span>画面标题</span>
             <strong id="title-range">--</strong>
           </div>
           <textarea id="title-text" rows="3" placeholder="视频内标题文字"></textarea>
@@ -246,6 +245,20 @@
         </section>
       </aside>
     </main>
+
+    <section id="transcript-workspace" class="transcript-workspace" aria-label="全文逐字稿" hidden>
+      <header class="transcript-workspace-head">
+        <div>
+          <strong>全文逐字稿</strong>
+          <span>点击跳转，双击编辑</span>
+        </div>
+        <div class="transcript-workspace-actions">
+          <input id="full-transcript-search" class="compact-input" type="search" placeholder="搜索全文">
+          <button id="close-full-transcript" class="tool-button" type="button">返回精修台</button>
+        </div>
+      </header>
+      <div id="full-transcript" class="full-transcript"></div>
+    </section>
   </div>
 
   <script>
@@ -266,6 +279,9 @@
     const videoFrame = document.getElementById("video-frame");
     const list = document.getElementById("sentence-list");
     const fullTranscript = document.getElementById("full-transcript");
+    const transcriptWorkspace = document.getElementById("transcript-workspace");
+    const fullTranscriptSearch = document.getElementById("full-transcript-search");
+    const closeFullTranscript = document.getElementById("close-full-transcript");
     const sentenceSearch = document.getElementById("sentence-search");
     const sentenceFilterState = document.getElementById("sentence-filter-state");
     const sentenceFilterText = document.getElementById("sentence-filter-text");
@@ -367,6 +383,7 @@
     let timelinePreviewPromise = null;
     let usingTimelinePreview = false;
     let allowSourceClipPlayback = false;
+    let liveTimelinePlaying = false;
     const manualSelectionLockMs = 1800;
     const timelineTrackOffset = 44;
     const defaultTimelineStatus = "拖动片段调整顺序，拖两端裁切；按 Alt 拖动可留空。";
@@ -939,14 +956,19 @@
 
     async function togglePlayback() {
       cancelPreviewClip();
-      if (!usingTimelinePreview || timelinePreviewVideo.paused || timelinePreviewVideo.ended) {
-        try {
-          await startTimelinePreviewPlayback();
-        } catch {
-          setTimelineStatus("浏览器阻止自动播放，请手动点击播放", 1600);
-        }
-      } else {
+      if (usingTimelinePreview && !timelinePreviewVideo.paused && !timelinePreviewVideo.ended) {
         stopTimelinePreviewPlayback();
+      } else if (liveTimelinePlaying && !video.paused) {
+        stopLiveTimelinePlayback();
+      } else {
+        const currentSignature = timelineStructureSignature();
+        if (timelinePreviewReady && timelinePreviewSignature === currentSignature) {
+          const started = await startTimelinePreviewPlayback();
+          if (!started) await startLiveTimelinePlayback();
+        } else {
+          ensureTimelinePreview();
+          await startLiveTimelinePlayback();
+        }
       }
       updatePlaybackButton();
     }
@@ -1014,8 +1036,7 @@
       if (timelinePreviewPromise) return timelinePreviewPromise;
       timelinePreviewRendering = true;
       timelinePreviewReady = false;
-      playBtn.disabled = true;
-      setTimelineStatus("正在更新连续预览…");
+      setTimelineStatus("后台正在更新无缝预览…");
       timelinePreviewPromise = (async () => {
         try {
           const response = await fetch(previewApiUrl, {
@@ -1040,7 +1061,6 @@
         } finally {
           timelinePreviewRendering = false;
           timelinePreviewPromise = null;
-          playBtn.disabled = false;
           if (requestedSignature !== timelineStructureSignature()) scheduleTimelinePreview(120);
         }
       })();
@@ -1082,6 +1102,49 @@
         setTimelineStatus(`无法播放连续预览：${message.slice(0, 80)}`, 2200);
         return false;
       }
+    }
+
+    function nextPlayableSentence(sentence) {
+      const clips = activeTimelineSentences();
+      const index = clips.findIndex((item) => item.id === sentence?.id);
+      for (let cursor = Math.max(0, index + 1); cursor < clips.length; cursor += 1) {
+        if (!isGapSentence(clips[cursor])) return clips[cursor];
+      }
+      return null;
+    }
+
+    async function startLiveTimelinePlayback() {
+      const startAt = clamp(timelineTimeForPlayback(), 0, activeTimelineDuration());
+      const hit = timelineLookup(startAt);
+      let sentence = hit?.sentence || selectedSentence();
+      if (isGapSentence(sentence)) sentence = nextPlayableSentence(sentence);
+      if (!sentence) return false;
+      stopTimelinePreviewPlayback();
+      selectedId = sentence.id;
+      const sourceTime = hit?.sentence?.id === sentence.id ? hit.sourceTime : clipStart(sentence);
+      video.currentTime = clamp(sourceTime, clipStart(sentence), Math.max(clipStart(sentence), clipEnd(sentence) - 0.001));
+      liveTimelinePlaying = true;
+      allowSourceClipPlayback = true;
+      setTimelineStatus(timelinePreviewRendering ? "即时预览 · 后台生成无缝版本" : "即时预览");
+      try {
+        await video.play();
+        updatePlaybackButton();
+        return true;
+      } catch {
+        liveTimelinePlaying = false;
+        allowSourceClipPlayback = false;
+        setTimelineStatus("浏览器阻止自动播放，请再次点击播放", 1600);
+        return false;
+      }
+    }
+
+    function stopLiveTimelinePlayback() {
+      if (!liveTimelinePlaying) return false;
+      liveTimelinePlaying = false;
+      allowSourceClipPlayback = false;
+      video.pause();
+      updatePlaybackButton();
+      return true;
     }
 
     function stopTimelinePreviewPlayback() {
@@ -1757,12 +1820,16 @@
       return prefix.toString().length;
     }
 
-    function focusEditableText(editable, atEnd = true) {
-      editable.contentEditable = "true";
+    function beginTextHistory(editable) {
       if (!editable.dataset.historyActive) {
         pushHistory();
         editable.dataset.historyActive = "1";
       }
+    }
+
+    function focusEditableText(editable, atEnd = true) {
+      editable.contentEditable = "true";
+      beginTextHistory(editable);
       editable.focus();
       const range = document.createRange();
       range.selectNodeContents(editable);
@@ -1882,6 +1949,7 @@
           renderAll();
           openContextMenu("sentence", event.clientX, event.clientY, sentence.id);
         });
+        editable.addEventListener("beforeinput", () => beginTextHistory(editable));
         editable.addEventListener("input", () => updateSelectedText(editable.textContent));
         editable.addEventListener("keydown", (event) => handleEditableEnter(event, editable));
         editable.addEventListener("blur", () => {
@@ -1957,6 +2025,7 @@
           sentenceSpan.textContent = sentence.text || "";
           focusEditableText(sentenceSpan, true);
         });
+        sentenceSpan.addEventListener("beforeinput", () => beginTextHistory(sentenceSpan));
         sentenceSpan.addEventListener("input", () => updateSelectedText(sentenceSpan.textContent || ""));
         sentenceSpan.addEventListener("keydown", (event) => handleEditableEnter(event, sentenceSpan));
         sentenceSpan.addEventListener("blur", () => {
@@ -2615,7 +2684,7 @@
       titleRow.className = "timeline-row title-row";
       videoRow.dataset.label = "1.mp4";
       subtitleRow.dataset.label = "A字幕";
-      titleRow.dataset.label = "标题";
+      titleRow.dataset.label = "画面标题";
       const active = activeTimelineSentences();
       let cursor = 0;
       active.forEach((sentence) => {
@@ -2686,7 +2755,7 @@
         const start = titleClipStart(clip);
         const end = titleClipEnd(clip);
         const block = timelineBlock(clip, titleRow, "timeline-segment title-block", start * pxPerSecond, Math.max(8, (end - start) * pxPerSecond), false);
-        block.textContent = clip.text || "标题";
+        block.textContent = clip.text || "画面标题";
         block.classList.toggle("active", clip.id === selectedTitleId);
         block.classList.toggle("hidden", !clip.enabled);
         if (clip.id === trimmingClipId && trimmingKind === "title") {
@@ -2780,11 +2849,15 @@
 
     function setTranscriptMode(mode) {
       transcriptMode = mode === "full" ? "full" : "sentences";
-      list.hidden = transcriptMode !== "sentences";
-      fullTranscript.hidden = transcriptMode !== "full";
+      transcriptWorkspace.hidden = transcriptMode !== "full";
+      document.body.classList.toggle("transcript-workspace-open", transcriptMode === "full");
       document.querySelectorAll("[data-transcript-mode]").forEach((button) => {
         button.classList.toggle("is-on", button.dataset.transcriptMode === transcriptMode);
       });
+      if (transcriptMode === "full") {
+        fullTranscriptSearch.value = sentenceSearch.value;
+        requestAnimationFrame(() => fullTranscriptSearch.focus());
+      }
       renderAll();
     }
 
@@ -3210,6 +3283,7 @@
       }
     }
 
+    subtitlePreview.addEventListener("beforeinput", () => beginTextHistory(subtitlePreview));
     subtitlePreview.addEventListener("input", () => {
       updateSelectedText(subtitlePreview.textContent || "");
       renderList();
@@ -3225,10 +3299,7 @@
 
     subtitlePreview.addEventListener("focus", () => {
       const sentence = selectedSentence();
-      if (!subtitlePreview.dataset.historyActive) {
-        pushHistory();
-        subtitlePreview.dataset.historyActive = "1";
-      }
+      beginTextHistory(subtitlePreview);
       if (sentence) subtitlePreview.textContent = sentence.text || "";
     });
 
@@ -3237,6 +3308,7 @@
       renderAll();
     });
 
+    titlePreview.addEventListener("beforeinput", () => beginTextHistory(titlePreview));
     titlePreview.addEventListener("input", () => {
       updateSelectedTitleText(titlePreview.textContent || "");
       renderTimeline();
@@ -3244,10 +3316,7 @@
 
     titlePreview.addEventListener("focus", () => {
       const clip = titleClip();
-      if (!titlePreview.dataset.historyActive) {
-        pushHistory();
-        titlePreview.dataset.historyActive = "1";
-      }
+      beginTextHistory(titlePreview);
       if (clip) titlePreview.textContent = clip.text || "";
     });
 
@@ -3402,6 +3471,11 @@
 
     document.getElementById("save-btn").addEventListener("click", saveProject);
     document.querySelectorAll("[data-transcript-mode]").forEach((button) => button.addEventListener("click", () => setTranscriptMode(button.dataset.transcriptMode)));
+    closeFullTranscript.addEventListener("click", () => setTranscriptMode("sentences"));
+    fullTranscriptSearch.addEventListener("input", () => {
+      sentenceSearch.value = fullTranscriptSearch.value;
+      renderFullTranscript();
+    });
     document.querySelectorAll("[data-stage-mode]").forEach((button) => button.addEventListener("click", () => setStageMode(button.dataset.stageMode)));
     document.getElementById("reanalyze-btn").addEventListener("click", reanalyzeTranscript);
     document.getElementById("reflow-btn").addEventListener("click", reflowTranscript);
@@ -3496,6 +3570,25 @@
 
     video.addEventListener("timeupdate", () => {
       if (stopPreviewClipIfNeeded()) return;
+      if (liveTimelinePlaying) {
+        const sentence = sentenceById(selectedId);
+        if (sentence && video.currentTime >= clipEnd(sentence) - 0.035) {
+          const next = nextPlayableSentence(sentence);
+          if (!next) {
+            stopLiveTimelinePlayback();
+            setTimelineStatus("已播放到时间线末尾", 1000);
+            return;
+          }
+          selectedId = next.id;
+          lockManualTimeSync(500);
+          video.currentTime = Math.max(0, clipStart(next) + 0.001);
+          renderAll();
+          return;
+        }
+        updateTimelinePlayhead();
+        updateTranscriptHighlight();
+        return;
+      }
       if (isManualTimeSyncLocked()) {
         updateTimelinePlayhead();
         updateTranscriptHighlight();
@@ -3562,6 +3655,7 @@
         return;
       }
       if (event.key === "Escape") {
+        if (transcriptMode === "full") setTranscriptMode("sentences");
         hideContextMenu();
         setShortcutPanel(false);
         return;

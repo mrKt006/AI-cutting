@@ -1688,13 +1688,67 @@ legend {
 }
 
 .full-transcript {
-  min-height: 100%;
-  padding: 14px 16px 28px;
+  height: 100%;
+  padding: 26px 32px 48px;
   color: #dbe5f4;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 2;
+  font-size: 15px;
+  font-weight: 560;
+  line-height: 2.25;
   overflow-wrap: anywhere;
+  overflow-y: auto;
+}
+
+.transcript-workspace {
+  position: fixed;
+  inset: 54px 16px 16px;
+  z-index: 40;
+  display: grid;
+  grid-template-rows: 58px minmax(0, 1fr);
+  max-width: 1120px;
+  margin: 0 auto;
+  overflow: hidden;
+  color: #dbe5f4;
+  background: #111827;
+  border: 1px solid #263753;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.38);
+}
+
+.transcript-workspace[hidden] {
+  display: none;
+}
+
+.transcript-workspace-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 18px 0 24px;
+  border-bottom: 1px solid #263753;
+}
+
+.transcript-workspace-head > div,
+.transcript-workspace-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.transcript-workspace-head span {
+  color: #7f93b4;
+  font-size: 12px;
+}
+
+.transcript-workspace-actions .compact-input {
+  width: min(320px, 32vw);
+}
+
+.transcript-workspace-open::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: rgba(3, 7, 18, 0.62);
 }
 
 .transcript-sentence {
