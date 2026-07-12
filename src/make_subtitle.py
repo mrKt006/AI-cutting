@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from style_presets import DEFAULT_STYLE_PRESETS, subtitle_override, subtitle_to_ass_style
 from text_utils import MARK_RE, split_script, strip_keyword_marks
@@ -13,6 +14,7 @@ class SubtitleCue:
     start: float
     end: float
     text: str
+    style: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

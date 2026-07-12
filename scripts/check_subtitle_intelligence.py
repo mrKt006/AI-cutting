@@ -4,16 +4,21 @@ import sys
 import io
 import json
 import urllib.error
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from llm_analysis import analyze_transcript, apply_high_confidence_corrections  # noqa: E402
 from subtitle_layout import build_layout_context, measure_text, segment_tokens, tokens_from_text  # noqa: E402
 from volc_asr import convert_utterances  # noqa: E402
+from make_subtitle import SubtitleCue  # noqa: E402
+from style_presets import get_style_preset  # noqa: E402
+from web.app import _write_edit_ass  # noqa: E402
 
 
 def main() -> int:
@@ -78,6 +83,14 @@ def main() -> int:
         failed = analyze_transcript(correction_tokens, base_url="https://example.test/v1", model="test", api_key="secret")
         assert failed["status"] == "skipped"
         assert "secret" not in json.dumps(failed)
+
+    with tempfile.TemporaryDirectory(prefix="subtitle-style-") as tmp:
+        ass_path = Path(tmp) / "styled.ass"
+        cue = SubtitleCue(1, 0.0, 1.0, "独立样式", style={"font_size": 96, "primary_color": "#ff0000", "position_x": 120})
+        _write_edit_ass([cue], [], ass_path, width=1080, height=1920, preset=get_style_preset("default-white"))
+        ass_text = ass_path.read_text(encoding="utf-8")
+        assert "Style: Subtitle1," in ass_text
+        assert ",Subtitle1,," in ass_text
     print("Subtitle intelligence check passed.")
     return 0
 

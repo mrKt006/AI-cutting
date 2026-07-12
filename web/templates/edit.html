@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>精修台 {{ job.id }}</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-50">
+  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-51">
 </head>
 <body class="editor-body">
   <div class="editor-shell">
@@ -189,21 +189,9 @@
               {% for preset in style_presets %}<option value="{{ preset.id }}">{{ preset.name }}</option>{% endfor %}
             </select>
           </label>
-          <div class="field-pair dense">
-            <label>字号 <input id="cover-font-size" type="number" min="20" max="180" value="76"></label>
-            <label>颜色 <input id="cover-color" type="color" value="#fff446"></label>
-          </div>
-          <div class="field-pair dense">
-            <label>水平 X <input id="cover-position-x" type="number" step="1" value="0"></label>
-            <label>垂直 Y <input id="cover-position-y" type="number" step="1" value="-520"></label>
-          </div>
-          <div class="field-pair dense">
-            <label>缩放 % <input id="cover-scale" type="number" min="20" max="200" value="100"></label>
-            <label>描边 <input id="cover-outline-width" type="number" min="0" max="16" value="4"></label>
-          </div>
           <div class="sentence-action-bar">
             <button id="set-cover-frame-btn" class="primary-action" type="button">设为当前画面</button>
-            <button id="reset-cover-style-btn" class="tool-button" type="button">恢复预设</button>
+            <button id="reset-cover-style-btn" class="tool-button editor-shortcut-only" type="button">恢复预设</button>
             <button id="save-cover-preset-btn" class="tool-button" type="button">保存为新预设</button>
           </div>
           <div id="cover-preview-status" class="clip-hint">选择时间线画面作为封面</div>
@@ -229,6 +217,85 @@
           <div class="clip-step-grid editor-gesture-only" aria-label="标题步进微调">
             <button id="title-nudge-left-btn" class="tool-button" type="button">左移 0.05</button>
             <button id="title-nudge-right-btn" class="tool-button" type="button">右移 0.05</button>
+          </div>
+        </section>
+
+        <section id="text-style-inspector" class="inspector-section text-style-inspector">
+          <div class="panel-head"><span>文本样式</span></div>
+          <label class="full-field">字体
+            <select id="text-font-family">
+              <option value="Microsoft YaHei">微软雅黑</option>
+              <option value="SimHei">黑体</option>
+              <option value="SimSun">宋体</option>
+              <option value="Arial">Arial</option>
+            </select>
+          </label>
+          <div class="field-pair dense">
+            <label>字号 <input id="text-font-size" type="number" min="12" max="240" step="1"></label>
+            <label>颜色 <input id="text-primary-color" type="color"></label>
+          </div>
+          <div class="text-style-toggles" role="group" aria-label="字体样式">
+            <button type="button" data-text-toggle="bold" aria-label="加粗"><strong>B</strong></button>
+            <button type="button" data-text-toggle="italic" aria-label="斜体"><em>I</em></button>
+            <button type="button" data-text-toggle="underline" aria-label="下划线"><u>U</u></button>
+          </div>
+          <label class="full-field">不透明度
+            <input id="text-opacity" type="range" min="0" max="100" step="1">
+          </label>
+          <div class="text-align-controls" role="group" aria-label="对齐方式">
+            <button type="button" data-text-align="left" aria-label="左对齐">左</button>
+            <button type="button" data-text-align="center" aria-label="居中">中</button>
+            <button type="button" data-text-align="right" aria-label="右对齐">右</button>
+          </div>
+
+          <details open>
+            <summary>位置与大小</summary>
+            <div class="field-pair dense">
+              <label>水平 X <input id="text-position-x" type="number" step="1"></label>
+              <label>垂直 Y <input id="text-position-y" type="number" step="1"></label>
+            </div>
+            <div class="field-pair dense">
+              <label>缩放 % <input id="text-scale" type="number" min="20" max="300" step="1"></label>
+              <label>旋转 ° <input id="text-rotation" type="number" min="-180" max="180" step="1"></label>
+            </div>
+            <div class="field-pair dense">
+              <label>字间距 <input id="text-letter-spacing" type="number" min="-20" max="100" step="1"></label>
+              <label>行间距 <input id="text-line-spacing" type="number" min="-50" max="200" step="1"></label>
+            </div>
+          </details>
+
+          <details>
+            <summary>描边与背景</summary>
+            <label class="check-line"><input id="text-outline-enabled" type="checkbox"><span>描边</span></label>
+            <div class="field-pair dense">
+              <label>描边颜色 <input id="text-outline-color" type="color"></label>
+              <label>描边宽度 <input id="text-outline-width" type="number" min="0" max="24" step="1"></label>
+            </div>
+            <label class="check-line"><input id="text-background-enabled" type="checkbox"><span>背景</span></label>
+            <div class="field-pair dense">
+              <label>背景颜色 <input id="text-background-color" type="color"></label>
+              <label>背景透明度 <input id="text-background-opacity" type="number" min="0" max="100" step="1"></label>
+            </div>
+            <label class="full-field">背景内边距 <input id="text-background-padding" type="number" min="0" max="100" step="1"></label>
+          </details>
+
+          <details>
+            <summary>阴影与发光</summary>
+            <label class="check-line"><input id="text-shadow-enabled" type="checkbox"><span>阴影</span></label>
+            <div class="field-pair dense">
+              <label>阴影颜色 <input id="text-shadow-color" type="color"></label>
+              <label>阴影距离 <input id="text-shadow-offset" type="number" min="0" max="30" step="1"></label>
+            </div>
+            <label class="full-field">模糊 <input id="text-blur" type="number" min="0" max="30" step="1"></label>
+            <label class="check-line"><input id="text-glow-enabled" type="checkbox"><span>发光</span></label>
+            <div class="field-pair dense">
+              <label>发光颜色 <input id="text-glow-color" type="color"></label>
+              <label>发光强度 <input id="text-glow-strength" type="number" min="0" max="30" step="1"></label>
+            </div>
+          </details>
+          <div id="subtitle-style-actions" class="sentence-action-bar">
+            <button id="apply-style-all-btn" class="tool-button" type="button">应用到全部字幕</button>
+            <button id="reset-text-style-btn" class="tool-button" type="button">恢复预设</button>
           </div>
         </section>
 
@@ -325,21 +392,64 @@
     const subtitleTextRange = document.getElementById("subtitle-text-range");
     const videoTitleInspector = document.getElementById("video-title-inspector");
     const globalAdjustInspector = document.getElementById("global-adjust-inspector");
-    const coverStyleFields = {
-      font_size: document.getElementById("cover-font-size"),
-      primary_color: document.getElementById("cover-color"),
-      position_x: document.getElementById("cover-position-x"),
-      position_y: document.getElementById("cover-position-y"),
-      scale: document.getElementById("cover-scale"),
-      outline_width: document.getElementById("cover-outline-width")
+    const textStyleInspector = document.getElementById("text-style-inspector");
+    const subtitleStyleActions = document.getElementById("subtitle-style-actions");
+    const applyStyleAllBtn = document.getElementById("apply-style-all-btn");
+    const textStyleFields = {
+      font_family: document.getElementById("text-font-family"),
+      font_size: document.getElementById("text-font-size"),
+      primary_color: document.getElementById("text-primary-color"),
+      opacity: document.getElementById("text-opacity"),
+      position_x: document.getElementById("text-position-x"),
+      position_y: document.getElementById("text-position-y"),
+      scale: document.getElementById("text-scale"),
+      rotation: document.getElementById("text-rotation"),
+      letter_spacing: document.getElementById("text-letter-spacing"),
+      line_spacing: document.getElementById("text-line-spacing"),
+      outline_enabled: document.getElementById("text-outline-enabled"),
+      outline_color: document.getElementById("text-outline-color"),
+      outline_width: document.getElementById("text-outline-width"),
+      background_enabled: document.getElementById("text-background-enabled"),
+      background_color: document.getElementById("text-background-color"),
+      background_opacity: document.getElementById("text-background-opacity"),
+      background_padding: document.getElementById("text-background-padding"),
+      shadow_enabled: document.getElementById("text-shadow-enabled"),
+      shadow_color: document.getElementById("text-shadow-color"),
+      shadow_offset: document.getElementById("text-shadow-offset"),
+      blur: document.getElementById("text-blur"),
+      glow_enabled: document.getElementById("text-glow-enabled"),
+      glow_color: document.getElementById("text-glow-color"),
+      glow_strength: document.getElementById("text-glow-strength")
     };
-    const coverStyleDefaults = {
+    const textStyleDefaults = {
+      font_family: "Microsoft YaHei",
       font_size: 76,
+      bold: true,
+      italic: false,
+      underline: false,
       primary_color: "#fff446",
+      opacity: 100,
       position_x: 0,
       position_y: -520,
       scale: 100,
-      outline_width: 4
+      rotation: 0,
+      letter_spacing: 0,
+      line_spacing: 0,
+      text_align: "center",
+      outline_enabled: true,
+      outline_color: "#000000",
+      outline_width: 4,
+      background_enabled: false,
+      background_color: "#000000",
+      background_opacity: 52,
+      background_padding: 18,
+      shadow_enabled: false,
+      shadow_color: "#000000",
+      shadow_offset: 0,
+      blur: 0,
+      glow_enabled: false,
+      glow_color: "#ffffff",
+      glow_strength: 0
     };
     const titleText = document.getElementById("title-text");
     const showVideoTitle = document.getElementById("show-video-title");
@@ -436,6 +546,7 @@
         text: project.title.video_text || "",
         enabled: Boolean(project.title.show_video_title),
         use_for_cover: false,
+        style_override: {},
       }];
       project.title_clips.forEach((clip, index) => {
         clip.id = clip.id || `t${String(index + 1).padStart(3, "0")}`;
@@ -443,6 +554,7 @@
         clip.end = Number(clip.end || Math.min(Math.max(Number(project.duration || 0.2), 0.2), 3));
         clip.text = String(clip.text || "");
         clip.enabled = Boolean(clip.enabled);
+        clip.style_override = clip.style_override && typeof clip.style_override === "object" ? clip.style_override : {};
       });
       selectedTitleId = project.title_clips.find((clip) => clip.id === selectedTitleId)?.id || project.title_clips[0]?.id || "t001";
       project.sentences.forEach((sentence, index) => {
@@ -453,6 +565,7 @@
         sentence.synthetic_gap = Boolean(sentence.synthetic_gap);
         sentence.tokens = Array.isArray(sentence.tokens) ? sentence.tokens : [];
         sentence.review_flags = Array.isArray(sentence.review_flags) ? sentence.review_flags : [];
+        sentence.style_override = sentence.style_override && typeof sentence.style_override === "object" ? sentence.style_override : {};
       });
       normalizeTimelineOrders();
     }
@@ -1739,12 +1852,15 @@
       const outlineColor = style.glow_enabled ? style.glow_color : style.outline_color;
       const outlinePx = Math.max(0, outline);
       const shadowPx = Math.max(0, shadow);
+      const blurPx = Math.max(0, Number(style.blur || 0) * frameHeight / 1920);
+      const glowPx = Math.max(0, Number(style.glow_enabled ? style.glow_strength || 0 : 0) * frameHeight / 1920);
       const pieces = [];
       if (outlinePx > 0) {
         const c = outlineColor || "#000000";
         pieces.push(`${outlinePx}px 0 0 ${c}`, `-${outlinePx}px 0 0 ${c}`, `0 ${outlinePx}px 0 ${c}`, `0 -${outlinePx}px 0 ${c}`);
       }
-      if (shadowPx > 0) pieces.push(`${shadowPx}px ${shadowPx}px 0 ${style.shadow_color || "#000000"}`);
+      if (shadowPx > 0) pieces.push(`${shadowPx}px ${shadowPx}px ${blurPx}px ${style.shadow_color || "#000000"}`);
+      if (glowPx > 0) pieces.push(`0 0 ${Math.max(2, glowPx * 1.8)}px ${style.glow_color || "#ffffff"}`);
       return pieces.join(", ") || "none";
     }
 
@@ -1758,7 +1874,7 @@
       element.style.left = `${x}px`;
       element.style.top = `${y}px`;
       element.style.bottom = "auto";
-      element.style.transform = "translate(-50%, -50%)";
+      element.style.transform = `translate(-50%, -50%) rotate(${Number(style.rotation || 0)}deg)`;
       const maxWidth = Math.max(80, frameWidth - Number(style.margin_x || 80) * 2 * frameWidth / 1080);
       element.dataset.maxWidth = String(maxWidth);
       if (element === subtitlePreview) {
@@ -1771,7 +1887,7 @@
       element.style.fontFamily = style.font_family || "Microsoft YaHei";
       element.style.fontSize = `${fontSize}px`;
       element.dataset.baseFontSize = String(fontSize);
-      element.style.fontWeight = style.bold === false ? "700" : "950";
+      element.style.fontWeight = style.bold === false ? "400" : "900";
       element.style.fontStyle = style.italic ? "italic" : "normal";
       element.style.textDecoration = style.underline ? "underline" : "none";
       element.style.color = hexToRgba(style.primary_color || "#ffffff", style.opacity ?? 100);
@@ -2859,15 +2975,87 @@
       keepSelectedClipVisible(false);
     }
 
+    function currentCoverStyle() {
+      const preset = stylePresets.find((item) => item.id === (project.cover.style_preset_id || project.style_preset_id)) || stylePresets[0] || {};
+      return {...textStyleDefaults, ...(preset.cover_title || {}), ...(project.cover.style_override || {})};
+    }
+
+    function currentTextStyle() {
+      if (stageMode === "cover") return currentCoverStyle();
+      if (inspectorMode === "title") return {...textStyleDefaults, ...titleStyle, ...(titleClip()?.style_override || {})};
+      return {...textStyleDefaults, ...subtitleStyle, ...(selectedSentence()?.style_override || {})};
+    }
+
+    function currentStyleOverride() {
+      if (stageMode === "cover") return project.cover.style_override;
+      if (inspectorMode === "title") return titleClip()?.style_override;
+      return selectedSentence()?.style_override;
+    }
+
+    function ensureCurrentStyleOverride() {
+      if (stageMode === "cover") {
+        project.cover.style_override = project.cover.style_override || {};
+        return project.cover.style_override;
+      }
+      if (inspectorMode === "title") {
+        const clip = titleClip();
+        if (!clip) return null;
+        clip.style_override = clip.style_override || {};
+        return clip.style_override;
+      }
+      const sentence = selectedSentence();
+      if (!sentence) return null;
+      sentence.style_override = sentence.style_override || {};
+      return sentence.style_override;
+    }
+
+    function refreshCurrentTextStyle() {
+      setDirty();
+      if (stageMode === "cover") scheduleCoverPreview();
+      renderInspector();
+      renderTimeline();
+    }
+
+    function resetCurrentTextStyle() {
+      pushHistory();
+      if (stageMode === "cover") project.cover.style_override = {};
+      else if (inspectorMode === "title" && titleClip()) titleClip().style_override = {};
+      else if (selectedSentence()) selectedSentence().style_override = {};
+      refreshCurrentTextStyle();
+    }
+
+    function renderTextStyleEditor() {
+      const style = currentTextStyle();
+      const unavailable = stageMode !== "cover" && inspectorMode === "subtitle" && !selectedSentence();
+      textStyleInspector.classList.toggle("is-disabled", unavailable);
+      Object.entries(textStyleFields).forEach(([key, input]) => {
+        if (!input) return;
+        input.disabled = unavailable;
+        if (document.activeElement === input) return;
+        if (input.type === "checkbox") input.checked = Boolean(style[key]);
+        else input.value = style[key] ?? textStyleDefaults[key] ?? "";
+      });
+      document.querySelectorAll("[data-text-toggle]").forEach((button) => {
+        const active = Boolean(style[button.dataset.textToggle]);
+        button.classList.toggle("is-on", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+        button.disabled = unavailable;
+      });
+      document.querySelectorAll("[data-text-align]").forEach((button) => {
+        const active = (style.text_align || "center") === button.dataset.textAlign;
+        button.classList.toggle("is-on", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+        button.disabled = unavailable;
+      });
+      subtitleStyleActions.hidden = false;
+      applyStyleAllBtn.hidden = stageMode === "cover" || inspectorMode !== "subtitle";
+    }
+
     function renderInspector() {
       const sentence = selectedSentence();
       const clip = titleClip();
       coverTitle.value = project.cover.text || "";
       coverStylePreset.value = project.cover.style_preset_id || project.style_preset_id || "default-white";
-      const resolvedCoverStyle = currentCoverStyle();
-      Object.entries(coverStyleFields).forEach(([key, input]) => {
-        if (input && document.activeElement !== input) input.value = resolvedCoverStyle[key] ?? "";
-      });
       coverFrameTime.textContent = formatPreciseTime(project.cover.frame_time || 0);
       coverInspector.hidden = stageMode !== "cover";
       textInspectorTabs.hidden = stageMode === "cover";
@@ -2887,6 +3075,7 @@
       subtitleTextRange.textContent = editableSentence
         ? `${formatPreciseTime(editableSentence.start)} - ${formatPreciseTime(editableSentence.end)}`
         : "--";
+      renderTextStyleEditor();
       titleText.value = clip.text || project.title.video_text || "";
       showVideoTitle.checked = Boolean(clip.enabled);
       titleStart.value = Number(clip.start || 0).toFixed(2);
@@ -2897,18 +3086,13 @@
       if (!sentence) {
         setPreviewText(subtitlePreview, "");
         setPreviewText(titlePreview, clip.enabled ? (clip.text || "") : "");
-        applyTextStyle(titlePreview, {...titleStyle, position_y: titleStyle.position_y ?? -520}, true);
+        applyTextStyle(titlePreview, currentTextStyle(), true);
         return;
       }
       setPreviewText(subtitlePreview, sentence.remove_video || !sentence.enabled ? "" : (sentence.text || sentence.original_text || ""));
       setPreviewText(titlePreview, clip.enabled ? (clip.text || "") : "");
-      applyTextStyle(subtitlePreview, subtitleStyle, false);
-      applyTextStyle(titlePreview, {...titleStyle, position_y: titleStyle.position_y ?? -520}, true);
-    }
-
-    function currentCoverStyle() {
-      const preset = stylePresets.find((item) => item.id === (project.cover.style_preset_id || project.style_preset_id)) || stylePresets[0] || {};
-      return {...coverStyleDefaults, ...(preset.cover_title || {}), ...(project.cover.style_override || {})};
+      applyTextStyle(subtitlePreview, {...textStyleDefaults, ...subtitleStyle, ...(sentence.style_override || {})}, false);
+      applyTextStyle(titlePreview, {...textStyleDefaults, ...titleStyle, ...(clip.style_override || {})}, true);
     }
 
     function setTranscriptMode(mode) {
@@ -3085,6 +3269,7 @@
         original_text: rightText,
         text: rightText,
         edited: true,
+        style_override: {...(sentence.style_override || {})},
       };
       sentence.clip_end = splitAt;
       retimeSentenceTokens(sentence);
@@ -3134,6 +3319,7 @@
         original_text: rightText,
         text: rightText,
         edited: true,
+        style_override: {...(sentence.style_override || {})},
       };
       retimeSentenceTokens(sentence);
       retimeSentenceTokens(next);
@@ -3213,9 +3399,11 @@
         text: project.title.video_text || "标题",
         enabled: true,
         use_for_cover: false,
+        style_override: {},
       };
       project.title_clips.push(clip);
       selectedTitleId = clip.id;
+      inspectorMode = "title";
       syncTitleGlobalState();
       setDirty();
       renderAll();
@@ -3250,10 +3438,12 @@
         end: clamp(titleClipEnd(clip) + offset, 0.2, duration),
         enabled: true,
         use_for_cover: false,
+        style_override: {...(clip.style_override || {})},
       };
       if (next.end <= next.start) next.end = clamp(next.start + titleClipDuration(clip), next.start + 0.2, duration);
       project.title_clips.push(next);
       selectedTitleId = next.id;
+      inspectorMode = "title";
       syncTitleGlobalState();
       setDirty();
       renderAll();
@@ -3432,13 +3622,54 @@
       scheduleCoverPreview(0);
     });
 
-    Object.entries(coverStyleFields).forEach(([key, input]) => input?.addEventListener("input", () => {
-      project.cover.style_override = {...(project.cover.style_override || {})};
-      const baseValue = currentCoverStyle()[key];
-      project.cover.style_override[key] = typeof baseValue === "number" ? Number(input.value || 0) : input.value;
-      setDirty();
-      scheduleCoverPreview();
+    Object.entries(textStyleFields).forEach(([key, input]) => {
+      const eventName = input.type === "checkbox" || input.tagName === "SELECT" ? "change" : "input";
+      input.addEventListener("focus", () => beginTextHistory(input));
+      input.addEventListener(eventName, () => {
+        beginTextHistory(input);
+        const target = ensureCurrentStyleOverride();
+        if (!target) return;
+        const defaultValue = currentTextStyle()[key] ?? textStyleDefaults[key];
+        target[key] = input.type === "checkbox"
+          ? input.checked
+          : typeof defaultValue === "number"
+            ? Number(input.value || 0)
+            : input.value;
+        refreshCurrentTextStyle();
+      });
+      input.addEventListener("blur", () => delete input.dataset.historyActive);
+    });
+
+    document.querySelectorAll("[data-text-toggle]").forEach((button) => button.addEventListener("click", () => {
+      pushHistory();
+      const target = ensureCurrentStyleOverride();
+      if (!target) return;
+      const key = button.dataset.textToggle;
+      target[key] = !Boolean(currentTextStyle()[key]);
+      refreshCurrentTextStyle();
     }));
+
+    document.querySelectorAll("[data-text-align]").forEach((button) => button.addEventListener("click", () => {
+      pushHistory();
+      const target = ensureCurrentStyleOverride();
+      if (!target) return;
+      target.text_align = button.dataset.textAlign;
+      refreshCurrentTextStyle();
+    }));
+
+    document.getElementById("reset-text-style-btn").addEventListener("click", resetCurrentTextStyle);
+    document.getElementById("apply-style-all-btn").addEventListener("click", () => {
+      const sentence = selectedSentence();
+      if (!sentence) return;
+      pushHistory();
+      const override = {...(sentence.style_override || {})};
+      project.sentences.forEach((item) => {
+        if (!isGapSentence(item)) item.style_override = {...override};
+      });
+      setDirty();
+      renderAll();
+      setTimelineStatus("当前样式已应用到全部字幕", 1500);
+    });
 
     document.getElementById("set-cover-frame-btn").addEventListener("click", () => {
       project.cover.frame_time = Number(timelineTimeForPlayback().toFixed(3));

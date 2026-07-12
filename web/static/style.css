@@ -1699,7 +1699,9 @@ legend {
 }
 
 .sentence-list[hidden],
-.full-transcript[hidden] {
+.full-transcript[hidden],
+#subtitle-style-actions[hidden],
+#apply-style-all-btn[hidden] {
   display: none !important;
 }
 
@@ -2717,6 +2719,66 @@ legend {
 .inspector-section textarea:focus {
   border-color: rgba(96, 165, 250, 0.8);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.text-style-inspector {
+  display: grid;
+  gap: 10px;
+}
+
+.text-style-inspector.is-disabled {
+  opacity: 0.55;
+}
+
+.text-style-toggles,
+.text-align-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.text-style-toggles button,
+.text-align-controls button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  height: 30px;
+  padding: 0 9px;
+  color: #9db0cd;
+  background: #111a2c;
+  border: 1px solid rgba(140, 163, 196, 0.2);
+  border-radius: 5px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.text-align-controls button {
+  flex: 1;
+}
+
+.text-style-toggles button.is-on,
+.text-align-controls button.is-on {
+  color: #fff;
+  background: #1d4ed8;
+  border-color: #3b82f6;
+}
+
+.text-style-inspector details {
+  padding-top: 8px;
+  border-top: 1px solid rgba(140, 163, 196, 0.14);
+}
+
+.text-style-inspector summary {
+  margin-bottom: 10px;
+  color: #cbd8eb;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.text-style-inspector details .field-pair + .field-pair,
+.text-style-inspector details .full-field,
+.text-style-inspector details .check-line {
+  margin-top: 8px;
 }
 
 .check-line {

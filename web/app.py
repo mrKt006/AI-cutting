@@ -1094,6 +1094,7 @@ def _blank_edit_project(job_dir: Path, job: dict[str, Any], item: dict[str, Any]
                 "text": "",
                 "enabled": False,
                 "use_for_cover": False,
+                "style_override": {},
             }
         ],
         "settings": {"subtitle_offset": 0.0},
@@ -1204,6 +1205,7 @@ def _sanitize_sentences(items: list[Any], old_by_id: dict[str, dict[str, Any]], 
                 "tokens": tokens,
                 "timing_pending": bool(item.get("timing_pending", original.get("timing_pending", False))),
                 "review_flags": item.get("review_flags") if isinstance(item.get("review_flags"), list) else original.get("review_flags", []),
+                "style_override": item.get("style_override") if isinstance(item.get("style_override"), dict) else original.get("style_override", {}),
             }
         )
     cleaned.sort(key=lambda item: (item["timeline_order"], item["start"], item["end"], item["id"]))
@@ -1327,6 +1329,7 @@ def _sanitize_title_clips(
                 "text": title.get("video_text") or "",
                 "enabled": bool(title.get("show_video_title")),
                 "use_for_cover": False,
+                "style_override": {},
             }
         ]
     cleaned: list[dict[str, Any]] = []
@@ -1356,6 +1359,7 @@ def _sanitize_title_clips(
                 "text": text,
                 "enabled": enabled,
                 "use_for_cover": False,
+                "style_override": item.get("style_override") if isinstance(item.get("style_override"), dict) else original.get("style_override", {}),
             }
         )
     cleaned.sort(key=lambda item: (item["start"], item["end"], item["id"]))
@@ -1489,7 +1493,7 @@ def _edit_cues(project: dict[str, Any], removed: list[Segment], duration: float)
         mapped_end = min(duration, mapped_end + offset)
         if mapped_end <= mapped_start:
             continue
-        cues.append(SubtitleCue(index=len(cues) + 1, start=mapped_start, end=mapped_end, text=str(sentence.get("text") or "")))
+        cues.append(SubtitleCue(index=len(cues) + 1, start=mapped_start, end=mapped_end, text=str(sentence.get("text") or ""), style=sentence.get("style_override") or None))
     return cues
 
 
@@ -1508,6 +1512,7 @@ def _edit_title_cues(project: dict[str, Any], removed: list[Segment], duration: 
                 start=max(0.0, mapped_start),
                 end=min(duration, mapped_end),
                 text=str(clip.get("text") or ""),
+                style=clip.get("style_override") or None,
             )
         )
     return cues
@@ -1742,7 +1747,7 @@ def _timeline_subtitle_cues(project: dict[str, Any], clips: list[dict[str, Any]]
             cue_start = max(0.0, cue_start)
             cue_end = min(duration, cue_end)
             if cue_end > cue_start:
-                cues.append(SubtitleCue(index=len(cues) + 1, start=cue_start, end=cue_end, text=str(sentence.get("text") or "")))
+                cues.append(SubtitleCue(index=len(cues) + 1, start=cue_start, end=cue_end, text=str(sentence.get("text") or ""), style=sentence.get("style_override") or None))
         cursor += clip_duration
     return cues
 
@@ -1756,7 +1761,7 @@ def _timeline_title_cues(project: dict[str, Any], duration: float) -> list[Subti
         end = _clamp_float(clip.get("end", start), 0.0, duration)
         if end <= start:
             continue
-        cues.append(SubtitleCue(index=len(cues) + 1, start=start, end=end, text=str(clip.get("text") or "")))
+        cues.append(SubtitleCue(index=len(cues) + 1, start=start, end=end, text=str(clip.get("text") or ""), style=clip.get("style_override") or None))
     return cues
 
 
@@ -1777,6 +1782,17 @@ def _write_edit_ass(
     title_style.setdefault("position_y", -520)
     title_style.setdefault("text_align", "center")
     title_style.setdefault("opacity", 100)
+    subtitle_styles = [({**subtitle_style, **(cue.style or {})}, f"Subtitle{cue.index}" if cue.style else "Subtitle") for cue in subtitle_cues]
+    title_styles = [({**title_style, **(cue.style or {})}, f"Title{cue.index}" if cue.style else "Title") for cue in title_cues]
+    style_lines = [
+        subtitle_to_ass_style(subtitle_style, width=width, height=height).replace("Style: Default,", "Style: Subtitle,", 1),
+        subtitle_to_ass_style(title_style, width=width, height=height).replace("Style: Default,", "Style: Title,", 1),
+    ]
+    style_lines.extend(
+        subtitle_to_ass_style(style, width=width, height=height).replace("Style: Default,", f"Style: {name},", 1)
+        for style, name in [*subtitle_styles, *title_styles]
+        if name not in {"Subtitle", "Title"}
+    )
     lines = [
         "[Script Info]",
         "ScriptType: v4.00+",
@@ -1787,18 +1803,17 @@ def _write_edit_ass(
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        subtitle_to_ass_style(subtitle_style, width=width, height=height).replace("Style: Default,", "Style: Subtitle,", 1),
-        subtitle_to_ass_style(title_style, width=width, height=height).replace("Style: Default,", "Style: Title,", 1),
+        *style_lines,
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
-    for cue in subtitle_cues:
-        override = subtitle_override(subtitle_style, cue.start, cue.end, width=width, height=height)
-        lines.append(f"Dialogue: 0,{_ass_time(cue.start)},{_ass_time(cue.end)},Subtitle,,0,0,0,,{override}{_ass_text(cue.text)}")
-    for cue in title_cues:
-        override = subtitle_override(title_style, cue.start, cue.end, width=width, height=height)
-        lines.append(f"Dialogue: 1,{_ass_time(cue.start)},{_ass_time(cue.end)},Title,,0,0,0,,{override}{_ass_text(cue.text)}")
+    for cue, (cue_style, style_name) in zip(subtitle_cues, subtitle_styles):
+        override = subtitle_override(cue_style, cue.start, cue.end, width=width, height=height)
+        lines.append(f"Dialogue: 0,{_ass_time(cue.start)},{_ass_time(cue.end)},{style_name},,0,0,0,,{override}{_ass_text(cue.text)}")
+    for cue, (cue_style, style_name) in zip(title_cues, title_styles):
+        override = subtitle_override(cue_style, cue.start, cue.end, width=width, height=height)
+        lines.append(f"Dialogue: 1,{_ass_time(cue.start)},{_ass_time(cue.end)},{style_name},,0,0,0,,{override}{_ass_text(cue.text)}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -1836,8 +1851,8 @@ def _build_edit_plan(
         "edited_duration": duration,
         "timeline_segments": timeline_segments,
         "removed_sentence_ids": [str(item.get("id")) for item in project.get("sentences", []) if item.get("remove_video")],
-        "subtitle_cues": [{"start": item.start, "end": item.end, "text": item.text} for item in subtitle_cues],
-        "title_cues": [{"start": item.start, "end": item.end, "text": item.text} for item in title_cues],
+        "subtitle_cues": [{"start": item.start, "end": item.end, "text": item.text, "style": item.style or {}} for item in subtitle_cues],
+        "title_cues": [{"start": item.start, "end": item.end, "text": item.text, "style": item.style or {}} for item in title_cues],
         "title_clips": [
             {
                 "id": str(item.get("id") or ""),
@@ -1846,6 +1861,7 @@ def _build_edit_plan(
                 "text": str(item.get("text") or ""),
                 "enabled": bool(item.get("enabled", False)),
                 "use_for_cover": bool(item.get("use_for_cover", False)),
+                "style_override": item.get("style_override") if isinstance(item.get("style_override"), dict) else {},
             }
             for item in project.get("title_clips", [])
             if isinstance(item, dict)

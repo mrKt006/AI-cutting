@@ -114,7 +114,7 @@ def main() -> int:
     assert plan["removed_sentence_ids"] == ["s004"]
     assert plan["edited_duration"] == 4.5
     assert plan["title_clips"] == [
-        {"id": "t001", "start": 0.5, "end": 2.0, "text": "title", "enabled": True, "use_for_cover": True}
+        {"id": "t001", "start": 0.5, "end": 2.0, "text": "title", "enabled": True, "use_for_cover": True, "style_override": {}}
     ]
     cleaned = _sanitize_sentences(
         [
