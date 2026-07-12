@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>精修台 {{ job.id }}</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-49">
+  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-50">
 </head>
 <body class="editor-body">
   <div class="editor-shell">
@@ -170,6 +170,17 @@
       </section>
 
       <aside class="edit-inspector">
+        <div id="text-inspector-tabs" class="inspector-mode-tabs" role="tablist" aria-label="文本类型">
+          <button class="is-on" type="button" role="tab" aria-selected="true" data-inspector-mode="subtitle">字幕</button>
+          <button type="button" role="tab" aria-selected="false" data-inspector-mode="title">画面标题</button>
+        </div>
+        <section id="subtitle-text-inspector" class="inspector-section">
+          <div class="panel-head">
+            <span>字幕文本</span>
+            <strong id="subtitle-text-range">--</strong>
+          </div>
+          <textarea id="selected-subtitle-text" rows="6" placeholder="选择字幕后在这里修改"></textarea>
+        </section>
         <section id="cover-inspector" class="inspector-section cover-inspector" hidden>
           <div class="panel-head"><span>封面</span><strong id="cover-frame-time">0:00.00</strong></div>
           <textarea id="cover-text" rows="4" placeholder="封面标题，可手动换行"></textarea>
@@ -308,6 +319,11 @@
     const coverStylePreset = document.getElementById("cover-style-preset");
     const coverFrameTime = document.getElementById("cover-frame-time");
     const coverPreviewStatus = document.getElementById("cover-preview-status");
+    const textInspectorTabs = document.getElementById("text-inspector-tabs");
+    const subtitleTextInspector = document.getElementById("subtitle-text-inspector");
+    const selectedSubtitleText = document.getElementById("selected-subtitle-text");
+    const subtitleTextRange = document.getElementById("subtitle-text-range");
+    const videoTitleInspector = document.getElementById("video-title-inspector");
     const globalAdjustInspector = document.getElementById("global-adjust-inspector");
     const coverStyleFields = {
       font_size: document.getElementById("cover-font-size"),
@@ -364,6 +380,7 @@
     let selectedIds = new Set(selectedId ? [selectedId] : []);
     let lastSelectedId = selectedId;
     let selectedTitleId = project.title_clips?.[0]?.id || "t001";
+    let inspectorMode = "subtitle";
     let dirty = false;
     let activeFilter = "all";
     let transcriptMode = "sentences";
@@ -561,6 +578,7 @@
     function setSingleSelection(id) {
       if (!id) return;
       selectedId = id;
+      inspectorMode = "subtitle";
       selectedIds = new Set([id]);
       lastSelectedId = id;
       lockManualTimeSync();
@@ -568,6 +586,7 @@
 
     function toggleSentenceSelection(id) {
       if (!id) return;
+      inspectorMode = "subtitle";
       if (selectedIds.has(id) && selectedIds.size > 1) {
         selectedIds.delete(id);
         selectedId = [...selectedIds].at(-1) || id;
@@ -579,6 +598,7 @@
     }
 
     function rangeSelectSentence(id) {
+      inspectorMode = "subtitle";
       const rows = visibleSentences();
       const from = rows.findIndex((item) => item.id === lastSelectedId);
       const to = rows.findIndex((item) => item.id === id);
@@ -1215,6 +1235,7 @@
       const hit = timelineLookup(clamp(time, 0, activeTimelineDuration()));
       if (!hit) return;
       selectedId = hit.sentence.id;
+      inspectorMode = "subtitle";
       lockManualTimeSync();
       if (!isGapSentence(hit.sentence)) {
         video.currentTime = clamp(hit.sourceTime, clipStart(hit.sentence), clipEnd(hit.sentence));
@@ -1681,6 +1702,7 @@
     function seekToSentence(sentence) {
       if (!sentence) return;
       selectedId = sentence.id;
+      inspectorMode = "subtitle";
       cancelPreviewClip();
       lockManualTimeSync();
       if (!isGapSentence(sentence)) {
@@ -1870,6 +1892,7 @@
     function focusTitlePreviewFromTimeline(clip) {
       if (!clip) return;
       selectedTitleId = clip.id;
+      inspectorMode = "title";
       clip.enabled = true;
       syncTitleGlobalState();
       setDirty();
@@ -1945,8 +1968,13 @@
         editable.textContent = sentence.text || sentence.original_text || "空字幕";
         if (sentence.overlong) row.title = "当前预设下字幕过长，请拆句或重新布局";
         row.addEventListener("click", (event) => {
-          if (event.target === editable && editable.isContentEditable) return;
+          inspectorMode = "subtitle";
+          if (event.target === editable && editable.isContentEditable) {
+            renderInspector();
+            return;
+          }
           if (sentence.id === selectedId && event.target === editable) {
+            renderInspector();
             focusEditableText(editable, true);
             return;
           }
@@ -2031,6 +2059,7 @@
           sentenceSpan.appendChild(tokenSpan);
         });
         sentenceSpan.addEventListener("click", () => {
+          inspectorMode = "subtitle";
           if (sentenceSpan.isContentEditable) return;
           setSingleSelection(sentence.id);
           seekToSentence(sentence);
@@ -2523,6 +2552,7 @@
       block.addEventListener("click", (event) => {
         event.stopPropagation();
         selectedTitleId = clip.id;
+        inspectorMode = "title";
         renderAll();
       });
       block.addEventListener("dblclick", (event) => {
@@ -2534,6 +2564,7 @@
         event.preventDefault();
         event.stopPropagation();
         selectedTitleId = clip.id;
+        inspectorMode = "title";
         renderAll();
         openContextMenu("title", event.clientX, event.clientY, clip.id);
       });
@@ -2543,6 +2574,7 @@
         event.stopPropagation();
         pushHistory();
         selectedTitleId = clip.id;
+        inspectorMode = "title";
         const pxPerSecond = Number(timelineZoom.value || 58);
         const originX = event.clientX;
         const scroll = block.closest(".timeline-scroll");
@@ -2838,8 +2870,23 @@
       });
       coverFrameTime.textContent = formatPreciseTime(project.cover.frame_time || 0);
       coverInspector.hidden = stageMode !== "cover";
-      document.getElementById("video-title-inspector").hidden = stageMode === "cover";
+      textInspectorTabs.hidden = stageMode === "cover";
+      subtitleTextInspector.hidden = stageMode === "cover" || inspectorMode !== "subtitle";
+      videoTitleInspector.hidden = stageMode === "cover" || inspectorMode !== "title";
       globalAdjustInspector.hidden = stageMode === "cover";
+      textInspectorTabs.querySelectorAll("[data-inspector-mode]").forEach((button) => {
+        const active = button.dataset.inspectorMode === inspectorMode;
+        button.classList.toggle("is-on", active);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+      });
+      const editableSentence = sentence && !isGapSentence(sentence) ? sentence : null;
+      if (document.activeElement !== selectedSubtitleText) {
+        selectedSubtitleText.value = editableSentence ? (editableSentence.text || editableSentence.original_text || "") : "";
+      }
+      selectedSubtitleText.disabled = !editableSentence;
+      subtitleTextRange.textContent = editableSentence
+        ? `${formatPreciseTime(editableSentence.start)} - ${formatPreciseTime(editableSentence.end)}`
+        : "--";
       titleText.value = clip.text || project.title.video_text || "";
       showVideoTitle.checked = Boolean(clip.enabled);
       titleStart.value = Number(clip.start || 0).toFixed(2);
@@ -3430,6 +3477,33 @@
       } catch (error) {
         setTimelineStatus(`保存封面预设失败：${String(error.message || error).slice(0, 80)}`, 2200);
       }
+    });
+
+    textInspectorTabs.querySelectorAll("[data-inspector-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        inspectorMode = button.dataset.inspectorMode === "title" ? "title" : "subtitle";
+        renderInspector();
+      });
+    });
+
+    selectedSubtitleText.addEventListener("beforeinput", () => beginTextHistory(selectedSubtitleText));
+    selectedSubtitleText.addEventListener("input", () => {
+      updateSelectedText(selectedSubtitleText.value);
+      renderList();
+      renderFullTranscript();
+      renderTimeline();
+    });
+    selectedSubtitleText.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      const cursor = selectedSubtitleText.selectionStart || 0;
+      updateSelectedText(selectedSubtitleText.value);
+      splitSentenceAt(cursor);
+    });
+    selectedSubtitleText.addEventListener("focus", () => beginTextHistory(selectedSubtitleText));
+    selectedSubtitleText.addEventListener("blur", () => {
+      delete selectedSubtitleText.dataset.historyActive;
+      renderAll();
     });
 
     titleText.addEventListener("input", () => {

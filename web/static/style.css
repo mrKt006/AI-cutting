@@ -2665,6 +2665,42 @@ legend {
   overflow: auto;
 }
 
+.inspector-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 3px;
+  background: #0a1020;
+  border: 1px solid rgba(140, 163, 196, 0.18);
+  border-radius: 6px;
+}
+
+.inspector-mode-tabs[hidden] {
+  display: none;
+}
+
+.inspector-mode-tabs button {
+  min-height: 30px;
+  color: #8fa2bf;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.inspector-mode-tabs button:hover {
+  color: #dbe8fa;
+  background: rgba(96, 165, 250, 0.08);
+}
+
+.inspector-mode-tabs button.is-on {
+  color: #f4f8ff;
+  background: #1d4ed8;
+}
+
 .inspector-section {
   padding-bottom: 14px;
   border-bottom: 1px solid rgba(140, 163, 196, 0.14);
