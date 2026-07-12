@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>精修台 {{ job.id }}</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-48">
+  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-49">
 </head>
 <body class="editor-body">
   <div class="editor-shell">
@@ -130,16 +130,32 @@
           <span>时间线</span>
           <strong id="timeline-time" class="timeline-time">0:00.00</strong>
           <div class="timeline-toolset" aria-label="时间线工具">
-            <button id="select-tool-btn" class="tool-button mode-toggle is-on" type="button">选择</button>
-            <button id="split-tool-btn" class="tool-button mode-toggle" type="button">切割</button>
+            <button id="select-tool-btn" class="tool-button icon-tool mode-toggle is-on" type="button" aria-label="选择工具" title="选择工具 (V)" data-tooltip="选择工具">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 9-6.4 1.5L9 20z"/></svg>
+            </button>
+            <button id="split-tool-btn" class="tool-button icon-tool mode-toggle" type="button" aria-label="切割工具" title="切割工具 (C)" data-tooltip="切割工具">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="m8.7 8.5 11.3 6.5M8.7 15.5 20 9"/></svg>
+            </button>
           </div>
-          <button id="insert-gap-btn" class="tool-button" type="button">插入空隙</button>
-          <button id="free-drop-toggle-btn" class="tool-button mode-toggle" type="button">吸附插入</button>
+          <button id="insert-gap-btn" class="tool-button icon-tool" type="button" aria-label="插入空隙" title="插入空隙 (G)" data-tooltip="插入空隙">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5v14M20 5v14M9 12h6M12 9v6"/></svg>
+          </button>
+          <button id="free-drop-toggle-btn" class="tool-button icon-tool mode-toggle" type="button" aria-label="吸附插入" title="吸附插入" data-tooltip="吸附插入">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3v9a6 6 0 0 0 12 0V3M6 7h4M14 7h4"/></svg>
+          </button>
           <div class="timeline-zoom-actions" aria-label="时间线缩放工具">
-            <button id="zoom-out-btn" class="tool-button" type="button">缩小</button>
-            <button id="zoom-in-btn" class="tool-button" type="button">放大</button>
-            <button id="zoom-fit-btn" class="tool-button" type="button">适合</button>
-            <button id="locate-selected-btn" class="tool-button" type="button">定位</button>
+            <button id="zoom-out-btn" class="tool-button icon-tool" type="button" aria-label="缩小时间线" title="缩小时间线" data-tooltip="缩小">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M16 16l5 5"/></svg>
+            </button>
+            <button id="zoom-in-btn" class="tool-button icon-tool" type="button" aria-label="放大时间线" title="放大时间线" data-tooltip="放大">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M16 16l5 5"/></svg>
+            </button>
+            <button id="zoom-fit-btn" class="tool-button icon-tool" type="button" aria-label="适合窗口" title="适合窗口" data-tooltip="适合窗口">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+            </button>
+            <button id="locate-selected-btn" class="tool-button icon-tool" type="button" aria-label="定位所选片段" title="定位所选片段" data-tooltip="定位所选">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>
+            </button>
           </div>
           <label class="timeline-zoom">缩放
             <input id="timeline-zoom" type="range" min="4" max="180" value="58">
@@ -468,8 +484,10 @@
       rippleToggleBtn.classList.toggle("is-on", rippleDelete);
       rippleToggleBtn.textContent = rippleDelete ? "波纹删除" : "留空隐藏";
       freeDropToggleBtn.classList.toggle("is-on", freeDropEnabled);
-      freeDropToggleBtn.textContent = freeDropEnabled ? "自由留空" : "吸附插入";
-      freeDropToggleBtn.title = freeDropEnabled ? "拖动片段时按落点自动留出空白" : "拖动片段时紧贴插入，按 Alt 可临时自由留空";
+      const dropModeLabel = freeDropEnabled ? "自由留空" : "吸附插入";
+      freeDropToggleBtn.setAttribute("aria-label", dropModeLabel);
+      freeDropToggleBtn.dataset.tooltip = dropModeLabel;
+      freeDropToggleBtn.title = freeDropEnabled ? "自由留空：拖动片段时按落点留出空白" : "吸附插入：拖动片段时紧贴插入，按 Alt 临时留空";
       selectToolBtn.classList.toggle("is-on", timelineTool === "select");
       splitToolBtn.classList.toggle("is-on", timelineTool === "split");
       selectToolBtn.title = "选择片段、跳转播放头";

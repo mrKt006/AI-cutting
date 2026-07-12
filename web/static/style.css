@@ -1708,6 +1708,55 @@ legend {
   display: none !important;
 }
 
+.icon-tool {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  min-width: 34px;
+  height: 30px;
+  padding: 0;
+}
+
+.icon-tool svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+
+.icon-tool::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  z-index: 30;
+  width: max-content;
+  max-width: 150px;
+  padding: 5px 7px;
+  color: #e7eefb;
+  background: #182238;
+  border: 1px solid #334562;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.icon-tool:hover::after,
+.icon-tool:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 .sentence-panel.full-mode .filter-tabs,
 .sentence-panel.full-mode .sentence-action-bar,
 .sentence-panel.full-mode .selection-tools,
