@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>精修台 {{ job.id }}</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-47">
+  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-48">
 </head>
 <body class="editor-body">
   <div class="editor-shell">
@@ -17,7 +17,7 @@
           <small>{{ job.id }} / {{ item_id }}</small>
         </span>
       </a>
-      <div class="editor-transport" aria-label="播放控制">
+      <div class="editor-transport editor-shortcut-only" aria-label="播放控制">
         <button id="prev-btn" class="tool-button" type="button">上一句</button>
         <button id="play-btn" class="tool-button" type="button" aria-pressed="false">播放</button>
         <button id="play-selection-btn" class="tool-button editor-shortcut-only" type="button" aria-pressed="false">预览本句</button>
@@ -230,7 +230,7 @@
           <div id="clip-hint" class="clip-hint">选择视频片段后可精确调整</div>
         </section>
 
-        <section id="global-adjust-inspector" class="inspector-section">
+        <section id="global-adjust-inspector" class="inspector-section editor-shortcut-only">
           <div class="panel-head">
             <span>全局微调</span>
           </div>
@@ -239,11 +239,11 @@
           </label>
         </section>
 
-        <section class="inspector-section output-section">
+        <section id="output-inspector" class="inspector-section output-section" hidden>
           <div class="panel-head">
-            <span>精修输出</span>
+            <span>导出文件</span>
           </div>
-          <div id="render-status" class="render-status">还没有导出精修版</div>
+          <div id="render-status" class="render-status"></div>
           <div id="render-files" class="render-files"></div>
         </section>
       </aside>
@@ -327,6 +327,7 @@
     const subtitleOffset = document.getElementById("subtitle-offset");
     const renderStatus = document.getElementById("render-status");
     const renderFiles = document.getElementById("render-files");
+    const outputInspector = document.getElementById("output-inspector");
     const renderBtn = document.getElementById("render-btn");
     const playBtn = document.getElementById("play-btn");
     const playSelectionBtn = document.getElementById("play-selection-btn");
@@ -2949,6 +2950,7 @@
       const files = Array.isArray(project.output_files) ? project.output_files : [];
       renderFiles.innerHTML = "";
       if (files.length) {
+        outputInspector.hidden = false;
         renderStatus.textContent = "精修版已生成";
         files.forEach((file) => {
           const link = document.createElement("a");
@@ -2966,7 +2968,11 @@
       }
       const outputs = project.outputs || {};
       const entries = Object.entries(outputs);
-      if (!entries.length) return;
+      if (!entries.length) {
+        if (!renderStatus.textContent.trim()) outputInspector.hidden = true;
+        return;
+      }
+      outputInspector.hidden = false;
       renderStatus.textContent = "精修版已生成";
       entries.forEach(([key, value]) => {
         const path = String(value);
@@ -3505,6 +3511,7 @@
     undoBtn.addEventListener("click", undoEdit);
     redoBtn.addEventListener("click", redoEdit);
     renderBtn.addEventListener("click", async () => {
+      outputInspector.hidden = false;
       if (project.preview_source !== "clean-no-subtitles") {
         renderStatus.textContent = "当前任务没有无字幕精修源，请重新处理一次视频后再导出精修版。";
         return;
