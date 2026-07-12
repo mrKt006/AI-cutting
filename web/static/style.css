@@ -1723,7 +1723,8 @@ legend {
 
 .transcript-sentence.active {
   color: #f8fbff;
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(59, 130, 246, 0.2);
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.12);
 }
 
 .transcript-sentence.removed {
@@ -1747,12 +1748,14 @@ legend {
 }
 
 .transcript-token {
-  border-radius: 2px;
+  border-radius: 3px;
+  transition: color 80ms linear, background-color 80ms linear, box-shadow 80ms linear;
 }
 
 .transcript-token.is-speaking {
   color: #fff;
-  background: rgba(59, 130, 246, 0.32);
+  background: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.62), 0 0 12px rgba(59, 130, 246, 0.48);
 }
 
 .transcript-pause {

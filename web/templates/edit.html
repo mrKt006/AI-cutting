@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>精修台 {{ job.id }}</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-45">
+  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-46">
 </head>
 <body class="editor-body">
   <div class="editor-shell">
@@ -161,16 +161,16 @@
             </select>
           </label>
           <div class="field-pair dense">
-            <label>字号 <input id="cover-font-size" type="number" min="20" max="180"></label>
-            <label>颜色 <input id="cover-color" type="color"></label>
+            <label>字号 <input id="cover-font-size" type="number" min="20" max="180" value="76"></label>
+            <label>颜色 <input id="cover-color" type="color" value="#fff446"></label>
           </div>
           <div class="field-pair dense">
-            <label>X <input id="cover-position-x" type="number" step="1"></label>
-            <label>Y <input id="cover-position-y" type="number" step="1"></label>
+            <label>水平 X <input id="cover-position-x" type="number" step="1" value="0"></label>
+            <label>垂直 Y <input id="cover-position-y" type="number" step="1" value="-520"></label>
           </div>
           <div class="field-pair dense">
-            <label>缩放 <input id="cover-scale" type="number" min="20" max="200"></label>
-            <label>描边 <input id="cover-outline-width" type="number" min="0" max="16"></label>
+            <label>缩放 % <input id="cover-scale" type="number" min="20" max="200" value="100"></label>
+            <label>描边 <input id="cover-outline-width" type="number" min="0" max="16" value="4"></label>
           </div>
           <div class="sentence-action-bar">
             <button id="set-cover-frame-btn" class="primary-action" type="button">设为当前画面</button>
@@ -297,6 +297,14 @@
       position_y: document.getElementById("cover-position-y"),
       scale: document.getElementById("cover-scale"),
       outline_width: document.getElementById("cover-outline-width")
+    };
+    const coverStyleDefaults = {
+      font_size: 76,
+      primary_color: "#fff446",
+      position_x: 0,
+      position_y: -520,
+      scale: 100,
+      outline_width: 4
     };
     const titleText = document.getElementById("title-text");
     const showVideoTitle = document.getElementById("show-video-title");
@@ -2830,7 +2838,7 @@
 
     function currentCoverStyle() {
       const preset = stylePresets.find((item) => item.id === (project.cover.style_preset_id || project.style_preset_id)) || stylePresets[0] || {};
-      return {...(preset.cover_title || {}), ...(project.cover.style_override || {})};
+      return {...coverStyleDefaults, ...(preset.cover_title || {}), ...(project.cover.style_override || {})};
     }
 
     function setTranscriptMode(mode) {
@@ -3345,6 +3353,7 @@
       project.cover.style_preset_id = coverStylePreset.value;
       project.cover.style_override = {};
       setDirty();
+      renderInspector();
       scheduleCoverPreview(0);
     });
 
@@ -3366,6 +3375,7 @@
     document.getElementById("reset-cover-style-btn").addEventListener("click", () => {
       project.cover.style_override = {};
       setDirty();
+      renderInspector();
       scheduleCoverPreview(0);
     });
 
