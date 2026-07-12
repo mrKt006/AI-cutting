@@ -1326,7 +1326,7 @@ def _sanitize_title_clips(
                 "end": min(max(duration, 0.2), 3.0),
                 "text": title.get("video_text") or "",
                 "enabled": bool(title.get("show_video_title")),
-                "use_for_cover": True,
+                "use_for_cover": False,
             }
         ]
     cleaned: list[dict[str, Any]] = []
@@ -1336,18 +1336,26 @@ def _sanitize_title_clips(
             continue
         clip_id = _safe_clip_id(str(item.get("id") or f"t{index:03d}"), "t", index, used_ids)
         original = old_by_id.get(clip_id, {})
+        legacy_cover_link = bool(item.get("use_for_cover", original.get("use_for_cover", False)))
         start = _clamp_float(item.get("start", original.get("start", 0.0)), 0.0, duration)
         end = _clamp_float(item.get("end", original.get("end", min(duration, start + 3.0))), 0.0, duration)
         if end <= start:
             end = min(duration, start + 0.2)
+        text = str(item.get("text", original.get("text", title.get("video_text", ""))))[:800]
+        enabled = bool(item.get("enabled", original.get("enabled", False)))
+        if legacy_cover_link:
+            text = ""
+            enabled = False
+            title["video_text"] = ""
+            title["show_video_title"] = False
         cleaned.append(
             {
                 "id": clip_id,
                 "start": round(start, 3),
                 "end": round(end, 3),
-                "text": str(item.get("text", original.get("text", title.get("video_text", ""))))[:800],
-                "enabled": bool(item.get("enabled", original.get("enabled", False))),
-                "use_for_cover": bool(item.get("use_for_cover", original.get("use_for_cover", False))),
+                "text": text,
+                "enabled": enabled,
+                "use_for_cover": False,
             }
         )
     cleaned.sort(key=lambda item: (item["start"], item["end"], item["id"]))
@@ -1403,17 +1411,17 @@ def _render_edit_project(job_dir: Path, job: dict[str, Any], project: dict[str, 
     title_cues = _timeline_title_cues(project, edited_duration)
     _write_edit_ass(cues, title_cues, ass_path, width=width, height=height, preset=preset)
     cover = project.get("cover") if isinstance(project.get("cover"), dict) else {}
-    video_title = cover.get("text") or project.get("title", {}).get("cover_text") or item.get("title") or "精修视频"
-    output_video = edited_dir / f"{_safe_output_basename(video_title)}-精修.mp4"
+    cover_title = cover.get("text") or project.get("title", {}).get("cover_text") or item.get("title") or "精修视频"
+    output_video = edited_dir / f"{_safe_output_basename(cover_title)}-精修.mp4"
     burn_subtitles(no_subtitle, ass_path, output_video)
-    cover_path = edited_dir / f"{_safe_output_basename(video_title)}-精修封面.jpg"
+    cover_path = edited_dir / f"{_safe_output_basename(cover_title)}-精修封面.jpg"
     cover_preset = get_style_preset(cover.get("style_preset_id") or project.get("style_preset_id") or "default-white", STYLE_PRESETS_PATH)
     cover_style = dict(cover_preset.get("cover_title") or {})
     if isinstance(cover.get("style_override"), dict):
         cover_style.update(cover["style_override"])
     make_cover(
         no_subtitle,
-        video_title,
+        cover_title,
         cover_path,
         cover_style,
         frame_time=float(cover.get("frame_time") or 0.0),

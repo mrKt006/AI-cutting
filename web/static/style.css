@@ -1703,6 +1703,11 @@ legend {
   display: none !important;
 }
 
+.editor-shortcut-only,
+.editor-gesture-only {
+  display: none !important;
+}
+
 .sentence-panel.full-mode .filter-tabs,
 .sentence-panel.full-mode .sentence-action-bar,
 .sentence-panel.full-mode .selection-tools,

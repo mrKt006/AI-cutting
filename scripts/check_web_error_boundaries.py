@@ -54,6 +54,19 @@ def main() -> int:
     finally:
         os.environ["PATH"] = original_path
 
+    from web.app import _sanitize_title_clips
+
+    legacy_title = {"cover_text": "封面标题", "video_text": "封面标题", "show_video_title": True}
+    migrated_titles = _sanitize_title_clips(
+        [{"id": "t001", "start": 0, "end": 3, "text": "封面标题", "enabled": True, "use_for_cover": True}],
+        {},
+        10.0,
+        legacy_title,
+    )
+    if migrated_titles[0]["text"] or migrated_titles[0]["enabled"] or migrated_titles[0]["use_for_cover"]:
+        print("Legacy cover/video title separation check failed.")
+        return 1
+
     index_response = client.get("/")
     print(f"index page: {index_response.status_code}")
     index_required_fragments = ["FFmpeg", "火山", "开始处理"]

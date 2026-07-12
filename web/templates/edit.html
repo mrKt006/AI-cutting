@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>精修台 {{ job.id }}</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-46">
+  <link rel="stylesheet" href="/static/style.css?v=timeline-editor-47">
 </head>
 <body class="editor-body">
   <div class="editor-shell">
@@ -20,13 +20,13 @@
       <div class="editor-transport" aria-label="播放控制">
         <button id="prev-btn" class="tool-button" type="button">上一句</button>
         <button id="play-btn" class="tool-button" type="button" aria-pressed="false">播放</button>
-        <button id="play-selection-btn" class="tool-button" type="button" aria-pressed="false">预览本句</button>
+        <button id="play-selection-btn" class="tool-button editor-shortcut-only" type="button" aria-pressed="false">预览本句</button>
         <button id="next-btn" class="tool-button" type="button">下一句</button>
         <button id="split-playhead-btn" class="tool-button" type="button">播放头切割</button>
-        <button id="snap-toggle-btn" class="tool-button is-on" type="button">磁吸开</button>
-        <button id="ripple-toggle-btn" class="tool-button is-on" type="button">波纹删除</button>
-        <button id="undo-btn" class="tool-button" type="button" disabled>撤销</button>
-        <button id="redo-btn" class="tool-button" type="button" disabled>重做</button>
+        <button id="snap-toggle-btn" class="tool-button is-on editor-shortcut-only" type="button">磁吸开</button>
+        <button id="ripple-toggle-btn" class="tool-button is-on editor-shortcut-only" type="button">波纹删除</button>
+        <button id="undo-btn" class="tool-button editor-shortcut-only" type="button" disabled>撤销</button>
+        <button id="redo-btn" class="tool-button editor-shortcut-only" type="button" disabled>重做</button>
       </div>
       <div class="editor-actions">
         <span id="save-state" class="save-state">已保存</span>
@@ -49,6 +49,8 @@
         <span>播放头切割</span><kbd>B</kbd>
         <span>保存</span><kbd>Ctrl + S</kbd>
         <span>撤销 / 重做</span><kbd>Ctrl + Z / Y</kbd>
+        <span>磁吸开关</span><kbd>M</kbd>
+        <span>波纹 / 留空删除</span><kbd>Shift + R</kbd>
         <span>全选当前列表</span><kbd>Ctrl + A</kbd>
         <span>移动所选字幕</span><kbd>Alt + ← / →</kbd>
         <span>标题微移</span><kbd>Alt + Shift + ← / →</kbd>
@@ -189,21 +191,21 @@
             <input id="show-video-title" type="checkbox">
             <span>显示视频内标题</span>
           </label>
-          <div class="sentence-action-bar title-action-bar" aria-label="标题片段操作">
+          <div class="sentence-action-bar title-action-bar editor-gesture-only" aria-label="标题片段操作">
             <button id="add-title-clip-btn" class="tool-button" type="button">添加标题</button>
             <button id="delete-title-clip-btn" class="tool-button" type="button">删除标题</button>
           </div>
-          <div class="field-pair dense">
+          <div class="field-pair dense editor-gesture-only">
             <label>开始 <input id="title-start" type="number" step="0.05" min="0"></label>
             <label>结束 <input id="title-end" type="number" step="0.05" min="0"></label>
           </div>
-          <div class="clip-step-grid" aria-label="标题步进微调">
+          <div class="clip-step-grid editor-gesture-only" aria-label="标题步进微调">
             <button id="title-nudge-left-btn" class="tool-button" type="button">左移 0.05</button>
             <button id="title-nudge-right-btn" class="tool-button" type="button">右移 0.05</button>
           </div>
         </section>
 
-        <section class="inspector-section">
+        <section id="clip-adjust-inspector" class="inspector-section editor-gesture-only">
           <div class="panel-head">
             <span>片段微调</span>
             <strong id="clip-range">--</strong>
@@ -228,7 +230,7 @@
           <div id="clip-hint" class="clip-hint">选择视频片段后可精确调整</div>
         </section>
 
-        <section class="inspector-section">
+        <section id="global-adjust-inspector" class="inspector-section">
           <div class="panel-head">
             <span>全局微调</span>
           </div>
@@ -290,6 +292,7 @@
     const coverStylePreset = document.getElementById("cover-style-preset");
     const coverFrameTime = document.getElementById("cover-frame-time");
     const coverPreviewStatus = document.getElementById("cover-preview-status");
+    const globalAdjustInspector = document.getElementById("global-adjust-inspector");
     const coverStyleFields = {
       font_size: document.getElementById("cover-font-size"),
       primary_color: document.getElementById("cover-color"),
@@ -398,7 +401,7 @@
         end: Math.min(Math.max(Number(project.duration || 0.2), 0.2), 3),
         text: project.title.video_text || "",
         enabled: Boolean(project.title.show_video_title),
-        use_for_cover: true,
+        use_for_cover: false,
       }];
       project.title_clips.forEach((clip, index) => {
         clip.id = clip.id || `t${String(index + 1).padStart(3, "0")}`;
@@ -2817,6 +2820,7 @@
       coverFrameTime.textContent = formatPreciseTime(project.cover.frame_time || 0);
       coverInspector.hidden = stageMode !== "cover";
       document.getElementById("video-title-inspector").hidden = stageMode === "cover";
+      globalAdjustInspector.hidden = stageMode === "cover";
       titleText.value = clip.text || project.title.video_text || "";
       showVideoTitle.checked = Boolean(clip.enabled);
       titleStart.value = Number(clip.start || 0).toFixed(2);
@@ -3716,6 +3720,14 @@
         else setSelectedClipEdgeToPlayhead("end");
       } else if (event.key.toLowerCase() === "h") {
         hideSelectedSubtitle();
+      } else if (event.key.toLowerCase() === "m") {
+        snapEnabled = !snapEnabled;
+        updateModeButtons();
+        setTimelineStatus(snapEnabled ? "磁吸已开启" : "磁吸已关闭", 1000);
+      } else if (event.shiftKey && event.key.toLowerCase() === "r") {
+        rippleDelete = !rippleDelete;
+        updateModeButtons();
+        setTimelineStatus(rippleDelete ? "波纹删除已开启" : "删除后保留空隙", 1200);
       } else if (event.key.toLowerCase() === "r") {
         recoverSelectedSegment();
       } else if (event.key.toLowerCase() === "t") {
