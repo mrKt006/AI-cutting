@@ -57,10 +57,10 @@ WINDOWS_TOOL_DIRS = [
 ]
 
 PRESETS = {
-    "natural": {"label": "自然", "noise": "-30dB", "min_silence": 0.45, "padding": 0.12},
-    "standard": {"label": "标准", "noise": "-28dB", "min_silence": 0.35, "padding": 0.10},
-    "compact": {"label": "紧凑", "noise": "-26dB", "min_silence": 0.30, "padding": 0.08},
-    "aggressive": {"label": "激进", "noise": "-24dB", "min_silence": 0.25, "padding": 0.06},
+    "natural": {"label": "保守", "decision_label": "AI 保守决策", "noise": "-30dB", "min_silence": 0.45, "padding": 0.12, "auto_edit_mode": "conservative"},
+    "standard": {"label": "标准", "decision_label": "AI 标准决策", "noise": "-28dB", "min_silence": 0.35, "padding": 0.10, "auto_edit_mode": "standard"},
+    "compact": {"label": "紧凑", "decision_label": "AI 标准决策", "noise": "-26dB", "min_silence": 0.30, "padding": 0.08, "auto_edit_mode": "standard"},
+    "aggressive": {"label": "激进", "decision_label": "AI 直接精简", "noise": "-24dB", "min_silence": 0.25, "padding": 0.06, "auto_edit_mode": "aggressive"},
 }
 
 STAGES = {
@@ -449,6 +449,7 @@ async def create_job(
     params = {
         "subtitle_source": "volcengine",
         "preset": preset,
+        "auto_edit_mode": PRESETS[preset]["auto_edit_mode"],
         "style_preset_id": style_preset["id"],
         "style_preset_name": style_preset["name"],
         "subtitle_delay": float(settings.get("subtitle_delay", 0.0)),
@@ -564,6 +565,7 @@ async def api_save_edit_project(job_id: str, request: Request, item: str = "001"
         payload = await _read_json_object(request, source="保存精修项目", required=True)
         project = _sanitize_edit_project({**existing, **payload}, existing)
         _write_edit_project(job_dir, project)
+        _write_training_feedback(job_dir, existing, project)
         return {"ok": True, "project": project}
     except HTTPException:
         raise
@@ -834,6 +836,8 @@ def _run_job(job_id: str) -> None:
                 str(STYLE_PRESETS_PATH),
                 "--editor-work-dir",
                 str(job_dir / "work" / item["id"]),
+                "--auto-edit-mode",
+                params.get("auto_edit_mode") or "standard",
             ]
             if params["detect_disfluency"]:
                 cmd.append("--detect-disfluency")
@@ -1391,6 +1395,95 @@ def _clamp_float(value: Any, minimum: float, maximum: float) -> float:
 def _write_edit_project(job_dir: Path, project: dict[str, Any]) -> None:
     path = _edit_project_path(job_dir, project.get("item_id") or "001")
     path.write_text(json.dumps(project, ensure_ascii=True, indent=2), encoding="utf-8")
+
+
+def _write_training_feedback(job_dir: Path, initial: dict[str, Any], final: dict[str, Any]) -> None:
+    item_id = str(final.get("item_id") or "001")
+    work_dir = job_dir / "work" / item_id
+    work_dir.mkdir(parents=True, exist_ok=True)
+    baseline_path = work_dir / "auto_edit_baseline.json"
+    feedback_path = work_dir / "training_feedback.json"
+    if baseline_path.exists():
+        try:
+            baseline = read_json_file(baseline_path)
+        except RuntimeError:
+            baseline = _feedback_project_snapshot(initial)
+    else:
+        baseline = _feedback_project_snapshot(initial)
+        baseline_path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    raw_transcript: list[dict[str, Any]] = []
+    for candidate in (work_dir / "raw_transcript_segments.json", work_dir / "volcengine_segments.json"):
+        if candidate.exists():
+            try:
+                value = read_json_file(candidate)
+                if isinstance(value, list):
+                    raw_transcript = value
+                    break
+            except RuntimeError:
+                continue
+    analysis: dict[str, Any] = {}
+    analysis_path = work_dir / "transcript_analysis.json"
+    if analysis_path.exists():
+        try:
+            value = read_json_file(analysis_path)
+            if isinstance(value, dict):
+                analysis = value
+        except RuntimeError:
+            pass
+    edit_plan: dict[str, Any] = {}
+    edit_plan_path = work_dir / "auto_edit_plan.json"
+    if edit_plan_path.exists():
+        try:
+            value = read_json_file(edit_plan_path)
+            if isinstance(value, dict):
+                edit_plan = value
+        except RuntimeError:
+            pass
+    final_snapshot = _feedback_project_snapshot(final)
+    before = {item["id"]: item for item in baseline.get("sentences", [])}
+    after = {item["id"]: item for item in final_snapshot.get("sentences", [])}
+    feedback = {
+        "version": 1,
+        "job_id": job_dir.name,
+        "item_id": item_id,
+        "updated_at": _now(),
+        "raw_transcript": raw_transcript,
+        "ai_decision": analysis,
+        "auto_edit_plan": edit_plan,
+        "initial_result": baseline,
+        "final_result": final_snapshot,
+        "user_changes": {
+            "restored_sentence_ids": [key for key, item in before.items() if item.get("remove_video") and not after.get(key, {}).get("remove_video")],
+            "removed_sentence_ids": [key for key, item in after.items() if item.get("remove_video") and not before.get(key, {}).get("remove_video")],
+            "text_edits": [
+                {"sentence_id": key, "before": before.get(key, {}).get("text", ""), "after": item.get("text", "")}
+                for key, item in after.items()
+                if key in before and item.get("text") != before[key].get("text")
+            ],
+        },
+    }
+    feedback_path.write_text(json.dumps(feedback, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _feedback_project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "style_preset_id": str(project.get("style_preset_id") or ""),
+        "sentences": [
+            {
+                "id": str(item.get("id") or ""),
+                "start": float(item.get("start") or 0.0),
+                "end": float(item.get("end") or 0.0),
+                "text": str(item.get("text") or ""),
+                "original_text": str(item.get("original_text") or ""),
+                "enabled": bool(item.get("enabled", True)),
+                "remove_video": bool(item.get("remove_video", False)),
+                "timeline_order": int(item.get("timeline_order") or 0),
+            }
+            for item in project.get("sentences", [])
+            if isinstance(item, dict) and not item.get("synthetic_gap")
+        ],
+    }
 
 
 def _render_edit_project(job_dir: Path, job: dict[str, Any], project: dict[str, Any]) -> list[dict[str, str]]:

@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import warnings
+import tempfile
 from pathlib import Path
 
 warnings.filterwarnings("ignore", message=r"Using `httpx` with `starlette\.testclient` is deprecated.*")
@@ -13,7 +14,7 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from web.app import app  # noqa: E402
+from web.app import _write_training_feedback, app  # noqa: E402
 
 
 def _find_job_id() -> str | None:
@@ -66,6 +67,33 @@ def main() -> int:
     if migrated_titles[0]["text"] or migrated_titles[0]["enabled"] or migrated_titles[0]["use_for_cover"]:
         print("Legacy cover/video title separation check failed.")
         return 1
+
+    with tempfile.TemporaryDirectory(prefix="feedback-check-", dir=ROOT) as tmp:
+        job_dir = Path(tmp) / "job-test"
+        work_dir = job_dir / "work" / "001"
+        work_dir.mkdir(parents=True)
+        (work_dir / "raw_transcript_segments.json").write_text(
+            json.dumps([{"text": "我我们开始", "tokens": [{"id": "t1", "text": "我"}]}], ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (work_dir / "transcript_analysis.json").write_text(
+            json.dumps({"status": "ok", "auto_edit_mode": "standard", "delete_ranges": [{"token_ids": ["t1"]}]}),
+            encoding="utf-8",
+        )
+        (work_dir / "auto_edit_plan.json").write_text(
+            json.dumps({"keep_segments": [{"start": 0.2, "end": 2.0}]}), encoding="utf-8"
+        )
+        initial = {"item_id": "001", "sentences": [{"id": "s1", "text": "开始", "start": 0, "end": 1}]}
+        final = {"item_id": "001", "sentences": [{"id": "s1", "text": "现在开始", "start": 0, "end": 1}]}
+        _write_training_feedback(job_dir, initial, final)
+        feedback_text = (work_dir / "training_feedback.json").read_text(encoding="utf-8")
+        feedback = json.loads(feedback_text)
+        if feedback["user_changes"]["text_edits"][0]["after"] != "现在开始" or "api_key" in feedback_text.lower():
+            print("Training feedback persistence check failed.")
+            return 1
+        if not feedback.get("auto_edit_plan", {}).get("keep_segments"):
+            print("Training feedback edit-plan check failed.")
+            return 1
 
     index_response = client.get("/")
     print(f"index page: {index_response.status_code}")

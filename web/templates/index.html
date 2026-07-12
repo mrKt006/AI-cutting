@@ -91,7 +91,7 @@
                   <input type="radio" name="preset" value="{{ key }}" {{ 'checked' if key == 'standard' else '' }}>
                   <span>
                     <strong>{{ preset.label }}</strong>
-                    <small>{{ preset.noise }} / 停顿 {{ preset.min_silence }}s / 留白 {{ preset.padding }}s</small>
+                    <small>{{ preset.decision_label }} · 停顿 {{ preset.min_silence }}s</small>
                   </span>
                 </label>
                 {% endfor %}

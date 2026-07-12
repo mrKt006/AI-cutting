@@ -9,6 +9,7 @@ jobs/
 input/
 output/
 models/
+training_data/
 web/static/style_previews/
 
 # Uploaded/generated media

@@ -10,7 +10,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from cut_silence import Segment, auto_cut
+from cut_silence import Segment, build_keep_segments, cut_video, detect_silences
 from disfluency import detect_repeated_utterances
 from ffmpeg_utils import media_duration, require_tool, video_size
 from make_cover import make_cover
@@ -46,6 +46,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--llm-base-url", default=None, help="OpenAI-compatible API base URL")
     parser.add_argument("--llm-model", default=None, help="OpenAI-compatible model name")
     parser.add_argument("--llm-timeout", type=float, default=60.0, help="LLM request timeout")
+    parser.add_argument("--auto-edit-mode", choices=["conservative", "standard", "aggressive"], default="standard", help="automatic AI editing strength")
     parser.add_argument("--export-subtitles", action="store_true", help="keep subtitle.ass and subtitle.srt in output")
     parser.add_argument("--export-asr-json", action="store_true", help="keep Volcengine segment JSON in output")
     parser.add_argument("--export-report", action="store_true", help="keep edit_report.json in output")
@@ -75,25 +76,9 @@ def main() -> int:
 
         with tempfile.TemporaryDirectory(prefix="ai-cutting-") as tmp:
             working_video = Path(tmp) / "cut.mp4"
-            if args.no_cut:
-                shutil.copyfile(video, working_video)
-                original_duration = media_duration(video)
-                output_duration = original_duration
-                keep_segments = [Segment(0.0, original_duration)]
-                removed_segments: list[Segment] = []
-            else:
-                keep_segments, removed_segments, original_duration, output_duration = auto_cut(
-                    video=video,
-                    output=working_video,
-                    noise=args.noise,
-                    min_duration=args.min_silence,
-                    padding=args.padding,
-                )
-
-            width, height = video_size(working_video)
-            subtitle_duration = max(0.2, output_duration - 0.08)
-            external_segments, raw_asr = _transcribe_cut_video_with_volcengine(
-                working_video=working_video,
+            original_duration = media_duration(video)
+            raw_segments, raw_asr = _transcribe_cut_video_with_volcengine(
+                working_video=video,
                 tmp_dir=Path(tmp),
                 appid=args.volc_appid,
                 token=args.volc_token,
@@ -101,7 +86,21 @@ def main() -> int:
                 max_lines=args.volc_max_lines,
                 timeout=args.volc_timeout,
             )
-            analysis = _run_transcript_analysis(external_segments, args)
+            analysis = _run_transcript_analysis(raw_segments, args)
+            ai_removed, removed_token_ids = _ai_removal_segments(raw_segments, analysis, args.auto_edit_mode)
+            if args.no_cut:
+                removed_segments = []
+                keep_segments = [Segment(0.0, original_duration)]
+            else:
+                silences = detect_silences(video, args.noise, args.min_silence)
+                _, silence_removed = build_keep_segments(original_duration, silences, args.padding)
+                removed_segments = _merge_removed_segments([*silence_removed, *ai_removed], original_duration)
+                keep_segments = _keep_from_removed(original_duration, removed_segments)
+            cut_video(video, working_video, keep_segments)
+            output_duration = media_duration(working_video)
+            width, height = video_size(working_video)
+            subtitle_duration = max(0.2, output_duration - 0.08)
+            external_segments = _map_retained_tokens_to_cut_timeline(raw_segments, keep_segments, removed_token_ids)
             external_segments = _intelligent_segments(
                 external_segments,
                 subtitle_style,
@@ -119,6 +118,24 @@ def main() -> int:
                 )
                 (editor_work_dir / "transcript_analysis.json").write_text(
                     json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                _write_timing_segments(raw_segments, editor_work_dir / "raw_transcript_segments.json")
+                (editor_work_dir / "auto_edit_plan.json").write_text(
+                    json.dumps(
+                        {
+                            "version": 1,
+                            "auto_edit_mode": args.auto_edit_mode,
+                            "original_duration": round(original_duration, 3),
+                            "output_duration": round(output_duration, 3),
+                            "keep_segments": [_segment_dict(segment) for segment in keep_segments],
+                            "removed_segments": [_segment_dict(segment) for segment in removed_segments],
+                            "ai_delete_ranges": analysis.get("applied_delete_ranges", []),
+                            "skipped_ai_delete_ranges": analysis.get("skipped_delete_ranges", []),
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
                 )
             if args.export_asr_json:
                 _write_timing_segments(external_segments, output_dir / "volcengine_segments.json")
@@ -179,9 +196,10 @@ def main() -> int:
                 "external_segment_count": len(external_segments),
                 "no_cut": args.no_cut,
                 "detect_disfluency": args.detect_disfluency,
-                "timing_strategy": "cut video transcribed by Volcengine ASR",
+                "timing_strategy": "original video ASR followed by AI and silence edit decision mapping",
                 "llm_enabled": bool(args.llm_enabled),
                 "llm_status": analysis.get("status"),
+                "auto_edit_mode": args.auto_edit_mode,
             },
             "disfluency": {
                 "repeat_candidates": disfluency_findings,
@@ -281,6 +299,116 @@ def _map_time_to_cut_timeline(time_value: float, keep_segments: list[Segment], p
     return elapsed
 
 
+def _ai_removal_segments(
+    segments: list[TimingSegment], analysis: dict, mode: str
+) -> tuple[list[Segment], set[str]]:
+    tokens = flatten_segment_tokens(segments)
+    token_index = {str(token.get("id")): index for index, token in enumerate(tokens)}
+    policies = {
+        "conservative": ({"stutter", "false_start", "exact_repeat"}, 0.9),
+        "standard": ({"stutter", "false_start", "exact_repeat", "semantic_repeat", "filler"}, 0.82),
+        "aggressive": ({"stutter", "false_start", "exact_repeat", "semantic_repeat", "filler", "redundant"}, 0.72),
+    }
+    allowed_types, threshold = policies.get(mode, policies["standard"])
+    removed_ids: set[str] = set()
+    removed: list[Segment] = []
+    applied: list[dict] = []
+    skipped: list[dict] = []
+    for operation in analysis.get("delete_ranges", []):
+        kind = str(operation.get("type") or "redundant")
+        confidence = float(operation.get("confidence", 0))
+        ids = [str(item) for item in operation.get("token_ids", []) if str(item) in token_index]
+        if kind not in allowed_types or confidence < threshold or not ids:
+            skipped.append({**operation, "skip_reason": "policy_or_confidence"})
+            continue
+        indices = sorted({token_index[token_id] for token_id in ids})
+        runs: list[list[int]] = []
+        for index in indices:
+            if not runs or index != runs[-1][-1] + 1:
+                runs.append([index])
+            else:
+                runs[-1].append(index)
+        for run in runs:
+            first = tokens[run[0]]
+            last = tokens[run[-1]]
+            start = max(0.0, float(first.get("start", 0)) - 0.025)
+            end = max(start + 0.04, float(last.get("end", start)) + 0.025)
+            removed.append(Segment(start, end))
+            run_ids = [str(tokens[index].get("id")) for index in run]
+            removed_ids.update(run_ids)
+            applied.append(
+                {
+                    **operation,
+                    "token_ids": run_ids,
+                    "start": round(start, 3),
+                    "end": round(end, 3),
+                }
+            )
+    analysis["auto_edit_mode"] = mode
+    analysis["applied_delete_ranges"] = applied
+    analysis["skipped_delete_ranges"] = skipped
+    return removed, removed_ids
+
+
+def _merge_removed_segments(segments: list[Segment], duration: float) -> list[Segment]:
+    ordered = sorted(
+        (Segment(max(0.0, item.start), min(duration, item.end)) for item in segments if item.end > item.start),
+        key=lambda item: item.start,
+    )
+    merged: list[Segment] = []
+    for segment in ordered:
+        if merged and segment.start <= merged[-1].end + 0.04:
+            merged[-1] = Segment(merged[-1].start, max(merged[-1].end, segment.end))
+        else:
+            merged.append(segment)
+    return [item for item in merged if item.duration >= 0.04]
+
+
+def _keep_from_removed(duration: float, removed: list[Segment]) -> list[Segment]:
+    keep: list[Segment] = []
+    cursor = 0.0
+    for segment in removed:
+        if segment.start > cursor + 0.04:
+            keep.append(Segment(cursor, segment.start))
+        cursor = max(cursor, segment.end)
+    if cursor < duration - 0.04:
+        keep.append(Segment(cursor, duration))
+    return keep or [Segment(0.0, duration)]
+
+
+def _map_retained_tokens_to_cut_timeline(
+    segments: list[TimingSegment], keep_segments: list[Segment], removed_token_ids: set[str]
+) -> list[TimingSegment]:
+    mapped_tokens: list[dict] = []
+    for token in flatten_segment_tokens(segments):
+        token_id = str(token.get("id") or "")
+        if token_id in removed_token_ids:
+            continue
+        start = float(token.get("start", 0))
+        end = float(token.get("end", start))
+        center = (start + end) / 2
+        if not any(segment.start <= center <= segment.end for segment in keep_segments):
+            continue
+        mapped = dict(token)
+        mapped["source_start"] = start
+        mapped["source_end"] = end
+        mapped["start"] = _map_time_to_cut_timeline(start, keep_segments, prefer_next=True)
+        mapped["end"] = _map_time_to_cut_timeline(end, keep_segments, prefer_next=False)
+        if mapped["end"] <= mapped["start"]:
+            mapped["end"] = mapped["start"] + max(0.04, min(0.3, end - start))
+        mapped_tokens.append(mapped)
+    if not mapped_tokens:
+        return _map_segments_to_cut_timeline(segments, keep_segments)
+    return [
+        TimingSegment(
+            start=float(mapped_tokens[0]["start"]),
+            end=float(mapped_tokens[-1]["end"]),
+            text="".join(str(token.get("text") or "") for token in mapped_tokens),
+            tokens=tuple(mapped_tokens),
+        )
+    ]
+
+
 def _transcribe_cut_video_with_volcengine(
     working_video: Path,
     tmp_dir: Path,
@@ -331,7 +459,7 @@ def _transcribe_cut_video_with_volcengine(
 
 def _run_transcript_analysis(segments: list[TimingSegment], args: argparse.Namespace) -> dict:
     if not args.llm_enabled:
-        return {"status": "skipped", "reason": "disabled", "corrections": [], "break_hints": [], "repeat_candidates": []}
+        return {"status": "skipped", "reason": "disabled", "corrections": [], "break_hints": [], "repeat_candidates": [], "delete_ranges": [], "final_sentences": []}
     return analyze_transcript(
         flatten_segment_tokens(segments),
         base_url=str(args.llm_base_url or os.environ.get("AI_CUTTING_LLM_BASE_URL") or ""),

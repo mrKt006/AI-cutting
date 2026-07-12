@@ -16,7 +16,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from llm_analysis import analyze_transcript, apply_high_confidence_corrections  # noqa: E402
 from subtitle_layout import build_layout_context, measure_text, segment_tokens, tokens_from_text  # noqa: E402
 from volc_asr import convert_utterances  # noqa: E402
-from make_subtitle import SubtitleCue  # noqa: E402
+from make_subtitle import SubtitleCue, TimingSegment  # noqa: E402
+from main import _ai_removal_segments, _keep_from_removed, _map_retained_tokens_to_cut_timeline  # noqa: E402
 from style_presets import get_style_preset  # noqa: E402
 from web.app import _write_edit_ass  # noqa: E402
 
@@ -76,13 +77,71 @@ def main() -> int:
         def read(self):
             return self.buffer.read()
 
-    success_payload = {"choices": [{"message": {"content": '{"corrections":[],"break_hints":[],"repeat_candidates":[]}'}}]}
+    delete_id = correction_tokens[0]["id"]
+    success_payload = {
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "corrections": [],
+                            "break_hints": [],
+                            "repeat_candidates": [],
+                            "delete_ranges": [
+                                {
+                                    "token_ids": [delete_id],
+                                    "type": "stutter",
+                                    "confidence": 0.97,
+                                    "reason": "重复起音",
+                                }
+                            ],
+                        },
+                        ensure_ascii=False,
+                    )
+                }
+            }
+        ]
+    }
     with patch("urllib.request.urlopen", return_value=FakeResponse(success_payload)):
-        assert analyze_transcript(correction_tokens, base_url="https://example.test/v1", model="test", api_key="secret")["status"] == "ok"
+        analyzed = analyze_transcript(correction_tokens, base_url="https://example.test/v1", model="test", api_key="secret")
+        assert analyzed["status"] == "ok"
+        assert analyzed["delete_ranges"][0]["type"] == "stutter"
     with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
         failed = analyze_transcript(correction_tokens, base_url="https://example.test/v1", model="test", api_key="secret")
         assert failed["status"] == "skipped"
         assert "secret" not in json.dumps(failed)
+
+    edit_tokens = tokens_from_text("我我们开始", 0.0, 2.0, prefix="edit")
+    edit_segment = TimingSegment(0.0, 2.0, "我我们开始", tokens=tuple(edit_tokens))
+    deletion = {
+        "delete_ranges": [
+            {
+                "token_ids": [edit_tokens[0]["id"]],
+                "type": "stutter",
+                "confidence": 0.98,
+                "reason": "重复起音",
+            }
+        ]
+    }
+    removed, removed_ids = _ai_removal_segments([edit_segment], deletion, "standard")
+    assert removed and edit_tokens[0]["id"] in removed_ids
+    keep = _keep_from_removed(2.0, removed)
+    mapped = _map_retained_tokens_to_cut_timeline([edit_segment], keep, removed_ids)
+    assert edit_tokens[0]["id"] not in {token["id"] for token in mapped[0].tokens}
+    assert mapped[0].end < 2.0
+
+    conservative = {
+        "delete_ranges": [
+            {
+                "token_ids": [edit_tokens[-1]["id"]],
+                "type": "semantic_repeat",
+                "confidence": 0.95,
+                "reason": "语义重复",
+            }
+        ]
+    }
+    conservative_removed, _ = _ai_removal_segments([edit_segment], conservative, "conservative")
+    assert not conservative_removed
 
     with tempfile.TemporaryDirectory(prefix="subtitle-style-") as tmp:
         ass_path = Path(tmp) / "styled.ass"
