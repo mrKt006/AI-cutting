@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from cut_silence import Segment, build_keep_segments, cut_video, detect_silences
+from ai_layout import layout_tokens_with_ai
 from disfluency import detect_repeated_utterances
 from ffmpeg_utils import media_duration, require_tool, video_size
 from make_cover import make_cover
@@ -18,9 +19,12 @@ from llm_analysis import analyze_transcript, apply_high_confidence_corrections
 from make_subtitle import TimingSegment, make_cues_from_segmented_timings, write_ass, write_srt
 from render_video import burn_subtitles
 from style_presets import get_style_preset
-from subtitle_layout import flatten_segment_tokens, segment_tokens
+from subtitle_layout import flatten_segment_tokens, tokens_from_text, wrap_title_text
 from text_utils import read_text, strip_keyword_marks
 from volc_asr import convert_utterances, extract_wav, query_until_done, submit_audio
+
+
+LLM_CACHE_DIR = Path(__file__).resolve().parents[1] / "web" / ".cache" / "llm"
 
 
 def parse_args() -> argparse.Namespace:
@@ -71,6 +75,7 @@ def main() -> int:
         output_basename = _safe_output_basename(args.output_basename or f"{title}-{datetime.now():%Y%m%d}")
         style_preset = get_style_preset(args.style_preset, args.style_presets_file)
         subtitle_style = style_preset.get("subtitle", {})
+        video_title_style = style_preset.get("video_title", {})
         cover_title_style = style_preset.get("cover_title", {})
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -94,11 +99,23 @@ def main() -> int:
             else:
                 silences = detect_silences(video, args.noise, args.min_silence)
                 _, silence_removed = build_keep_segments(original_duration, silences, args.padding)
+                silence_removed = _protect_speech_from_silence(silence_removed, raw_segments, removed_token_ids)
                 removed_segments = _merge_removed_segments([*silence_removed, *ai_removed], original_duration)
                 keep_segments = _keep_from_removed(original_duration, removed_segments)
             cut_video(video, working_video, keep_segments)
             output_duration = media_duration(working_video)
             width, height = video_size(working_video)
+            title_lines = [line.strip() for line in title.replace("\r", "").split("\n") if line.strip()]
+            title_tokens = [
+                token
+                for line_index, line in enumerate(title_lines or [title], start=1)
+                for token in tokens_from_text(line, 0.0, 1.0, prefix=f"title-{line_index}")
+            ]
+            title_analysis = _run_transcript_analysis(
+                [TimingSegment(0.0, 1.0, title, tuple(title_tokens))], args
+            )
+            video_title_text, video_title_layout = _intelligent_title(title, video_title_style, width, height, title_analysis, args)
+            cover_title_text, cover_title_layout = _intelligent_title(title, cover_title_style, width, height, title_analysis, args)
             subtitle_duration = max(0.2, output_duration - 0.08)
             external_segments = _map_retained_tokens_to_cut_timeline(raw_segments, keep_segments, removed_token_ids)
             external_segments = _intelligent_segments(
@@ -107,6 +124,7 @@ def main() -> int:
                 width,
                 height,
                 analysis,
+                args,
             )
             if args.editor_work_dir:
                 editor_work_dir = Path(args.editor_work_dir)
@@ -118,6 +136,21 @@ def main() -> int:
                 )
                 (editor_work_dir / "transcript_analysis.json").write_text(
                     json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
+                (editor_work_dir / "title_layout.json").write_text(
+                    json.dumps(
+                        {
+                            "source_text": title,
+                            "video_text": video_title_text,
+                            "cover_text": cover_title_text,
+                            "analysis": title_analysis,
+                            "video_layout": video_title_layout,
+                            "cover_layout": cover_title_layout,
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
                 )
                 _write_timing_segments(raw_segments, editor_work_dir / "raw_transcript_segments.json")
                 (editor_work_dir / "auto_edit_plan.json").write_text(
@@ -144,14 +177,26 @@ def main() -> int:
             subtitle_ass = output_dir / "subtitle.ass" if args.export_subtitles else Path(tmp) / "subtitle.ass"
             if args.export_subtitles:
                 write_srt(cues, subtitle_srt)
-            write_ass(cues, subtitle_ass, width=width, height=height, style=subtitle_style)
+            title_end = output_duration
+            if video_title_style.get("display_mode") == "intro":
+                title_end = min(output_duration, max(0.2, float(video_title_style.get("display_duration", 3.0))))
+            write_ass(
+                cues,
+                subtitle_ass,
+                width=width,
+                height=height,
+                style=subtitle_style,
+                title_text=video_title_text,
+                title_style=video_title_style,
+                title_end=title_end,
+            )
             disfluency_findings = detect_repeated_utterances(external_segments) if args.detect_disfluency and args.export_report else []
 
             final_video = output_dir / f"{output_basename}.mp4"
             burn_subtitles(working_video, subtitle_ass, final_video)
             final_duration = media_duration(final_video)
             cover_path = output_dir / f"{output_basename}-\u5c01\u9762.jpg"
-            make_cover(working_video, title, cover_path, style=cover_title_style)
+            make_cover(working_video, cover_title_text, cover_path, style=cover_title_style)
 
         report = {
             "input": {
@@ -364,6 +409,37 @@ def _merge_removed_segments(segments: list[Segment], duration: float) -> list[Se
     return [item for item in merged if item.duration >= 0.04]
 
 
+def _protect_speech_from_silence(
+    silences: list[Segment], segments: list[TimingSegment], removed_token_ids: set[str]
+) -> list[Segment]:
+    protected = [
+        Segment(max(0.0, float(token.get("start", 0)) - 0.015), float(token.get("end", 0)) + 0.015)
+        for token in flatten_segment_tokens(segments)
+        if str(token.get("id") or "") not in removed_token_ids
+        and float(token.get("end", 0)) > float(token.get("start", 0))
+    ]
+    result: list[Segment] = []
+    for silence in silences:
+        pieces = [silence]
+        for speech in protected:
+            if speech.end <= silence.start or speech.start >= silence.end:
+                continue
+            next_pieces: list[Segment] = []
+            for piece in pieces:
+                if speech.end <= piece.start or speech.start >= piece.end:
+                    next_pieces.append(piece)
+                    continue
+                if speech.start > piece.start:
+                    next_pieces.append(Segment(piece.start, min(piece.end, speech.start)))
+                if speech.end < piece.end:
+                    next_pieces.append(Segment(max(piece.start, speech.end), piece.end))
+            pieces = next_pieces
+            if not pieces:
+                break
+        result.extend(piece for piece in pieces if piece.duration >= 0.04)
+    return result
+
+
 def _keep_from_removed(duration: float, removed: list[Segment]) -> list[Segment]:
     keep: list[Segment] = []
     cursor = 0.0
@@ -459,13 +535,14 @@ def _transcribe_cut_video_with_volcengine(
 
 def _run_transcript_analysis(segments: list[TimingSegment], args: argparse.Namespace) -> dict:
     if not args.llm_enabled:
-        return {"status": "skipped", "reason": "disabled", "corrections": [], "break_hints": [], "repeat_candidates": [], "delete_ranges": [], "final_sentences": []}
+        return {"status": "skipped", "reason": "disabled", "corrections": [], "break_hints": [], "allowed_breaks": [], "forbidden_breaks": [], "protected_spans": [], "repeat_candidates": [], "delete_ranges": [], "final_sentences": []}
     return analyze_transcript(
         flatten_segment_tokens(segments),
         base_url=str(args.llm_base_url or os.environ.get("AI_CUTTING_LLM_BASE_URL") or ""),
         model=str(args.llm_model or os.environ.get("AI_CUTTING_LLM_MODEL") or ""),
         api_key=str(os.environ.get("AI_CUTTING_LLM_API_KEY") or ""),
         timeout=float(args.llm_timeout),
+        cache_dir=LLM_CACHE_DIR,
     )
 
 
@@ -475,15 +552,23 @@ def _intelligent_segments(
     width: int,
     height: int,
     analysis: dict,
+    args: argparse.Namespace,
 ) -> list[TimingSegment]:
     tokens = flatten_segment_tokens(segments)
     apply_high_confidence_corrections(tokens, analysis)
-    hints = [
-        str(item.get("after_token_id"))
-        for item in analysis.get("break_hints", [])
-        if float(item.get("confidence", 0)) >= 0.6
-    ]
-    groups = segment_tokens(tokens, style, width, height, hints)
+    groups, layout_audit = layout_tokens_with_ai(
+        tokens,
+        style,
+        width,
+        height,
+        analysis,
+        base_url=str(args.llm_base_url or os.environ.get("AI_CUTTING_LLM_BASE_URL") or ""),
+        model=str(args.llm_model or os.environ.get("AI_CUTTING_LLM_MODEL") or ""),
+        api_key=str(os.environ.get("AI_CUTTING_LLM_API_KEY") or ""),
+        timeout=float(args.llm_timeout),
+        cache_dir=LLM_CACHE_DIR,
+    )
+    analysis["layout_decision"] = layout_audit
     result: list[TimingSegment] = []
     for group in groups:
         visible = [token for token in group if str(token.get("text") or "")]
@@ -498,6 +583,36 @@ def _intelligent_segments(
             )
         )
     return result or segments
+
+
+def _intelligent_title(
+    title: str,
+    style: dict,
+    width: int,
+    height: int,
+    analysis: dict,
+    args: argparse.Namespace,
+) -> tuple[str, dict]:
+    lines: list[str] = []
+    audits: list[dict] = []
+    source_lines = [line.strip() for line in str(title or "").replace("\r", "").split("\n") if line.strip()]
+    for line_index, line in enumerate(source_lines or [str(title or "")], start=1):
+        tokens = tokens_from_text(line, 0.0, 1.0, prefix=f"title-{line_index}")
+        groups, audit = layout_tokens_with_ai(
+            tokens,
+            style,
+            width,
+            height,
+            analysis,
+            base_url=str(args.llm_base_url or os.environ.get("AI_CUTTING_LLM_BASE_URL") or ""),
+            model=str(args.llm_model or os.environ.get("AI_CUTTING_LLM_MODEL") or ""),
+            api_key=str(os.environ.get("AI_CUTTING_LLM_API_KEY") or ""),
+            timeout=float(args.llm_timeout),
+            cache_dir=LLM_CACHE_DIR,
+        )
+        lines.extend("".join(str(token.get("text") or "") for token in group) for group in groups)
+        audits.append(audit)
+    return "\n".join(lines).strip() or wrap_title_text(title, style, width, height, analysis), {"status": "ai", "chunks": audits}
 
 
 if __name__ == "__main__":

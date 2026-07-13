@@ -11,6 +11,7 @@ output/
 models/
 training_data/
 web/static/style_previews/
+web/.cache/
 
 # Uploaded/generated media
 *.mp4

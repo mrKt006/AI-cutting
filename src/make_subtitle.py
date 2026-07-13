@@ -182,6 +182,9 @@ def write_ass(
     width: int = 1080,
     height: int = 1920,
     style: dict | None = None,
+    title_text: str = "",
+    title_style: dict | None = None,
+    title_end: float | None = None,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     style = style or DEFAULT_STYLE_PRESETS[0]["subtitle"]
@@ -195,7 +198,8 @@ def write_ass(
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        subtitle_to_ass_style(style, width=width, height=height),
+        subtitle_to_ass_style(style, width=width, height=height).replace("Style: Default,", "Style: Subtitle,", 1),
+        subtitle_to_ass_style(title_style or style, width=width, height=height).replace("Style: Default,", "Style: ContentTitle,", 1),
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -203,7 +207,13 @@ def write_ass(
     for cue in cues:
         override = subtitle_override(style, cue.start, cue.end, width=width, height=height)
         lines.append(
-            f"Dialogue: 0,{_ass_time(cue.start)},{_ass_time(cue.end)},Default,,0,0,0,,{override}{_ass_text(cue.text)}"
+            f"Dialogue: 0,{_ass_time(cue.start)},{_ass_time(cue.end)},Subtitle,,0,0,0,,{override}{_ass_text(cue.text)}"
+        )
+    if title_text.strip() and title_style and title_style.get("enabled", False):
+        end = max(0.2, float(title_end if title_end is not None else max((cue.end for cue in cues), default=3.0)))
+        override = subtitle_override(title_style, 0.0, end, width=width, height=height)
+        lines.append(
+            f"Dialogue: 1,{_ass_time(0.0)},{_ass_time(end)},ContentTitle,,0,0,0,,{override}{_ass_text(title_text)}"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 

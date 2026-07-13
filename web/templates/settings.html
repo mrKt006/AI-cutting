@@ -48,7 +48,7 @@
               <div class="runtime-item {{ 'ok' if env.ffmpeg_ready else 'warn' }}">
                 <span>FFmpeg / FFprobe</span>
                 <strong>{{ '可用' if env.ffmpeg_ready else '未检测到' }}</strong>
-                <small>{{ env.ffmpeg_path if env.ffmpeg_ready else '请先安装 FFmpeg，并确保命令行可运行。' }}</small>
+                <small>{{ env.ffmpeg_path if env.ffmpeg_ready else env.ffmpeg_error }}</small>
               </div>
               <div class="runtime-item {{ 'ok' if env.volc_ready else 'warn' }}">
                 <span>火山引擎凭证</span>

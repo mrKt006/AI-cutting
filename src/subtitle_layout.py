@@ -67,6 +67,31 @@ def text_overflows(text: str, style: dict[str, Any], width: int, height: int) ->
     return measure_text(text, context) > context.hard_width
 
 
+def wrap_title_text(
+    text: str,
+    style: dict[str, Any],
+    width: int,
+    height: int,
+    analysis: dict[str, Any] | None = None,
+) -> str:
+    source_lines = str(text or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    output: list[str] = []
+    for line_index, source in enumerate(source_lines, start=1):
+        source = source.strip()
+        if not source:
+            output.append("")
+            continue
+        tokens = tokens_from_text(source, 0.0, max(1.0, len(source) * 0.1), prefix=f"title-{line_index}")
+        preferred: set[str] = set()
+        forbidden: set[str] = set()
+        if analysis:
+            preferred, semantic_ends, forbidden = analysis_break_sets(tokens, analysis)
+            preferred.update(semantic_ends)
+        groups = segment_tokens(tokens, style, width, height, preferred, (), forbidden)
+        output.extend("".join(str(token.get("text") or "") for token in group).strip() for group in groups)
+    return "\n".join(line for line in output if line).strip()
+
+
 def tokens_from_text(
     text: str,
     start: float,
@@ -148,13 +173,20 @@ def segment_tokens(
     width: int,
     height: int,
     break_hints: Iterable[str] = (),
+    required_breaks: Iterable[str] = (),
+    forbidden_breaks: Iterable[str] = (),
 ) -> list[list[dict[str, Any]]]:
     tokens = [dict(token) for token in tokens if str(token.get("text") or "")]
     if not tokens:
         return []
     context = build_layout_context(style, width, height)
     hints = set(break_hints)
+    required_ids = set(required_breaks)
+    forbidden_ids = set(forbidden_breaks)
     count = len(tokens)
+    required_positions = {
+        index + 1 for index, token in enumerate(tokens[:-1]) if str(token.get("id") or "") in required_ids
+    }
     best = [math.inf] * (count + 1)
     previous = [-1] * (count + 1)
     best[0] = 0.0
@@ -162,16 +194,23 @@ def segment_tokens(
         if math.isinf(best[start_index]):
             continue
         text = ""
+        next_required = min((position for position in required_positions if position > start_index), default=count)
         for end_index in range(start_index + 1, count + 1):
+            if end_index > next_required:
+                break
             text += str(tokens[end_index - 1].get("text") or "")
             measured = measure_text(text, context)
-            if measured > context.hard_width and end_index > start_index + 1:
-                break
+            boundary_id = str(tokens[end_index - 1].get("id") or "")
+            boundary_allowed = end_index == count or end_index in required_positions or boundary_id not in forbidden_ids
+            if not boundary_allowed:
+                continue
             cost = _segment_cost(tokens, start_index, end_index, measured, context, hints, end_index == count)
             candidate = best[start_index] + cost
             if candidate < best[end_index]:
                 best[end_index] = candidate
                 previous[end_index] = start_index
+            if measured > context.hard_width and end_index > start_index + 1:
+                break
     if previous[count] < 0:
         return [[token] for token in tokens]
     ranges: list[tuple[int, int]] = []
@@ -184,6 +223,74 @@ def segment_tokens(
         cursor = start_index
     ranges.reverse()
     return [tokens[start:end] for start, end in ranges]
+
+
+def analysis_break_sets(
+    tokens: list[dict[str, Any]], analysis: dict[str, Any]
+) -> tuple[set[str], set[str], set[str]]:
+    token_ids = {str(token.get("id") or "") for token in tokens}
+    token_by_id = {str(token.get("id") or ""): token for token in tokens}
+    token_position = {str(token.get("id") or ""): index for index, token in enumerate(tokens)}
+    preferred = {
+        str(item.get("after_token_id") or "")
+        for key in ("break_hints", "allowed_breaks")
+        for item in analysis.get(key, [])
+        if float(item.get("confidence", 0)) >= 0.6 and str(item.get("after_token_id") or "") in token_ids
+    }
+    forbidden: set[str] = set()
+    for item in analysis.get("forbidden_breaks", []):
+        if float(item.get("confidence", 0)) < 0.7:
+            continue
+        span_ids = [str(token_id) for token_id in item.get("token_ids", []) if str(token_id) in token_ids]
+        if _valid_semantic_span(span_ids, str(item.get("text") or ""), token_by_id, token_position):
+            forbidden.update(span_ids[:-1])
+            continue
+        after_id = str(item.get("after_token_id") or "")
+        if after_id in token_ids:
+            forbidden.add(after_id)
+    required: set[str] = set()
+    for sentence in analysis.get("final_sentences", []):
+        ids = [str(item) for item in sentence.get("token_ids", []) if str(item) in token_ids]
+        if _valid_semantic_span(ids, str(sentence.get("text") or ""), token_by_id, token_position):
+            required.add(ids[-1])
+    if tokens:
+        required.discard(str(tokens[-1].get("id") or ""))
+    preferred.update(required)
+    forbidden.difference_update(required)
+    forbidden.update(_same_word_forbidden_breaks(tokens))
+    for span in analysis.get("protected_spans", []):
+        ids = [str(item) for item in span.get("token_ids", []) if str(item) in token_ids]
+        if float(span.get("confidence", 0)) >= 0.7 and _valid_semantic_span(
+            ids, str(span.get("text") or ""), token_by_id, token_position
+        ):
+            forbidden.update(ids[:-1])
+    forbidden.difference_update(required)
+    return preferred, required, forbidden
+
+
+def _valid_semantic_span(
+    ids: list[str], text: str, token_by_id: dict[str, dict[str, Any]], token_position: dict[str, int]
+) -> bool:
+    if not ids or any(item not in token_position for item in ids):
+        return False
+    positions = [token_position[item] for item in ids]
+    if positions != list(range(positions[0], positions[0] + len(positions))):
+        return False
+    joined = "".join(str(token_by_id[item].get("text") or "") for item in ids)
+    normalize = lambda value: re.sub(r"[\s，。！？!?；;：:,]", "", value).casefold()
+    return bool(normalize(text)) and normalize(joined) == normalize(text)
+
+
+def _same_word_forbidden_breaks(tokens: list[dict[str, Any]]) -> set[str]:
+    result: set[str] = set()
+    for left, right in zip(tokens, tokens[1:]):
+        left_id = str(left.get("id") or "")
+        right_id = str(right.get("id") or "")
+        left_word = re.sub(r"-c\d+$", "", left_id)
+        right_word = re.sub(r"-c\d+$", "", right_id)
+        if left_word and left_word == right_word:
+            result.add(left_id)
+    return result
 
 
 def flatten_segment_tokens(segments: Iterable[Any]) -> list[dict[str, Any]]:

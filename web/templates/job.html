@@ -6,9 +6,6 @@
   <title>任务 {{ job.id }}</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/style.css">
-  {% if job.status in ["queued", "running"] %}
-  <meta http-equiv="refresh" content="5">
-  {% endif %}
 </head>
 <body>
   <div class="app-shell">
@@ -35,15 +32,19 @@
           <h1>{{ job.params.title }}</h1>
         </div>
         <div class="status-card">
-          <span class="status {{ job.status }}">{{ status_labels.get(job.status, stage_label) }}</span>
-          <small>{{ job.updated_at }}</small>
+          <span id="job-status" class="status {{ job.status }}">{{ status_labels.get(job.status, stage_label) }}</span>
+          <small id="job-updated-at">{{ job.updated_at }}</small>
         </div>
       </div>
 
       <div class="job-layout">
         <section class="surface task-surface">
           {% if job.error %}
-          <div class="toast error"><strong>处理失败</strong><span>{{ job.error }}</span></div>
+          <div class="toast error"><strong>处理失败</strong><span>{{ display_error }}</span></div>
+          <form method="post" action="/jobs/{{ job.id }}/retry" class="job-retry-form">
+            <button class="primary-action small" type="submit">重新处理未完成视频</button>
+            <a class="ghost-link" href="/">返回任务设置</a>
+          </form>
           {% endif %}
 
           {% set job_items = job.params.get("items", []) %}
@@ -57,13 +58,13 @@
             </div>
             <div class="queue-list">
               {% for item in job_items %}
-              <div class="queue-item">
+              <div class="queue-item" data-job-item="{{ item.id }}">
                 <span class="queue-main">
                   <strong>{{ item.title }}</strong>
                   <small>{{ item.source_name or item.id }}</small>
                 </span>
                 <span class="queue-actions">
-                  <em class="{{ item.status }}">{{ status_labels.get(item.status, item.status) }}</em>
+                  <em data-item-status class="{{ item.status }}">{{ status_labels.get(item.status, item.status) }}</em>
                   {% if item.status == "done" %}
                   <a class="ghost-link" href="/jobs/{{ job.id }}/edit?item={{ item.id }}">进入精修</a>
                   {% endif %}
@@ -105,22 +106,58 @@
             {% endif %}
           </div>
 
-          <div class="surface-block">
-            <div class="surface-head">
-              <div>
-                <p class="section-kicker">日志</p>
-                <h2>处理日志</h2>
-              </div>
-            </div>
-            <div class="log" aria-live="polite">
+          <details class="surface-block job-log-panel" {% if job.status == "failed" %}open{% endif %}>
+            <summary>技术日志</summary>
+            <div id="job-log" class="log" aria-live="polite">
               {% for item in job.log %}
               <p><time>{{ item.time }}</time>{{ item.message }}</p>
               {% endfor %}
             </div>
-          </div>
+          </details>
         </section>
       </div>
     </main>
   </div>
+  {% if job.status in ["queued", "running"] %}
+  <script>
+    const statusLabels = {done: "完成", running: "处理中", failed: "失败", queued: "等待中"};
+    const pollJob = async () => {
+      try {
+        const response = await fetch("/api/jobs/{{ job.id }}", {cache: "no-store"});
+        if (!response.ok) return;
+        const data = await response.json();
+        const status = document.getElementById("job-status");
+        status.textContent = statusLabels[data.status] || data.status;
+        status.className = `status ${data.status}`;
+        document.getElementById("job-updated-at").textContent = data.updated_at || "";
+        (data.params?.items || []).forEach((item) => {
+          const row = document.querySelector(`[data-job-item="${CSS.escape(item.id)}"]`);
+          const badge = row?.querySelector("[data-item-status]");
+          if (!badge) return;
+          badge.textContent = statusLabels[item.status] || item.status;
+          badge.className = item.status;
+        });
+        const log = document.getElementById("job-log");
+        if (log && Array.isArray(data.log)) {
+          log.replaceChildren(...data.log.map((entry) => {
+            const row = document.createElement("p");
+            const time = document.createElement("time");
+            time.textContent = entry.time || "";
+            row.append(time, document.createTextNode(entry.message || ""));
+            return row;
+          }));
+        }
+        if (data.status === "done" || data.status === "failed") {
+          window.location.reload();
+          return;
+        }
+      } catch {
+        // A transient polling failure must not replace the task page.
+      }
+      window.setTimeout(pollJob, 2000);
+    };
+    window.setTimeout(pollJob, 1000);
+  </script>
+  {% endif %}
 </body>
 </html>

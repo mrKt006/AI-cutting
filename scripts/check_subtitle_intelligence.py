@@ -14,15 +14,68 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from llm_analysis import analyze_transcript, apply_high_confidence_corrections  # noqa: E402
-from subtitle_layout import build_layout_context, measure_text, segment_tokens, tokens_from_text  # noqa: E402
+from ai_layout import layout_tokens_with_ai  # noqa: E402
+from subtitle_layout import analysis_break_sets, build_layout_context, measure_text, segment_tokens, tokens_from_text, wrap_title_text  # noqa: E402
 from volc_asr import convert_utterances  # noqa: E402
-from make_subtitle import SubtitleCue, TimingSegment  # noqa: E402
-from main import _ai_removal_segments, _keep_from_removed, _map_retained_tokens_to_cut_timeline  # noqa: E402
+from make_subtitle import SubtitleCue, TimingSegment, write_ass  # noqa: E402
+from main import _ai_removal_segments, _keep_from_removed, _map_retained_tokens_to_cut_timeline, _protect_speech_from_silence  # noqa: E402
+from cut_silence import Segment  # noqa: E402
 from style_presets import get_style_preset  # noqa: E402
-from web.app import _write_edit_ass  # noqa: E402
+from web.app import _preview_ass, _write_edit_ass  # noqa: E402
 
 
 def main() -> int:
+    protected_tokens = tokens_from_text("起来了不是", 7.16, 8.36, prefix="guard")
+    protected_segment = TimingSegment(7.16, 8.36, "起来了不是", tuple(protected_tokens))
+    guarded = _protect_speech_from_silence([Segment(7.49, 7.91)], [protected_segment], set())
+    assert all(not (item.start < protected_tokens[2]["end"] and item.end > protected_tokens[2]["start"]) for item in guarded)
+
+    title_text = "普通人该如何学习AI才是最好的"
+    title_tokens = tokens_from_text(title_text, 0.0, 1.0, prefix="title-1")
+    title_analysis = {
+        "allowed_breaks": [
+            {"after_token_id": title_tokens[5]["id"], "confidence": 0.95},
+            {"after_token_id": title_tokens[10]["id"], "confidence": 0.95},
+        ]
+    }
+    wrapped_title = wrap_title_text(title_text, {"font_size": 100, "margin_x": 120, "bold": True}, 1080, 1920, title_analysis)
+    assert wrapped_title.replace("\n", "") == title_text
+    assert "\n" in wrapped_title
+
+    ai_tokens = tokens_from_text("生意反而做起来了不是他们", 0.0, 2.0, prefix="ai-layout")
+    ai_analysis = {
+        "final_sentences": [
+            {"token_ids": [token["id"] for token in ai_tokens[:8]], "text": "生意反而做起来了"},
+            {"token_ids": [token["id"] for token in ai_tokens[8:]], "text": "不是他们"},
+        ],
+        "forbidden_breaks": [
+            {"token_ids": [token["id"] for token in ai_tokens[8:10]], "text": "不是", "confidence": 0.99},
+            {"token_ids": [token["id"] for token in ai_tokens[-2:]], "text": "他们", "confidence": 0.99},
+        ],
+    }
+    invalid_layout = {
+        "status": "ok",
+        "option_ids": ["o000-008"],
+    }
+    valid_layout = {
+        "status": "ok",
+        "option_ids": ["o000-008", "o008-012"],
+    }
+    with patch("ai_layout.decide_line_layout", side_effect=[invalid_layout, valid_layout]) as layout_mock:
+        ai_groups, ai_audit = layout_tokens_with_ai(
+            ai_tokens,
+            {"font_size": 64, "margin_x": 80, "bold": True},
+            1080,
+            1920,
+            ai_analysis,
+            base_url="https://example.invalid/v1",
+            model="test-model",
+            api_key="test-key",
+        )
+    assert layout_mock.call_count == 2
+    assert ["".join(token["text"] for token in group) for group in ai_groups] == ["生意反而做起来了", "不是他们"]
+    assert ai_audit["status"] == "ai"
+
     response = {
         "utterances": [
             {
@@ -143,6 +196,49 @@ def main() -> int:
     conservative_removed, _ = _ai_removal_segments([edit_segment], conservative, "conservative")
     assert not conservative_removed
 
+    semantic_tokens = tokens_from_text("不是他们突然变勇敢了是因为做视频", 0.0, 3.0, prefix="semantic")
+    semantic_analysis = {
+        "final_sentences": [
+            {"token_ids": [token["id"] for token in semantic_tokens[:10]], "text": "不是他们突然变勇敢了"},
+            {"token_ids": [token["id"] for token in semantic_tokens[10:]], "text": "是因为做视频"},
+        ],
+        "allowed_breaks": [{"after_token_id": semantic_tokens[4]["id"], "confidence": 0.9}],
+        "forbidden_breaks": [
+            {
+                "token_ids": [semantic_tokens[2]["id"], semantic_tokens[3]["id"]],
+                "text": "他们",
+                "confidence": 0.99,
+            }
+        ],
+    }
+    preferred, required, forbidden = analysis_break_sets(semantic_tokens, semantic_analysis)
+    semantic_groups = segment_tokens(
+        semantic_tokens,
+        {**base_style, "font_size": 110, "margin_x": 420},
+        1080,
+        1920,
+        preferred,
+        required,
+        forbidden,
+    )
+    semantic_lines = ["".join(token["text"] for token in group) for group in semantic_groups]
+    assert not any(line.endswith("他") for line in semantic_lines)
+    first_sentence_ids = {token["id"] for token in semantic_tokens[:10]}
+    second_sentence_ids = {token["id"] for token in semantic_tokens[10:]}
+    assert all(
+        not ({token["id"] for token in group} & first_sentence_ids and {token["id"] for token in group} & second_sentence_ids)
+        for group in semantic_groups
+    )
+
+    static_preview_ass = _preview_ass(
+        "内容标题",
+        {**get_style_preset("default-white")["video_title"], "animation_in": "fade", "animation_out": "fade"},
+        1080,
+        1920,
+    )
+    assert r"\fad" not in static_preview_ass
+    assert "内容标题" in static_preview_ass
+
     with tempfile.TemporaryDirectory(prefix="subtitle-style-") as tmp:
         ass_path = Path(tmp) / "styled.ass"
         cue = SubtitleCue(1, 0.0, 1.0, "独立样式", style={"font_size": 96, "primary_color": "#ff0000", "position_x": 120})
@@ -150,6 +246,28 @@ def main() -> int:
         ass_text = ass_path.read_text(encoding="utf-8")
         assert "Style: Subtitle1," in ass_text
         assert ",Subtitle1,," in ass_text
+        automatic_ass = Path(tmp) / "automatic-title.ass"
+        write_ass(
+            [SubtitleCue(1, 0.0, 2.0, "字幕")],
+            automatic_ass,
+            width=1080,
+            height=1920,
+            style=get_style_preset("default-white")["subtitle"],
+            title_text="内容标题",
+            title_style={
+                **get_style_preset("default-white")["video_title"],
+                "enabled": True,
+                "font_size": 72,
+                "position_y": -620,
+            },
+            title_end=1.5,
+        )
+        automatic_text = automatic_ass.read_text(encoding="utf-8")
+        assert "Style: ContentTitle," in automatic_text
+        assert ",ContentTitle,," in automatic_text
+        assert "内容标题" in automatic_text
+        assert "0:00:01.50" in automatic_text
+        assert get_style_preset("default-white")["video_title"]["enabled"] is False
     print("Subtitle intelligence check passed.")
     return 0
 

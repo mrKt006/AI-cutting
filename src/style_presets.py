@@ -233,14 +233,33 @@ def get_style_preset(preset_id: str | None, path: str | Path | None = None) -> d
 
 def merge_style_preset(preset: dict[str, Any]) -> dict[str, Any]:
     base = deepcopy(DEFAULT_STYLE_PRESETS[0])
-    base["video_title"] = deepcopy(base["cover_title"])
+    base["video_title"] = _default_video_title_style()
     base.update({k: v for k, v in preset.items() if k not in {"subtitle", "video_title", "cover_title"}})
     base["subtitle"].update(preset.get("subtitle") or {})
-    base["video_title"].update(preset.get("video_title") or preset.get("cover_title") or {})
+    base["video_title"].update(preset.get("video_title") or {})
     base["cover_title"].update(preset.get("cover_title") or {})
     base["id"] = _slug(str(base.get("id") or base.get("name") or "style"))
     base["name"] = str(base.get("name") or base["id"])
     return base
+
+
+def _default_video_title_style() -> dict[str, Any]:
+    style = deepcopy(DEFAULT_STYLE_PRESETS[0]["subtitle"])
+    style.update(
+        {
+            "enabled": False,
+            "display_mode": "full",
+            "display_duration": 3.0,
+            "font_size": 64,
+            "position_x": 0,
+            "position_y": -620,
+            "target_len": 12,
+            "max_len": 20,
+            "animation_in": "fade",
+            "animation_out": "fade",
+        }
+    )
+    return style
 
 
 def hex_to_ass(color: str, alpha_percent: int = 0) -> str:

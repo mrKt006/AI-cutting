@@ -80,6 +80,7 @@
               <img id="accurate-preview" class="accurate-preview-image" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" alt="精确预览图">
             </div>
           </div>
+          <button id="preview-render-status" class="preview-error-action" type="button" hidden>精确预览失败，点击重试</button>
           <div class="preview-toolbar">
             <form action="/style-presets/preview-frame" method="post" enctype="multipart/form-data" class="preview-upload">
               <input type="hidden" name="preset" value="{{ selected.id }}">
@@ -109,6 +110,7 @@
 
           <form action="/style-presets" method="post" class="job-form" id="style-form">
             <input type="hidden" name="preview_path" value="{{ preview }}">
+            <input type="hidden" name="original_preset_id" value="{{ selected.id }}">
             <input type="hidden" name="active_text_style" id="active-text-style" value="{{ active_style }}">
             <input type="hidden" name="preview_text" id="preview-text-hidden" value="{{ preview_text }}">
             <input type="hidden" name="preview_aspect" id="preview-aspect-hidden" value="{{ preview_aspect }}">
@@ -123,12 +125,26 @@
               </div>
               <div class="style-mode-tabs" role="group" aria-label="文本样式类型">
                 <button class="style-mode-button is-active" type="button" data-style-mode="subtitle">字幕设置</button>
-                <button class="style-mode-button" type="button" data-style-mode="video">视频标题</button>
+                <button class="style-mode-button" type="button" data-style-mode="video">内容标题</button>
                 <button class="style-mode-button" type="button" data-style-mode="cover">封面设置</button>
               </div>
             </div>
 
             <div class="style-form-scroll">
+              <section class="content-title-options" id="content-title-options" hidden>
+                <label class="capcut-switch"><span>在成片中显示内容标题</span><input type="checkbox" name="enabled" value="1"></label>
+                <div class="capcut-row">
+                  <label>显示时间</label>
+                  <select name="display_mode">
+                    <option value="full">全程显示</option>
+                    <option value="intro">仅开头显示</option>
+                  </select>
+                </div>
+                <div class="capcut-row" id="content-title-duration-row">
+                  <label>开头时长（秒）</label>
+                  <input type="number" name="display_duration" min="0.2" max="3600" step="0.1" value="3">
+                </div>
+              </section>
               <details class="capcut-section" open>
                 <summary>基础</summary>
                 <div class="capcut-row">
@@ -229,7 +245,7 @@
 
             <div class="form-actions sticky-actions">
               <button class="primary-button" type="submit" name="action" value="save">保存预设</button>
-              <button class="danger-button" type="submit" name="action" value="delete">删除预设</button>
+              <button id="delete-preset-btn" class="danger-button" type="submit" name="action" value="delete">删除预设</button>
             </div>
           </form>
         </section>
@@ -244,6 +260,8 @@
     const textInput = document.querySelector("#preview-text");
     const accurateImage = document.querySelector("#accurate-preview");
     const previewSurface = document.querySelector("#preview-surface");
+    const previewRenderStatus = document.querySelector("#preview-render-status");
+    const deletePresetButton = document.querySelector("#delete-preset-btn");
     const activeStyleInput = document.querySelector("#active-text-style");
     const previewTextHidden = document.querySelector("#preview-text-hidden");
     const previewAspectHidden = document.querySelector("#preview-aspect-hidden");
@@ -252,6 +270,8 @@
     const videoStyleInput = document.querySelector("#video-style-json");
     const coverStyleInput = document.querySelector("#cover-style-json");
     const modeButtons = document.querySelectorAll("[data-style-mode]");
+    const contentTitleOptions = document.querySelector("#content-title-options");
+    const contentTitleDurationRow = document.querySelector("#content-title-duration-row");
     const initialSubtitleStyle = {{ selected.subtitle | tojson }};
     const initialVideoStyle = {{ selected.video_title | tojson }};
     const initialCoverStyle = {{ selected.cover_title | tojson }};
@@ -304,17 +324,50 @@
       target_len: 10,
       max_len: 16
     };
-    const styleKeys = Object.keys(subtitleDefaults);
-    const checkboxKeys = new Set(["bold", "italic", "underline", "outline_enabled", "shadow_enabled", "uniform_scale", "background_enabled", "glow_enabled"]);
+    const videoDefaults = {
+      ...subtitleDefaults,
+      enabled: false,
+      display_mode: "full",
+      display_duration: 3,
+      font_size: 64,
+      position_x: 0,
+      position_y: -620,
+      target_len: 12,
+      max_len: 20,
+      animation_in: "fade",
+      animation_out: "fade"
+    };
+    const styleKeys = [...new Set([...Object.keys(subtitleDefaults), ...Object.keys(videoDefaults)])];
+    const checkboxKeys = new Set(["enabled", "bold", "italic", "underline", "outline_enabled", "shadow_enabled", "uniform_scale", "background_enabled", "glow_enabled"]);
     let activeStyleMode = {{ active_style | tojson }};
     let previewAspect = {{ preview_aspect | tojson }};
     const styleStates = {
       subtitle: { ...subtitleDefaults, ...initialSubtitleStyle },
-      video: { ...coverDefaults, ...initialVideoStyle },
+      video: { ...videoDefaults, ...initialVideoStyle },
       cover: { ...coverDefaults, ...initialCoverStyle }
     };
     let previewTimer = null;
     let previewSerial = 0;
+
+    function applyControlAccessibleNames() {
+      form?.querySelectorAll("input:not([type='hidden']), select, textarea").forEach((control) => {
+        if (control.getAttribute("aria-label") || control.labels?.length) return;
+        const row = control.closest(".capcut-row");
+        const siblings = row ? Array.from(row.children) : [];
+        const controlIndex = siblings.indexOf(control);
+        let label = "";
+        for (let index = controlIndex - 1; index >= 0; index -= 1) {
+          if (siblings[index].tagName === "LABEL") {
+            label = siblings[index].textContent.trim();
+            break;
+          }
+        }
+        if (!label) label = control.name || "文本样式参数";
+        const sameName = form.querySelectorAll(`[name="${CSS.escape(control.name || "")}"]`);
+        if (sameName.length > 1) label += control.type === "range" ? "滑杆" : "数值";
+        control.setAttribute("aria-label", label);
+      });
+    }
 
     form?.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && event.target instanceof HTMLInputElement) {
@@ -353,7 +406,8 @@
         if (checkboxKeys.has(key)) {
           style[key] = data.get(key) != null;
         } else {
-          const fallback = activeStyleMode === "subtitle" ? subtitleDefaults[key] : coverDefaults[key];
+          const defaults = activeStyleMode === "subtitle" ? subtitleDefaults : activeStyleMode === "video" ? videoDefaults : coverDefaults;
+          const fallback = defaults[key];
           const value = firstValue(data, key, fallback);
           style[key] = typeof fallback === "number" ? Number(value || fallback) : value;
         }
@@ -422,9 +476,16 @@
       modeButtons.forEach((button) => {
         button.classList.toggle("is-active", button.dataset.styleMode === activeStyleMode);
       });
+      updateContentTitleOptions();
       syncStateInputs();
       updatePreview();
       scheduleAccuratePreview();
+    }
+
+    function updateContentTitleOptions() {
+      if (contentTitleOptions) contentTitleOptions.hidden = activeStyleMode !== "video";
+      const displayMode = form?.querySelector('[name="display_mode"]')?.value || "full";
+      if (contentTitleDurationRow) contentTitleDurationRow.hidden = activeStyleMode !== "video" || displayMode !== "intro";
     }
 
     function updatePreview() {
@@ -469,6 +530,7 @@
     form?.addEventListener("input", () => {
       syncActiveStyle();
       updatePreview();
+      updateContentTitleOptions();
     });
     textInput?.addEventListener("input", updatePreview);
     aspectInputs.forEach((input) => {
@@ -484,6 +546,8 @@
     modeButtons.forEach((button) => {
       button.classList.toggle("is-active", button.dataset.styleMode === activeStyleMode);
     });
+    updateContentTitleOptions();
+    applyControlAccessibleNames();
     syncStateInputs();
     applyPreviewAspect();
     updatePreview();
@@ -507,10 +571,14 @@
         accurateImage.src = `${result.image}?t=${Date.now()}`;
         accurateImage.style.display = "block";
         preview.style.display = "none";
+        previewRenderStatus.hidden = true;
+        previewRenderStatus.title = "";
       } catch (error) {
         if (serial !== previewSerial) return;
         accurateImage.style.display = "none";
         preview.style.display = "block";
+        previewRenderStatus.hidden = false;
+        previewRenderStatus.title = String(error?.message || error || "精确预览不可用");
       }
     }
 
@@ -519,6 +587,10 @@
       scheduleAccuratePreview();
     });
     textInput?.addEventListener("input", scheduleAccuratePreview);
+    previewRenderStatus?.addEventListener("click", renderAccuratePreview);
+    deletePresetButton?.addEventListener("click", (event) => {
+      if (!window.confirm("确定删除这个预设吗？删除后无法撤销。")) event.preventDefault();
+    });
     renderAccuratePreview();
   </script>
 </body>

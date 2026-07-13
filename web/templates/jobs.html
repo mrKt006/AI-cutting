@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>全部任务 · AI-cutting</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="返回 AI-cutting 首页">
+        <span class="brand-mark" aria-hidden="true">AI</span>
+        <span><strong>AI-cutting</strong><small>任务中心</small></span>
+      </a>
+      <nav class="nav-links" aria-label="主要导航">
+        <a class="nav-link is-active" href="/jobs">任务</a>
+        <a class="nav-link" href="/style-presets">样式预设</a>
+        <a class="nav-link" href="/settings">设置</a>
+      </nav>
+    </header>
+
+    <main class="workspace jobs-workspace">
+      <div class="page-title">
+        <div><p class="section-kicker">Tasks</p><h1>全部任务</h1></div>
+        <a class="primary-action small" href="/">新建任务</a>
+      </div>
+
+      <section class="surface jobs-surface">
+        <form class="jobs-filter" method="get" action="/jobs">
+          <label class="field">
+            <span>搜索</span>
+            <input type="search" name="q" value="{{ query }}" placeholder="标题或任务 ID">
+          </label>
+          <label class="field">
+            <span>状态</span>
+            <select name="status">
+              <option value="">全部状态</option>
+              {% for value, label in status_labels.items() %}
+              <option value="{{ value }}" {{ 'selected' if active_status == value else '' }}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <button class="ghost-button" type="submit">筛选</button>
+          {% if query or active_status %}<a class="ghost-link" href="/jobs">清除</a>{% endif %}
+        </form>
+
+        {% if jobs %}
+        <div class="task-history-list">
+          {% for job in jobs %}
+          <a class="task-history-row" href="/jobs/{{ job.id }}">
+            <span class="queue-main">
+              <strong>{{ job.params.title or '未命名任务' }}</strong>
+              <small>{{ job.id }} · {{ job.created_at }}</small>
+            </span>
+            <span class="queue-actions">
+              <em class="{{ job.status }}">{{ status_labels.get(job.status, job.status) }}</em>
+              <span aria-hidden="true">›</span>
+            </span>
+          </a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state"><strong>没有匹配的任务</strong><p>调整搜索条件，或返回首页创建新任务。</p></div>
+        {% endif %}
+      </section>
+    </main>
+  </div>
+</body>
+</html>

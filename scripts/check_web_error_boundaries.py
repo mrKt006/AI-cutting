@@ -109,6 +109,18 @@ def main() -> int:
     if settings_response.status_code != 200 or missing:
         print(f"Settings page runtime status check failed; missing: {', '.join(missing)}")
         return 1
+    jobs_response = client.get("/jobs")
+    jobs_required_fragments = ["全部任务", "标题或任务 ID", "全部状态"]
+    missing = [fragment for fragment in jobs_required_fragments if fragment not in jobs_response.text]
+    if jobs_response.status_code != 200 or missing:
+        print(f"Jobs page check failed; missing: {', '.join(missing)}")
+        return 1
+    styles_response = client.get("/style-presets")
+    style_fragments = ["内容标题", "在成片中显示内容标题", "仅开头显示", "精确预览失败，点击重试", "确定删除这个预设吗"]
+    missing = [fragment for fragment in style_fragments if fragment not in styles_response.text]
+    if styles_response.status_code != 200 or missing:
+        print(f"Content title preset check failed; missing: {', '.join(missing)}")
+        return 1
 
     cases = [
         ("empty save body", "post", f"/api/jobs/{job_id}/edit-project?item=001", {}, 400),
