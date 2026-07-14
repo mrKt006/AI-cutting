@@ -15,7 +15,15 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from web.app import _build_job_zip, _write_training_feedback, app, recover_interrupted_jobs  # noqa: E402
+from web.app import (  # noqa: E402
+    _aggregate_job_usage,
+    _build_job_zip,
+    _inspect_uploaded_video,
+    _item_usage,
+    _write_training_feedback,
+    app,
+    recover_interrupted_jobs,
+)
 
 
 def _find_job_id() -> str | None:
@@ -136,6 +144,19 @@ def main() -> int:
         if feedback["user_changes"]["text_edits"][0]["after"] != "现在开始" or "api_key" in feedback_text.lower():
             print("Training feedback persistence check failed.")
             return 1
+
+    with tempfile.TemporaryDirectory(prefix="media-probe-check-", dir=ROOT) as tmp:
+        fake_media = Path(tmp) / "fake.mp4"
+        fake_media.write_bytes(b"not-a-video")
+        with patch("web.app.probe_media", return_value={"format": {"duration": "1"}, "streams": []}):
+            try:
+                _inspect_uploaded_video(fake_media, "fake.mp4")
+            except Exception as exc:
+                if getattr(exc, "status_code", None) != 400:
+                    raise
+            else:
+                print("Upload media stream validation failed.")
+                return 1
         if (
             feedback.get("version") != 2
             or feedback["data_policy"]["training_consent"]
@@ -205,6 +226,7 @@ def main() -> int:
         with (
             patch("web.app.JOBS_DIR", temporary_jobs),
             patch("web.app._runtime_status", return_value={"ffmpeg_ready": True}),
+            patch("web.app._inspect_uploaded_video", return_value={"duration": 1.0, "width": 1080, "height": 1920, "bytes": 10}),
             patch(
                 "web.app._load_settings",
                 return_value={
@@ -246,6 +268,7 @@ def main() -> int:
         with (
             patch("web.app.JOBS_DIR", temporary_jobs),
             patch("web.app._runtime_status", return_value={"ffmpeg_ready": True}),
+            patch("web.app._inspect_uploaded_video", return_value={"duration": 1.0, "width": 1080, "height": 1920, "bytes": 10}),
             patch(
                 "web.app._load_settings",
                 return_value={"volc_app_id": "test-app", "volc_access_token": "test-token", "llm_enabled": False},
@@ -353,6 +376,18 @@ def main() -> int:
         zip_path = _build_job_zip(pause_job_dir, pack_retry_job["params"]["items"])
         if not zip_path.is_file() or zip_path.with_name(f".{zip_path.name}.tmp").exists():
             print("Atomic output package check failed.")
+            return 1
+        usage_work = pause_job_dir / "work" / "001"
+        usage_work.mkdir(parents=True, exist_ok=True)
+        (usage_work / "transcript_analysis.json").write_text(
+            json.dumps({"usage": {"prompt_tokens": 12, "completion_tokens": 3, "total_tokens": 15}}), encoding="utf-8"
+        )
+        usage_item = pack_retry_job["params"]["items"][0]
+        usage_item["media"] = {"duration": 4.5, "bytes": 100}
+        usage_item["usage"] = _item_usage(pause_job_dir, usage_item)
+        job_usage = _aggregate_job_usage([usage_item], zip_path)
+        if job_usage["total_tokens"] != 15 or job_usage["asr_audio_seconds"] != 4.5 or job_usage["zip_bytes"] <= 0:
+            print("Job usage aggregation check failed.")
             return 1
         feedback_dir = pause_job_dir / "work" / "001"
         feedback_dir.mkdir(parents=True, exist_ok=True)

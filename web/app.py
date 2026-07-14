@@ -28,7 +28,7 @@ from fastapi.templating import Jinja2Templates
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from cut_silence import Segment, cut_video  # noqa: E402
 from ai_layout import layout_tokens_with_ai  # noqa: E402
-from ffmpeg_utils import ffmpeg_filter_path, media_duration, run as ffmpeg_run, video_size  # noqa: E402
+from ffmpeg_utils import ffmpeg_filter_path, media_duration, probe_media, run as ffmpeg_run, video_size  # noqa: E402
 from make_cover import make_cover  # noqa: E402
 from make_subtitle import SubtitleCue  # noqa: E402
 from render_video import burn_subtitles  # noqa: E402
@@ -50,6 +50,13 @@ from transcript_document import (  # noqa: E402
 )
 
 
+def _env_number(name: str, default: float) -> float:
+    try:
+        return float(os.environ.get(name, str(default)))
+    except ValueError:
+        return default
+
+
 ROOT = Path(__file__).resolve().parents[1]
 JOBS_DIR = ROOT / "jobs"
 PYTHON = sys.executable
@@ -68,6 +75,9 @@ SUPPORTED_VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm"}
 MAX_VIDEOS_PER_JOB = 20
 MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024
 MAX_TRANSCRIPT_BYTES = 2 * 1024 * 1024
+MAX_VIDEO_DURATION_SECONDS = max(60.0, _env_number("AI_CUTTING_MAX_VIDEO_SECONDS", 7200.0))
+MAX_CONCURRENT_JOBS = max(1, min(4, int(_env_number("AI_CUTTING_MAX_CONCURRENT_JOBS", 1))))
+JOB_WORKER_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_JOBS)
 
 PRESETS = {
     "natural": {"label": "保守", "decision_label": "AI 保守决策", "noise": "-30dB", "min_silence": 0.45, "padding": 0.12, "auto_edit_mode": "conservative"},
@@ -669,6 +679,11 @@ async def create_job(
         _save_uploaded_video(upload, video_path)
         if not video_path.exists() or video_path.stat().st_size == 0:
             raise HTTPException(status_code=400, detail=f"{upload.filename} 为空或保存失败")
+        try:
+            media_info = _inspect_uploaded_video(video_path, upload.filename or video_path.name)
+        except HTTPException:
+            shutil.rmtree(job_dir, ignore_errors=True)
+            raise
         content_title_path = item_input_dir / "content_title.txt"
         cover_title_path = item_input_dir / "cover_title.txt"
         title_path = item_input_dir / "title.txt"
@@ -698,6 +713,7 @@ async def create_job(
                 "content_title": video_content_title,
                 "cover_title": video_cover_title,
                 "video": str(video_path),
+                "media": media_info,
                 "title_path": str(title_path),
                 "content_title_path": str(content_title_path),
                 "cover_title_path": str(cover_title_path),
@@ -1224,6 +1240,7 @@ def _run_job(job_id: str) -> None:
     params = job["params"]
     preset = PRESETS[params["preset"]]
     ACTIVE_JOB_IDS.add(job_id)
+    JOB_WORKER_SLOTS.acquire()
 
     try:
         if _cancel_requested(job_dir):
@@ -1363,6 +1380,7 @@ def _run_job(job_id: str) -> None:
                 if path.is_file():
                     item_outputs[path.name] = str(path)
             item["outputs"] = item_outputs
+            item["usage"] = _item_usage(job_dir, item)
             item["status"] = "done"
             _set_job_items(job_dir, items)
             if _cancel_requested(job_dir):
@@ -1381,10 +1399,12 @@ def _run_job(job_id: str) -> None:
         _update_job(job_dir, status="running", stage="packing", message="正在打包输出文件")
         zip_path = _build_job_zip(job_dir, items)
         outputs = {"batch_zip": str(zip_path)}
-        _update_job(job_dir, status="done", stage="done", message="处理完成，已生成 ZIP", outputs=outputs)
+        usage = _aggregate_job_usage(items, zip_path)
+        _update_job(job_dir, status="done", stage="done", message="处理完成，已生成 ZIP", outputs=outputs, usage=usage)
     except Exception as exc:
         _update_job(job_dir, status="failed", stage="failed", error=str(exc), message=f"失败: {exc}")
     finally:
+        JOB_WORKER_SLOTS.release()
         ACTIVE_JOB_IDS.discard(job_id)
 
 
@@ -1414,6 +1434,31 @@ def _save_uploaded_video(upload: UploadFile, target: Path) -> None:
     except Exception:
         target.unlink(missing_ok=True)
         raise
+
+
+def _inspect_uploaded_video(path: Path, display_name: str) -> dict[str, Any]:
+    try:
+        data = probe_media(path)
+        duration = float((data.get("format") or {}).get("duration") or 0.0)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"{display_name} 不是可读取的视频文件或文件已损坏") from exc
+    video_stream = next(
+        (stream for stream in data.get("streams", []) if isinstance(stream, dict) and stream.get("codec_type") == "video"),
+        None,
+    )
+    if not video_stream or duration <= 0:
+        raise HTTPException(status_code=400, detail=f"{display_name} 没有可用的视频轨道")
+    if duration > MAX_VIDEO_DURATION_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{display_name} 时长 {duration / 60:.1f} 分钟，超过单条 {MAX_VIDEO_DURATION_SECONDS / 60:.0f} 分钟限制",
+        )
+    return {
+        "duration": round(duration, 3),
+        "width": int(video_stream.get("width") or 0),
+        "height": int(video_stream.get("height") or 0),
+        "bytes": path.stat().st_size,
+    }
 
 
 async def _read_transcript_upload(upload: UploadFile) -> tuple[bytes, ParsedTranscriptDocument]:
@@ -1462,6 +1507,55 @@ def _set_job_items(job_dir: Path, items: list[dict[str, Any]]) -> None:
     job = _load_job(job_dir)
     job.setdefault("params", {})["items"] = items
     _write_job(job_dir, job)
+
+
+def _item_usage(job_dir: Path, item: dict[str, Any]) -> dict[str, Any]:
+    item_id = str(item.get("id") or "001")
+    work_dir = job_dir / "work" / item_id
+    analysis: dict[str, Any] = {}
+    analysis_path = work_dir / "transcript_analysis.json"
+    if analysis_path.is_file():
+        try:
+            loaded = _load_json_file(analysis_path)
+            analysis = loaded if isinstance(loaded, dict) else {}
+        except RuntimeError:
+            analysis = {}
+    usage = analysis.get("usage", {}) if isinstance(analysis, dict) else {}
+    media = item.get("media") if isinstance(item.get("media"), dict) else {}
+    return {
+        "asr_audio_seconds": float(media.get("duration") or 0.0),
+        "prompt_tokens": int(usage.get("prompt_tokens") or 0),
+        "completion_tokens": int(usage.get("completion_tokens") or 0),
+        "total_tokens": int(usage.get("total_tokens") or 0),
+        "input_bytes": int(media.get("bytes") or 0),
+        "output_bytes": _directory_bytes(Path(item.get("output_dir") or "")),
+        "work_bytes": _directory_bytes(work_dir),
+    }
+
+
+def _aggregate_job_usage(items: list[dict[str, Any]], zip_path: Path) -> dict[str, Any]:
+    keys = ("asr_audio_seconds", "prompt_tokens", "completion_tokens", "total_tokens", "input_bytes", "output_bytes", "work_bytes")
+    result = {
+        key: sum(float((item.get("usage") or {}).get(key) or 0) for item in items)
+        for key in keys
+    }
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens", "input_bytes", "output_bytes", "work_bytes"):
+        result[key] = int(result[key])
+    result["zip_bytes"] = zip_path.stat().st_size if zip_path.is_file() else 0
+    return result
+
+
+def _directory_bytes(path: Path) -> int:
+    if not path.is_dir():
+        return 0
+    total = 0
+    for candidate in path.rglob("*"):
+        try:
+            if candidate.is_file():
+                total += candidate.stat().st_size
+        except OSError:
+            continue
+    return total
 
 
 def _build_job_zip(job_dir: Path, items: list[dict[str, Any]]) -> Path:
