@@ -177,6 +177,27 @@ def main() -> int:
     if index_response.status_code != 200 or missing:
         print(f"Index page environment status check failed; missing: {', '.join(missing)}")
         return 1
+    expected_security_headers = {
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+        "referrer-policy": "no-referrer",
+    }
+    for header, expected in expected_security_headers.items():
+        if index_response.headers.get(header) != expected:
+            print(f"Security header check failed: {header}")
+            return 1
+    remote_response = client.get("/", headers={"host": "public.example"})
+    if remote_response.status_code != 403 or "仅允许本机访问" not in remote_response.text:
+        print("Remote host guard check failed.")
+        return 1
+    if remote_response.headers.get("x-content-type-options") != "nosniff":
+        print("Rejected response security header check failed.")
+        return 1
+    with patch.dict(os.environ, {"AI_CUTTING_ALLOW_UNSAFE_REMOTE": "1"}):
+        unsafe_remote_response = client.get("/", headers={"host": "public.example"})
+    if unsafe_remote_response.status_code != 200:
+        print("Explicit unsafe remote override check failed.")
+        return 1
     settings_response = client.get("/settings")
     print(f"settings page: {settings_response.status_code}")
     settings_required_fragments = ["运行环境", "FFmpeg / FFprobe", "火山引擎凭证"]

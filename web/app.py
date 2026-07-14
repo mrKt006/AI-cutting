@@ -102,6 +102,41 @@ templates = Jinja2Templates(directory=str(ROOT / "web" / "templates"))
 app.mount("/static", StaticFiles(directory=str(ROOT / "web" / "static")), name="static")
 
 
+@app.middleware("http")
+async def local_access_and_security_headers(request: Request, call_next):
+    allow_unsafe_remote = os.environ.get("AI_CUTTING_ALLOW_UNSAFE_REMOTE") == "1"
+    raw_host = request.headers.get("host", "").strip().lower()
+    if raw_host.startswith("["):
+        host = raw_host.split("]", 1)[0].lstrip("[")
+    else:
+        host = raw_host.split(":", 1)[0]
+    client_host = str(request.client.host if request.client else "").lower()
+    allowed_hosts = {"127.0.0.1", "localhost", "::1", "testserver"}
+    allowed_clients = {"127.0.0.1", "localhost", "::1", "testclient"}
+
+    def apply_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Cache-Control"] = (
+            "no-store"
+            if request.url.path.startswith(("/jobs", "/api"))
+            else response.headers.get("Cache-Control", "no-cache")
+        )
+        return response
+
+    if not allow_unsafe_remote and (host not in allowed_hosts or client_host not in allowed_clients):
+        return apply_security_headers(
+            JSONResponse(
+                status_code=403,
+                content={"detail": "当前版本仅允许本机访问。公网部署前必须完成账号隔离、密钥加密和持久化任务队列。"},
+            )
+        )
+    response = await call_next(request)
+    return apply_security_headers(response)
+
+
 @app.on_event("startup")
 def recover_interrupted_jobs() -> None:
     """Recover resumable work without repeating completed external API stages."""

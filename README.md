@@ -175,5 +175,6 @@ python scripts/check_edit_page_js.py
 
 - `web/settings.local.json` 保存本地火山配置，已被 `.gitignore` 排除，不应该提交到公开仓库。
 - `jobs/`、`input/`、`output/`、视频文件和模型文件默认不提交。
-- 当前版本仍是本地单人 MVP。如果部署到公网，需要额外做账号隔离、密钥加密、上传限制和任务队列。
+- 当前版本仍是本地单人 MVP，默认拒绝非本机访问。`AI_CUTTING_ALLOW_UNSAFE_REMOTE=1` 只用于受信任局域网临时调试，不能作为公网部署方案。
+- 公网版必须补齐账号与租户隔离、密钥加密、持久化任务队列、对象存储、配额和审计，详见 [公网部署架构蓝图](docs/PUBLIC_DEPLOYMENT_BLUEPRINT.md)。
 - AI 决策和用户修改数据规则参见 [docs/DATA_GOVERNANCE.md](docs/DATA_GOVERNANCE.md)。
