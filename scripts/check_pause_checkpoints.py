@@ -34,6 +34,14 @@ def main() -> int:
         else:
             raise AssertionError("pause request did not stop at the checkpoint")
 
+        control.write_text(json.dumps({"pause_requested": False, "cancel_requested": True}), encoding="utf-8")
+        try:
+            pipeline._stage_checkpoint(args, "analysis")
+        except pipeline.CancelRequested:
+            pass
+        else:
+            raise AssertionError("cancel request did not stop at the checkpoint")
+
         segments = [
             TimingSegment(
                 0.1,

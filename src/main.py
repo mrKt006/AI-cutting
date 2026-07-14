@@ -70,6 +70,10 @@ class PauseRequested(RuntimeError):
     pass
 
 
+class CancelRequested(RuntimeError):
+    pass
+
+
 def main() -> int:
     args = parse_args()
     video = Path(args.video)
@@ -337,6 +341,9 @@ def main() -> int:
     except PauseRequested as exc:
         print(f"Paused: {exc}")
         return 75
+    except CancelRequested as exc:
+        print(f"Cancelled: {exc}")
+        return 76
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
@@ -356,6 +363,8 @@ def _stage_checkpoint(args: argparse.Namespace, stage: str) -> None:
         control = json.loads(control_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return
+    if control.get("cancel_requested"):
+        raise CancelRequested(f"已在 {stage} 阶段结束后安全取消")
     if control.get("pause_requested"):
         raise PauseRequested(f"已在 {stage} 阶段结束后安全暂停")
 

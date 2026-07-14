@@ -230,6 +230,16 @@ def main() -> int:
         if resume_response.status_code != 303 or resumed.get("status") != "queued" or resumed["params"]["items"][0]["status"] != "queued":
             print("Resume endpoint check failed.")
             return 1
+        resumed["status"] = "paused"
+        resumed["stage"] = "paused"
+        resumed["params"]["items"][0]["status"] = "paused"
+        (pause_job_dir / "job.json").write_text(json.dumps(resumed, ensure_ascii=False), encoding="utf-8")
+        with patch("web.app.JOBS_DIR", temporary_jobs):
+            cancel_response = client.post("/jobs/pause-test/cancel", follow_redirects=False)
+        cancelled = json.loads((pause_job_dir / "job.json").read_text(encoding="utf-8"))
+        if cancel_response.status_code != 303 or cancelled.get("status") != "cancelled" or cancelled["params"]["items"][0]["status"] != "cancelled":
+            print("Cancel endpoint check failed.")
+            return 1
     jobs_response = client.get("/jobs")
     jobs_required_fragments = ["全部任务", "标题或任务 ID", "全部状态"]
     missing = [fragment for fragment in jobs_required_fragments if fragment not in jobs_response.text]

@@ -216,7 +216,9 @@ small {
 }
 
 .pausing,
-.paused {
+.paused,
+.cancelling,
+.cancelled {
   color: #344054;
   background: #eaecf0;
 }

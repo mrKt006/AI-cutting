@@ -81,6 +81,8 @@ STAGES = {
     "running": "处理中",
     "pausing": "正在安全暂停",
     "paused": "已暂停",
+    "cancelling": "正在取消",
+    "cancelled": "已取消",
     "done": "完成",
     "failed": "失败",
 }
@@ -100,7 +102,17 @@ def recover_interrupted_jobs() -> None:
             job = read_json_file(job_file)
         except RuntimeError:
             continue
-        if not isinstance(job, dict) or job.get("status") not in {"queued", "running", "pausing"}:
+        if not isinstance(job, dict) or job.get("status") not in {"queued", "running", "pausing", "cancelling"}:
+            continue
+        if job.get("status") == "cancelling":
+            job["status"] = "cancelled"
+            job["stage"] = "cancelled"
+            job["error"] = None
+            job["updated_at"] = _now()
+            for item in job.get("params", {}).get("items", []):
+                if item.get("status") == "running":
+                    item["status"] = "cancelled"
+            job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")
             continue
         if job.get("status") == "pausing":
             job["status"] = "paused"
@@ -743,6 +755,26 @@ def pause_job(job_id: str) -> RedirectResponse:
     return RedirectResponse(f"/jobs/{job_id}", status_code=303)
 
 
+@app.post("/jobs/{job_id}/cancel")
+def cancel_job(job_id: str) -> RedirectResponse:
+    job_dir = _job_path(job_id)
+    job = _load_job(job_dir)
+    if job.get("status") not in {"queued", "running", "pausing", "paused", "cancelling"}:
+        raise HTTPException(status_code=409, detail="当前任务不能取消")
+    _write_job_control(job_dir, pause_requested=False, cancel_requested=True)
+    if job_id not in ACTIVE_JOB_IDS or job.get("status") == "paused":
+        for item in job.get("params", {}).get("items", []):
+            if item.get("status") not in {"done", "failed"}:
+                item["status"] = "cancelled"
+        job["status"] = "cancelled"
+        job["stage"] = "cancelled"
+        job.setdefault("log", []).append({"time": _now(), "message": "用户取消任务"})
+        _write_job(job_dir, job)
+    elif job.get("status") != "cancelling":
+        _update_job(job_dir, status="cancelling", stage="cancelling", message="已请求取消，将在当前步骤结束后停止")
+    return RedirectResponse(f"/jobs/{job_id}", status_code=303)
+
+
 @app.post("/jobs/{job_id}/resume")
 def resume_job(job_id: str) -> RedirectResponse:
     if job_id in ACTIVE_JOB_IDS:
@@ -760,7 +792,7 @@ def resume_job(job_id: str) -> RedirectResponse:
     if needs_asr and not (settings.get("volc_app_id") and settings.get("volc_access_token")):
         raise HTTPException(status_code=400, detail="继续任务前请先在设置页配置火山 APP ID 和 Access Token")
     _set_job_secrets(job_id, settings)
-    _write_job_control(job_dir, pause_requested=False)
+    _write_job_control(job_dir, pause_requested=False, cancel_requested=False)
     for item in job.get("params", {}).get("items", []):
         if item.get("status") == "paused":
             item["status"] = "queued"
@@ -779,8 +811,8 @@ def retry_job(job_id: str) -> RedirectResponse:
         raise HTTPException(status_code=409, detail="任务仍在运行，不能重复启动")
     job_dir = _job_path(job_id)
     job = _load_job(job_dir)
-    if job.get("status") not in {"failed", "queued"}:
-        raise HTTPException(status_code=409, detail="只有失败或中断的任务可以重新处理")
+    if job.get("status") not in {"failed", "queued", "cancelled"}:
+        raise HTTPException(status_code=409, detail="只有失败、中断或已取消的任务可以重新处理")
     settings = _load_settings()
     runtime = _runtime_status(settings)
     if not runtime["ffmpeg_ready"]:
@@ -814,7 +846,7 @@ def retry_job(job_id: str) -> RedirectResponse:
     job["updated_at"] = _now()
     job.setdefault("log", []).append({"time": _now(), "message": f"用户重新处理 {pending} 个未完成视频"})
     _write_job(job_dir, job)
-    _write_job_control(job_dir, pause_requested=False)
+    _write_job_control(job_dir, pause_requested=False, cancel_requested=False)
     JOB_SECRETS[job_id] = {
         "VOLC_APP_ID": str(volc_app_id),
         "VOLC_ACCESS_TOKEN": str(volc_token),
@@ -1118,6 +1150,9 @@ def _run_job(job_id: str) -> None:
     ACTIVE_JOB_IDS.add(job_id)
 
     try:
+        if _cancel_requested(job_dir):
+            _update_job(job_dir, status="cancelled", stage="cancelled", message="任务已在开始处理前取消")
+            return
         if _pause_requested(job_dir):
             _update_job(job_dir, status="paused", stage="paused", message="任务已在开始处理前暂停")
             return
@@ -1152,6 +1187,11 @@ def _run_job(job_id: str) -> None:
             if item.get("status") == "done" and item.get("outputs"):
                 _append_log(job_dir, f"跳过已完成的视频: {item['title']}")
                 continue
+            if _cancel_requested(job_dir):
+                item["status"] = "cancelled"
+                _set_job_items(job_dir, items)
+                _update_job(job_dir, status="cancelled", stage="cancelled", message="任务已在下一个视频开始前取消")
+                return
             if _pause_requested(job_dir):
                 item["status"] = "paused"
                 _set_job_items(job_dir, items)
@@ -1226,6 +1266,12 @@ def _run_job(job_id: str) -> None:
                 _append_log(job_dir, masked_stderr)
                 (job_dir / f"debug_traceback_{item['id']}.txt").write_text(masked_stderr, encoding="utf-8")
             if proc.returncode != 0:
+                if proc.returncode == 76:
+                    item["status"] = "cancelled"
+                    item["error"] = None
+                    _set_job_items(job_dir, items)
+                    _update_job(job_dir, status="cancelled", stage="cancelled", message="当前步骤已完成，任务已取消")
+                    return
                 if proc.returncode == 75:
                     item["status"] = "paused"
                     item["error"] = None
@@ -1243,6 +1289,9 @@ def _run_job(job_id: str) -> None:
             item["outputs"] = item_outputs
             item["status"] = "done"
             _set_job_items(job_dir, items)
+            if _cancel_requested(job_dir):
+                _update_job(job_dir, status="cancelled", stage="cancelled", message="当前视频已完成，批量任务已取消")
+                return
             if _pause_requested(job_dir):
                 _update_job(job_dir, status="paused", stage="paused", message="当前视频已完成，批量任务已安全暂停")
                 return
@@ -1379,20 +1428,27 @@ def _job_control_path(job_dir: Path) -> Path:
     return job_dir / "control.json"
 
 
-def _write_job_control(job_dir: Path, *, pause_requested: bool) -> None:
+def _write_job_control(
+    job_dir: Path,
+    *,
+    pause_requested: bool | None = None,
+    cancel_requested: bool | None = None,
+) -> None:
     path = _job_control_path(job_dir)
+    existing: dict[str, Any] = {}
+    if path.exists():
+        try:
+            payload = read_json_file(path)
+            existing = payload if isinstance(payload, dict) else {}
+        except RuntimeError:
+            existing = {}
+    if pause_requested is not None:
+        existing["pause_requested"] = bool(pause_requested)
+    if cancel_requested is not None:
+        existing["cancel_requested"] = bool(cancel_requested)
+    existing["updated_at"] = _now()
     temp = path.with_suffix(".tmp.json")
-    temp.write_text(
-        json.dumps(
-            {
-                "pause_requested": bool(pause_requested),
-                "updated_at": _now(),
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    temp.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
     temp.replace(path)
 
 
@@ -1405,6 +1461,17 @@ def _pause_requested(job_dir: Path) -> bool:
     except RuntimeError:
         return False
     return bool(isinstance(payload, dict) and payload.get("pause_requested"))
+
+
+def _cancel_requested(job_dir: Path) -> bool:
+    path = _job_control_path(job_dir)
+    if not path.exists():
+        return False
+    try:
+        payload = read_json_file(path)
+    except RuntimeError:
+        return False
+    return bool(isinstance(payload, dict) and payload.get("cancel_requested"))
 
 
 def _set_job_secrets(job_id: str, settings: dict[str, Any]) -> None:

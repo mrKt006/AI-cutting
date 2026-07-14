@@ -22,7 +22,7 @@
     </header>
 
     <main class="workspace">
-      {% set status_labels = {"done": "完成", "running": "处理中", "pausing": "正在安全暂停", "paused": "已暂停", "failed": "失败", "queued": "等待中"} %}
+      {% set status_labels = {"done": "完成", "running": "处理中", "pausing": "正在安全暂停", "paused": "已暂停", "cancelling": "正在取消", "cancelled": "已取消", "failed": "失败", "queued": "等待中"} %}
       <div class="page-title job-title">
         <div>
           <p class="section-kicker">任务 {{ job.id }}</p>
@@ -34,8 +34,12 @@
           <div id="job-controls" class="job-controls">
             {% if job.status in ["queued", "running", "pausing"] %}
             <form method="post" action="/jobs/{{ job.id }}/pause"><button class="secondary-action small" type="submit" {% if job.status == "pausing" %}disabled{% endif %}>{{ "等待当前步骤" if job.status == "pausing" else "暂停任务" }}</button></form>
+            <form method="post" action="/jobs/{{ job.id }}/cancel"><button class="danger-action small" type="submit">取消任务</button></form>
             {% elif job.status == "paused" %}
             <form method="post" action="/jobs/{{ job.id }}/resume"><button class="primary-action small" type="submit">继续任务</button></form>
+            <form method="post" action="/jobs/{{ job.id }}/cancel"><button class="danger-action small" type="submit">取消任务</button></form>
+            {% elif job.status == "cancelling" %}
+            <button class="secondary-action small" type="button" disabled>等待当前步骤</button>
             {% endif %}
           </div>
         </div>
@@ -48,6 +52,11 @@
           <form method="post" action="/jobs/{{ job.id }}/retry" class="job-retry-form">
             <button class="primary-action small" type="submit">重新处理未完成视频</button>
             <a class="ghost-link" href="/">返回任务设置</a>
+          </form>
+          {% endif %}
+          {% if job.status == "cancelled" %}
+          <form method="post" action="/jobs/{{ job.id }}/retry" class="job-retry-form">
+            <button class="primary-action small" type="submit">重新开始未完成视频</button>
           </form>
           {% endif %}
 
@@ -96,9 +105,9 @@
       </div>
     </main>
   </div>
-  {% if job.status in ["queued", "running", "pausing"] %}
+  {% if job.status in ["queued", "running", "pausing", "cancelling"] %}
   <script>
-    const statusLabels = {done: "完成", running: "处理中", pausing: "正在安全暂停", paused: "已暂停", failed: "失败", queued: "等待中"};
+    const statusLabels = {done: "完成", running: "处理中", pausing: "正在安全暂停", paused: "已暂停", cancelling: "正在取消", cancelled: "已取消", failed: "失败", queued: "等待中"};
     const pollJob = async () => {
       try {
         const response = await fetch("/api/jobs/{{ job.id }}", {cache: "no-store"});
@@ -125,7 +134,7 @@
             return row;
           }));
         }
-        if (["done", "failed", "paused"].includes(data.status)) {
+        if (["done", "failed", "paused", "cancelled"].includes(data.status)) {
           window.location.reload();
           return;
         }
