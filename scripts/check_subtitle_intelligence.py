@@ -18,7 +18,7 @@ from ai_layout import layout_tokens_with_ai  # noqa: E402
 from subtitle_layout import analysis_break_sets, build_layout_context, measure_text, segment_tokens, tokens_from_text, wrap_title_text  # noqa: E402
 from volc_asr import convert_utterances  # noqa: E402
 from make_subtitle import SubtitleCue, TimingSegment, write_ass  # noqa: E402
-from main import _ai_removal_segments, _keep_from_removed, _map_retained_tokens_to_cut_timeline, _protect_speech_from_silence  # noqa: E402
+from main import _ai_removal_segments, _assert_token_conservation, _keep_from_removed, _map_retained_tokens_to_cut_timeline, _protect_speech_from_silence  # noqa: E402
 from cut_silence import Segment  # noqa: E402
 from style_presets import get_style_preset  # noqa: E402
 from web.app import _preview_ass, _write_edit_ass  # noqa: E402
@@ -182,6 +182,33 @@ def main() -> int:
     mapped = _map_retained_tokens_to_cut_timeline([edit_segment], keep, removed_ids)
     assert edit_tokens[0]["id"] not in {token["id"] for token in mapped[0].tokens}
     assert mapped[0].end < 2.0
+
+    trailing_tokens = [
+        {"id": "tail-1", "text": "起", "start": 7.10, "end": 7.36},
+        {"id": "tail-2", "text": "来", "start": 7.36, "end": 7.44},
+        {"id": "tail-3", "text": "了", "start": 7.44, "end": 7.86},
+        {"id": "next-1", "text": "不", "start": 7.88, "end": 8.08},
+        {"id": "next-2", "text": "是", "start": 8.08, "end": 8.28},
+    ]
+    trailing_segment = TimingSegment(7.10, 8.28, "起来了不是", tokens=tuple(trailing_tokens))
+    trailing_keep = [Segment(0.0, 7.491), Segment(7.906, 9.0)]
+    trailing_mapped = _map_retained_tokens_to_cut_timeline([trailing_segment], trailing_keep, set())
+    assert "".join(token["text"] for token in trailing_mapped[0].tokens) == "起来了不是"
+    assert [token["id"] for token in trailing_mapped[0].tokens] == [token["id"] for token in trailing_tokens]
+
+    try:
+        _assert_token_conservation(trailing_tokens, trailing_tokens[:-1], set())
+    except RuntimeError as exc:
+        assert "missing=next-2" in str(exc)
+    else:
+        raise AssertionError("Token integrity check did not reject a missing subtitle token")
+
+    fully_removed = _map_retained_tokens_to_cut_timeline(
+        [trailing_segment],
+        [Segment(0.0, 9.0)],
+        {token["id"] for token in trailing_tokens},
+    )
+    assert fully_removed == []
 
     conservative = {
         "delete_ranges": [

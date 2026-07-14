@@ -455,26 +455,32 @@ def _keep_from_removed(duration: float, removed: list[Segment]) -> list[Segment]
 def _map_retained_tokens_to_cut_timeline(
     segments: list[TimingSegment], keep_segments: list[Segment], removed_token_ids: set[str]
 ) -> list[TimingSegment]:
+    source_tokens = flatten_segment_tokens(segments)
     mapped_tokens: list[dict] = []
-    for token in flatten_segment_tokens(segments):
+    for token in source_tokens:
         token_id = str(token.get("id") or "")
         if token_id in removed_token_ids:
             continue
         start = float(token.get("start", 0))
         end = float(token.get("end", start))
-        center = (start + end) / 2
-        if not any(segment.start <= center <= segment.end for segment in keep_segments):
+        overlaps = [
+            Segment(max(start, segment.start), min(end, segment.end))
+            for segment in keep_segments
+            if min(end, segment.end) > max(start, segment.start)
+        ]
+        if not overlaps:
             continue
         mapped = dict(token)
         mapped["source_start"] = start
         mapped["source_end"] = end
-        mapped["start"] = _map_time_to_cut_timeline(start, keep_segments, prefer_next=True)
-        mapped["end"] = _map_time_to_cut_timeline(end, keep_segments, prefer_next=False)
+        mapped["start"] = _map_time_to_cut_timeline(overlaps[0].start, keep_segments, prefer_next=True)
+        mapped["end"] = _map_time_to_cut_timeline(overlaps[-1].end, keep_segments, prefer_next=False)
         if mapped["end"] <= mapped["start"]:
             mapped["end"] = mapped["start"] + max(0.04, min(0.3, end - start))
         mapped_tokens.append(mapped)
+    _assert_token_conservation(source_tokens, mapped_tokens, removed_token_ids)
     if not mapped_tokens:
-        return _map_segments_to_cut_timeline(segments, keep_segments)
+        return [] if source_tokens else _map_segments_to_cut_timeline(segments, keep_segments)
     return [
         TimingSegment(
             start=float(mapped_tokens[0]["start"]),
@@ -483,6 +489,40 @@ def _map_retained_tokens_to_cut_timeline(
             tokens=tuple(mapped_tokens),
         )
     ]
+
+
+def _assert_token_conservation(
+    source_tokens: list[dict], mapped_tokens: list[dict], removed_token_ids: set[str]
+) -> None:
+    source_ids = [str(token.get("id") or "") for token in source_tokens if str(token.get("id") or "")]
+    if not source_ids:
+        return
+    expected_ids = [token_id for token_id in source_ids if token_id not in removed_token_ids]
+    mapped_ids = [str(token.get("id") or "") for token in mapped_tokens if str(token.get("id") or "")]
+    if mapped_ids == expected_ids:
+        return
+
+    expected_set = set(expected_ids)
+    mapped_set = set(mapped_ids)
+    missing = [token_id for token_id in expected_ids if token_id not in mapped_set]
+    unexpected = [token_id for token_id in mapped_ids if token_id not in expected_set]
+    seen: set[str] = set()
+    duplicates: set[str] = set()
+    for token_id in mapped_ids:
+        if token_id in seen:
+            duplicates.add(token_id)
+        seen.add(token_id)
+    order_changed = not missing and not unexpected and not duplicates and mapped_ids != expected_ids
+    details = []
+    if missing:
+        details.append(f"missing={','.join(missing[:12])}")
+    if unexpected:
+        details.append(f"unexpected={','.join(unexpected[:12])}")
+    if duplicates:
+        details.append(f"duplicates={','.join(sorted(duplicates)[:12])}")
+    if order_changed:
+        details.append("order_changed=true")
+    raise RuntimeError("Subtitle token integrity check failed: " + "; ".join(details))
 
 
 def _transcribe_cut_video_with_volcengine(

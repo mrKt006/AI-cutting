@@ -48,6 +48,7 @@ def main() -> int:
     checks = [
         ("Python compile", [py, "-m", "compileall", "web", "src", "scripts"]),
         ("Encoding scan", [py, "scripts/check_encoding.py"]),
+        ("Tracked-file secret scan", [py, "scripts/check_secrets.py"]),
         ("Web port helper", [py, "scripts/find_web_port.py"]),
         ("Editor timeline plan", [py, "scripts/check_editor_timeline.py"]),
         ("Subtitle intelligence", [py, "scripts/check_subtitle_intelligence.py"]),
