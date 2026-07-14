@@ -182,6 +182,16 @@ def main() -> int:
             _stage_checkpoint(args, "video_cut")
             output_duration = media_duration(working_video)
             width, height = video_size(working_video)
+            _save_checkpoint(
+                checkpoint_dir,
+                "media",
+                {
+                    "original_duration": round(original_duration, 3),
+                    "output_duration": round(output_duration, 3),
+                    "width": width,
+                    "height": height,
+                },
+            )
             title_checkpoint = _load_checkpoint(checkpoint_dir, "titles")
             if title_checkpoint:
                 content_title_analysis = title_checkpoint.get("content_analysis") or {}

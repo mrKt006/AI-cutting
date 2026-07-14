@@ -2098,6 +2098,10 @@ def _write_training_feedback(job_dir: Path, initial: dict[str, Any], final: dict
             baseline = _feedback_project_snapshot(initial)
     else:
         baseline = _feedback_project_snapshot(initial)
+        baseline["captured_at"] = _now()
+        baseline_path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2), encoding="utf-8")
+    if not baseline.get("captured_at"):
+        baseline["captured_at"] = _now()
         baseline_path.write_text(json.dumps(baseline, ensure_ascii=False, indent=2), encoding="utf-8")
 
     raw_transcript: list[dict[str, Any]] = []

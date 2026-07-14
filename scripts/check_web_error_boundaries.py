@@ -242,6 +242,42 @@ def main() -> int:
             print(f"Transcript job fields are incorrect: {created_item}")
             return 1
 
+        second_transcript = transcript_markdown.replace("内容标题测试", "第二条内容").replace("第一行\n第二行", "第二条封面").replace("我们在广西做AI获客系统。", "第二条视频逐字稿。")
+        with (
+            patch("web.app.JOBS_DIR", temporary_jobs),
+            patch("web.app._runtime_status", return_value={"ffmpeg_ready": True}),
+            patch(
+                "web.app._load_settings",
+                return_value={"volc_app_id": "test-app", "volc_access_token": "test-token", "llm_enabled": False},
+            ),
+            patch("web.app._run_job", return_value=None),
+        ):
+            multi_response = client.post(
+                "/jobs",
+                data={"transcript_indices": ["0", "1"], "style_preset_id": "default-white"},
+                files=[
+                    ("video", ("first.mp4", b"first-video", "video/mp4")),
+                    ("video", ("second.mp4", b"second-video", "video/mp4")),
+                    ("transcript_files", ("first.md", transcript_markdown.encode("utf-8"), "text/markdown")),
+                    ("transcript_files", ("second.md", second_transcript.encode("utf-8"), "text/markdown")),
+                ],
+                follow_redirects=False,
+            )
+        if multi_response.status_code != 303:
+            print(f"Multi-video transcript creation failed: {multi_response.status_code} {multi_response.text}")
+            return 1
+        all_created_jobs = sorted(temporary_jobs.glob("*/job.json"), key=lambda path: path.stat().st_mtime)
+        multi_job = json.loads(all_created_jobs[-1].read_text(encoding="utf-8"))
+        multi_items = multi_job["params"]["items"]
+        if (
+            len(multi_items) != 2
+            or multi_items[0]["content_title"] != "内容标题测试"
+            or multi_items[1]["content_title"] != "第二条内容"
+            or Path(multi_items[0]["transcript_path"]).read_text(encoding="utf-8") == Path(multi_items[1]["transcript_path"]).read_text(encoding="utf-8")
+        ):
+            print("Multi-video transcript mapping check failed.")
+            return 1
+
         pause_job_dir = temporary_jobs / "pause-test"
         pause_job_dir.mkdir(parents=True)
         pause_job = {

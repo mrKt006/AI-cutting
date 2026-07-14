@@ -21,6 +21,8 @@ DELETE /api/jobs/<任务ID>/training-feedback?item=<视频编号>
 
 该接口会删除 `training_feedback.json` 和 `auto_edit_baseline.json`，不会删除视频输出、逐字稿或运行所需的检查点。
 
+`scripts/export_training_feedback.py` 只导出 `training_consent=true` 的记录。默认本地记录会被跳过；导出时任务 ID 会散列化，并移除路径、密钥字段和不必要的诊断响应。
+
 ## 公网版前置条件
 
 公网部署前必须另外完成：
