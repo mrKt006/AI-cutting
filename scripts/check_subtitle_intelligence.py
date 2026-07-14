@@ -183,6 +183,56 @@ def main() -> int:
     assert edit_tokens[0]["id"] not in {token["id"] for token in mapped[0].tokens}
     assert mapped[0].end < 2.0
 
+    restart_tokens = tokens_from_text("我们在广我们在广西做获客系统", 0.0, 3.0, prefix="restart")
+    restart_segment = TimingSegment(0.0, 3.0, "我们在广我们在广西做获客系统", tuple(restart_tokens))
+    first_restart_ids = [token["id"] for token in restart_tokens[:4]]
+    restart_analysis = {
+        "delete_ranges": [
+            {"token_ids": first_restart_ids, "type": "false_start", "confidence": 0.97, "reason": "半句后重新起句"}
+        ]
+    }
+    restart_removed, restart_removed_ids = _ai_removal_segments([restart_segment], restart_analysis, "standard")
+    assert restart_removed and restart_removed_ids == set(first_restart_ids)
+
+    unsafe_analysis = {
+        "delete_ranges": [
+            {
+                "token_ids": [restart_tokens[0]["id"], restart_tokens[2]["id"]],
+                "type": "false_start",
+                "confidence": 0.99,
+                "reason": "不连续范围",
+            },
+            {
+                "token_ids": [restart_tokens[-1]["id"]],
+                "type": "stutter",
+                "confidence": 0.99,
+                "reason": "末尾没有重复证据",
+            },
+        ]
+    }
+    unsafe_removed, _ = _ai_removal_segments([restart_segment], unsafe_analysis, "standard")
+    assert not unsafe_removed
+    assert {item["skip_reason"] for item in unsafe_analysis["skipped_delete_ranges"]} == {
+        "non_contiguous_tokens",
+        "missing_adjacent_evidence",
+    }
+
+    protected_tokens = tokens_from_text("24小时24小时在线", 0.0, 2.0, prefix="protected-delete")
+    protected_segment = TimingSegment(0.0, 2.0, "24小时24小时在线", tuple(protected_tokens))
+    protected_analysis = {
+        "delete_ranges": [
+            {
+                "token_ids": [protected_tokens[0]["id"]],
+                "type": "exact_repeat",
+                "confidence": 0.99,
+                "reason": "数字属于关键内容",
+            }
+        ]
+    }
+    protected_removed, _ = _ai_removal_segments([protected_segment], protected_analysis, "standard")
+    assert not protected_removed
+    assert protected_analysis["skipped_delete_ranges"][0]["skip_reason"] == "protected_content"
+
     trailing_tokens = [
         {"id": "tail-1", "text": "起", "start": 7.10, "end": 7.36},
         {"id": "tail-2", "text": "来", "start": 7.36, "end": 7.44},

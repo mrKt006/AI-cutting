@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -555,6 +556,15 @@ def _ai_removal_segments(
         "aggressive": ({"stutter", "false_start", "exact_repeat", "semantic_repeat", "filler", "redundant"}, 0.72),
     }
     allowed_types, threshold = policies.get(mode, policies["standard"])
+    type_thresholds = {
+        "stutter": threshold,
+        "false_start": max(threshold, 0.86),
+        "exact_repeat": max(threshold, 0.88),
+        "semantic_repeat": 0.94 if mode == "standard" else threshold,
+        "filler": max(threshold, 0.9),
+        "redundant": max(threshold, 0.9),
+    }
+    protected_ids = _protected_delete_token_ids(tokens, analysis)
     removed_ids: set[str] = set()
     removed: list[Segment] = []
     applied: list[dict] = []
@@ -563,36 +573,95 @@ def _ai_removal_segments(
         kind = str(operation.get("type") or "redundant")
         confidence = float(operation.get("confidence", 0))
         ids = [str(item) for item in operation.get("token_ids", []) if str(item) in token_index]
-        if kind not in allowed_types or confidence < threshold or not ids:
+        if kind not in allowed_types or confidence < type_thresholds.get(kind, threshold) or not ids:
             skipped.append({**operation, "skip_reason": "policy_or_confidence"})
             continue
         indices = sorted({token_index[token_id] for token_id in ids})
-        runs: list[list[int]] = []
-        for index in indices:
-            if not runs or index != runs[-1][-1] + 1:
-                runs.append([index])
-            else:
-                runs[-1].append(index)
-        for run in runs:
-            first = tokens[run[0]]
-            last = tokens[run[-1]]
-            start = max(0.0, float(first.get("start", 0)) - 0.025)
-            end = max(start + 0.04, float(last.get("end", start)) + 0.025)
-            removed.append(Segment(start, end))
-            run_ids = [str(tokens[index].get("id")) for index in run]
-            removed_ids.update(run_ids)
-            applied.append(
-                {
-                    **operation,
-                    "token_ids": run_ids,
-                    "start": round(start, 3),
-                    "end": round(end, 3),
-                }
-            )
+        if not indices or indices != list(range(indices[0], indices[-1] + 1)):
+            skipped.append({**operation, "skip_reason": "non_contiguous_tokens"})
+            continue
+        run_ids = [str(tokens[index].get("id")) for index in indices]
+        if set(run_ids) & protected_ids:
+            skipped.append({**operation, "skip_reason": "protected_content"})
+            continue
+        if set(run_ids) & removed_ids:
+            skipped.append({**operation, "skip_reason": "overlapping_delete"})
+            continue
+        evidence = _delete_evidence(kind, indices, tokens, mode)
+        if not evidence["accepted"]:
+            skipped.append({**operation, "skip_reason": evidence["reason"]})
+            continue
+        if len(removed_ids) + len(run_ids) > max(1, int(len(tokens) * 0.4)):
+            skipped.append({**operation, "skip_reason": "deletion_budget_exceeded"})
+            continue
+        first = tokens[indices[0]]
+        last = tokens[indices[-1]]
+        start = max(0.0, float(first.get("start", 0)) - 0.025)
+        end = max(start + 0.04, float(last.get("end", start)) + 0.025)
+        removed.append(Segment(start, end))
+        removed_ids.update(run_ids)
+        applied.append(
+            {
+                **operation,
+                "token_ids": run_ids,
+                "start": round(start, 3),
+                "end": round(end, 3),
+                "validation": evidence["reason"],
+            }
+        )
     analysis["auto_edit_mode"] = mode
     analysis["applied_delete_ranges"] = applied
     analysis["skipped_delete_ranges"] = skipped
     return removed, removed_ids
+
+
+def _protected_delete_token_ids(tokens: list[dict], analysis: dict) -> set[str]:
+    protected = {
+        str(token_id)
+        for span in analysis.get("protected_spans", [])
+        if float(span.get("confidence", 0)) >= 0.8
+        for token_id in span.get("token_ids", [])
+    }
+    for token in tokens:
+        text = str(token.get("text") or "")
+        if re.search(r"\d", text) or re.fullmatch(r"[A-Za-z][A-Za-z0-9._+-]*", text):
+            protected.add(str(token.get("id") or ""))
+    return protected
+
+
+def _delete_evidence(kind: str, indices: list[int], tokens: list[dict], mode: str) -> dict[str, object]:
+    deleted = "".join(str(tokens[index].get("text") or "") for index in indices).strip()
+    right_tokens = tokens[indices[-1] + 1 : indices[-1] + 1 + max(6, len(indices) + 2)]
+    right = "".join(str(token.get("text") or "") for token in right_tokens).strip()
+    if not deleted or not right and kind not in {"filler", "redundant"}:
+        return {"accepted": False, "reason": "missing_adjacent_evidence"}
+    if kind == "stutter":
+        repeated = right.startswith(deleted) or right.startswith(deleted[-1])
+        return {"accepted": repeated, "reason": "adjacent_stutter_match" if repeated else "stutter_not_repeated"}
+    if kind == "exact_repeat":
+        repeated = right.startswith(deleted)
+        return {"accepted": repeated, "reason": "adjacent_exact_repeat" if repeated else "exact_repeat_not_found"}
+    if kind == "false_start":
+        shared = _common_prefix_length(deleted, right)
+        accepted = shared >= min(2, len(deleted))
+        return {"accepted": accepted, "reason": "adjacent_restart_match" if accepted else "restart_prefix_not_found"}
+    if kind == "filler":
+        accepted = deleted in {"嗯", "啊", "呃", "额", "那个", "这个", "就是"}
+        return {"accepted": accepted, "reason": "known_filler" if accepted else "unknown_filler"}
+    if kind == "semantic_repeat":
+        return {"accepted": mode in {"standard", "aggressive"}, "reason": "high_confidence_semantic_repeat"}
+    if kind == "redundant":
+        return {"accepted": mode == "aggressive", "reason": "aggressive_redundancy" if mode == "aggressive" else "redundancy_requires_aggressive"}
+    return {"accepted": False, "reason": "unsupported_delete_type"}
+
+
+def _common_prefix_length(left: str, right: str) -> int:
+    length = 0
+    for left_char, right_char in zip(left, right):
+        if left_char != right_char:
+            break
+        length += 1
+    return length
 
 
 def _merge_removed_segments(segments: list[Segment], duration: float) -> list[Segment]:
