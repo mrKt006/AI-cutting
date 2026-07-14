@@ -95,10 +95,15 @@ def main() -> int:
         cover_title_style = style_preset.get("cover_title", {})
         output_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else None
+        artifact_dir = checkpoint_dir / "artifacts" if checkpoint_dir else None
+        if artifact_dir:
+            artifact_dir.mkdir(parents=True, exist_ok=True)
         _stage_checkpoint(args, "validated")
 
         with tempfile.TemporaryDirectory(prefix="ai-cutting-") as tmp:
-            working_video = Path(tmp) / "cut.mp4"
+            temporary_cut = Path(tmp) / "cut.mp4"
+            persistent_cut = artifact_dir / "cut_no_subtitles.mp4" if artifact_dir else None
+            working_video = persistent_cut if persistent_cut and _valid_video_artifact(persistent_cut) else temporary_cut
             original_duration = media_duration(video)
             asr_checkpoint = _load_checkpoint(checkpoint_dir, "asr")
             if asr_checkpoint:
@@ -136,18 +141,45 @@ def main() -> int:
                 _save_checkpoint(checkpoint_dir, "analysis", analysis)
             analysis["transcript_alignment_status"] = transcript_alignment.get("status")
             _stage_checkpoint(args, "analysis")
-            ai_removed, removed_token_ids = _ai_removal_segments(aligned_segments, analysis, args.auto_edit_mode)
-            if args.no_cut:
-                removed_segments = []
-                keep_segments = [Segment(0.0, original_duration)]
+            edit_checkpoint = _load_checkpoint(checkpoint_dir, "edit_plan")
+            cached_keep_segments = _segments_from_data(edit_checkpoint.get("keep_segments"))
+            if edit_checkpoint and cached_keep_segments:
+                keep_segments = cached_keep_segments
+                removed_segments = _segments_from_data(edit_checkpoint.get("removed_segments"))
+                removed_token_ids = {str(item) for item in edit_checkpoint.get("removed_token_ids", [])}
+                analysis["applied_delete_ranges"] = edit_checkpoint.get("applied_delete_ranges", [])
+                analysis["skipped_delete_ranges"] = edit_checkpoint.get("skipped_delete_ranges", [])
             else:
-                silences = detect_silences(video, args.noise, args.min_silence)
-                _, silence_removed = build_keep_segments(original_duration, silences, args.padding)
-                silence_removed = _protect_speech_from_silence(silence_removed, aligned_segments, removed_token_ids)
-                removed_segments = _merge_removed_segments([*silence_removed, *ai_removed], original_duration)
-                keep_segments = _keep_from_removed(original_duration, removed_segments)
+                ai_removed, removed_token_ids = _ai_removal_segments(aligned_segments, analysis, args.auto_edit_mode)
+                if args.no_cut:
+                    removed_segments = []
+                    keep_segments = [Segment(0.0, original_duration)]
+                else:
+                    silences = detect_silences(video, args.noise, args.min_silence)
+                    _, silence_removed = build_keep_segments(original_duration, silences, args.padding)
+                    silence_removed = _protect_speech_from_silence(silence_removed, aligned_segments, removed_token_ids)
+                    removed_segments = _merge_removed_segments([*silence_removed, *ai_removed], original_duration)
+                    keep_segments = _keep_from_removed(original_duration, removed_segments)
+                _save_checkpoint(
+                    checkpoint_dir,
+                    "edit_plan",
+                    {
+                        "keep_segments": [_segment_dict(item) for item in keep_segments],
+                        "removed_segments": [_segment_dict(item) for item in removed_segments],
+                        "removed_token_ids": sorted(removed_token_ids),
+                        "applied_delete_ranges": analysis.get("applied_delete_ranges", []),
+                        "skipped_delete_ranges": analysis.get("skipped_delete_ranges", []),
+                    },
+                )
             _stage_checkpoint(args, "edit_plan")
-            cut_video(video, working_video, keep_segments)
+            if not _valid_video_artifact(working_video):
+                cut_video(video, temporary_cut, keep_segments)
+                if persistent_cut:
+                    _replace_artifact(temporary_cut, persistent_cut)
+                    working_video = persistent_cut
+                else:
+                    working_video = temporary_cut
+            _stage_checkpoint(args, "video_cut")
             output_duration = media_duration(working_video)
             width, height = video_size(working_video)
             title_checkpoint = _load_checkpoint(checkpoint_dir, "titles")
@@ -185,19 +217,32 @@ def main() -> int:
                 )
             _stage_checkpoint(args, "title_layout")
             subtitle_duration = max(0.2, output_duration - 0.08)
-            external_segments = _map_retained_tokens_to_cut_timeline(aligned_segments, keep_segments, removed_token_ids)
-            external_segments = _intelligent_segments(
-                external_segments,
-                subtitle_style,
-                width,
-                height,
-                analysis,
-                args,
-            )
+            subtitle_checkpoint = _load_checkpoint(checkpoint_dir, "subtitle_layout")
+            if subtitle_checkpoint:
+                external_segments = _timing_segments_from_data(subtitle_checkpoint.get("segments"))
+                analysis["layout_decision"] = subtitle_checkpoint.get("layout_decision", {})
+            else:
+                external_segments = _map_retained_tokens_to_cut_timeline(aligned_segments, keep_segments, removed_token_ids)
+                external_segments = _intelligent_segments(
+                    external_segments,
+                    subtitle_style,
+                    width,
+                    height,
+                    analysis,
+                    args,
+                )
+                _save_checkpoint(
+                    checkpoint_dir,
+                    "subtitle_layout",
+                    {"segments": _timing_segments_data(external_segments), "layout_decision": analysis.get("layout_decision", {})},
+                )
+            _stage_checkpoint(args, "subtitle_layout")
             if args.editor_work_dir:
                 editor_work_dir = Path(args.editor_work_dir)
                 editor_work_dir.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(working_video, editor_work_dir / "cut_no_subtitles.mp4")
+                editor_cut = editor_work_dir / "cut_no_subtitles.mp4"
+                if working_video.resolve() != editor_cut.resolve():
+                    _replace_artifact(working_video, editor_cut)
                 _write_timing_segments(external_segments, editor_work_dir / "volcengine_segments.json")
                 (editor_work_dir / "volcengine_response.json").write_text(
                     json.dumps(raw_asr, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -267,7 +312,11 @@ def main() -> int:
                 _write_timing_segments(external_segments, output_dir / "volcengine_segments.json")
             cues = make_cues_from_segmented_timings(external_segments, subtitle_duration, delay=args.subtitle_delay)
             subtitle_srt = output_dir / "subtitle.srt"
-            subtitle_ass = output_dir / "subtitle.ass" if args.export_subtitles else Path(tmp) / "subtitle.ass"
+            subtitle_ass = (
+                output_dir / "subtitle.ass"
+                if args.export_subtitles
+                else (artifact_dir / "subtitle.ass" if artifact_dir else Path(tmp) / "subtitle.ass")
+            )
             if args.export_subtitles:
                 write_srt(cues, subtitle_srt)
             title_end = output_duration
@@ -283,14 +332,21 @@ def main() -> int:
                 title_style=video_title_style,
                 title_end=title_end,
             )
+            _stage_checkpoint(args, "subtitle_ready")
             disfluency_findings = detect_repeated_utterances(external_segments) if args.detect_disfluency and args.export_report else []
 
             final_video = output_dir / f"{output_basename}.mp4"
-            burn_subtitles(working_video, subtitle_ass, final_video)
+            if not _valid_video_artifact(final_video):
+                temporary_final = Path(tmp) / "final.mp4"
+                burn_subtitles(working_video, subtitle_ass, temporary_final)
+                _replace_artifact(temporary_final, final_video)
             final_duration = media_duration(final_video)
             _stage_checkpoint(args, "video_rendered")
             cover_path = output_dir / f"{output_basename}-\u5c01\u9762.jpg"
-            make_cover(working_video, cover_title_text, cover_path, style=cover_title_style)
+            if not _valid_image_artifact(cover_path):
+                temporary_cover = Path(tmp) / "cover.jpg"
+                make_cover(working_video, cover_title_text, temporary_cover, style=cover_title_style)
+                _replace_artifact(temporary_cover, cover_path)
             _stage_checkpoint(args, "cover_rendered")
 
         report = {
@@ -354,6 +410,7 @@ def main() -> int:
                 json.dumps(report, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
+        _stage_checkpoint(args, "completed")
         print(f"Done. Outputs written to {output_dir.resolve()}")
         return 0
     except PauseRequested as exc:
@@ -371,7 +428,9 @@ def main() -> int:
 def _stage_checkpoint(args: argparse.Namespace, stage: str) -> None:
     checkpoint_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else None
     if checkpoint_dir:
-        _save_checkpoint(checkpoint_dir, "state", {"completed_stage": stage, "updated_at": datetime.now().isoformat(timespec="seconds")})
+        payload = {"completed_stage": stage, "updated_at": datetime.now().isoformat(timespec="seconds")}
+        _save_checkpoint(checkpoint_dir, "state", payload)
+        _save_checkpoint(checkpoint_dir, f"stage_{stage}", payload)
     if not args.control_file:
         return
     control_path = Path(args.control_file)
@@ -689,6 +748,47 @@ def _common_prefix_length(left: str, right: str) -> int:
             break
         length += 1
     return length
+
+
+def _segments_from_data(value: object) -> list[Segment]:
+    result: list[Segment] = []
+    for item in value if isinstance(value, list) else []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            start = float(item.get("start", 0))
+            end = float(item.get("end", 0))
+        except (TypeError, ValueError):
+            continue
+        if end > start:
+            result.append(Segment(start, end))
+    return result
+
+
+def _valid_video_artifact(path: Path | None) -> bool:
+    if not path or not path.is_file() or path.stat().st_size < 1024:
+        return False
+    try:
+        return media_duration(path) > 0.05
+    except Exception:
+        return False
+
+
+def _valid_image_artifact(path: Path | None) -> bool:
+    if not path or not path.is_file() or path.stat().st_size < 128:
+        return False
+    try:
+        header = path.read_bytes()[:12]
+    except OSError:
+        return False
+    return header.startswith(b"\xff\xd8\xff") or header.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def _replace_artifact(source: Path, target: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(f".{target.name}.tmp")
+    shutil.copyfile(source, temporary)
+    temporary.replace(target)
 
 
 def _merge_removed_segments(segments: list[Segment], duration: float) -> list[Segment]:

@@ -94,9 +94,12 @@ app.mount("/static", StaticFiles(directory=str(ROOT / "web" / "static")), name="
 
 @app.on_event("startup")
 def recover_interrupted_jobs() -> None:
-    """A process restart cannot leave old jobs looking permanently active."""
+    """Recover resumable work without repeating completed external API stages."""
     if not JOBS_DIR.exists():
         return
+    settings = _load_settings()
+    runtime = _runtime_status(settings)
+    resumable_job_ids: list[str] = []
     for job_file in JOBS_DIR.glob("*/job.json"):
         try:
             job = read_json_file(job_file)
@@ -125,15 +128,50 @@ def recover_interrupted_jobs() -> None:
                     item["status"] = "paused"
             job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")
             continue
-        job["status"] = "failed"
-        job["stage"] = "failed"
-        job["error"] = "服务曾中断，任务未能完成。请点击重新处理。"
+        job_dir = job_file.parent
+        can_resume = bool(runtime.get("ffmpeg_ready")) and _job_has_required_resume_credentials(job_dir, job, settings)
+        job["status"] = "queued" if can_resume else "paused"
+        job["stage"] = "queued" if can_resume else "paused"
+        job["error"] = None
         job["updated_at"] = _now()
         for item in job.get("params", {}).get("items", []):
             if item.get("status") in {"queued", "running"}:
-                item["status"] = "failed"
-                item["error"] = "服务中断"
+                item["status"] = "queued" if can_resume else "paused"
+                item["error"] = None
+        message = "服务重启，任务将从最近检查点自动恢复" if can_resume else "服务重启后任务已暂停，请检查运行环境或接口配置"
+        job.setdefault("log", []).append({"time": _now(), "message": message})
         job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")
+        if can_resume:
+            _set_job_secrets(str(job.get("id") or job_dir.name), settings)
+            _write_job_control(job_dir, pause_requested=False, cancel_requested=False)
+            resumable_job_ids.append(str(job.get("id") or job_dir.name))
+    for job_id in resumable_job_ids:
+        threading.Thread(target=_run_job, args=(job_id,), daemon=True).start()
+
+
+def _job_has_required_resume_credentials(job_dir: Path, job: dict[str, Any], settings: dict[str, Any]) -> bool:
+    pending_items = [item for item in job.get("params", {}).get("items", []) if item.get("status") != "done"]
+    if not pending_items:
+        return True
+    all_asr_cached = all(
+        _valid_asr_checkpoint(job_dir / "work" / str(item.get("id") or "001") / "checkpoints" / "asr.json")
+        for item in pending_items
+    )
+    has_volc = bool(
+        (settings.get("volc_app_id") or os.environ.get("VOLC_APP_ID"))
+        and (settings.get("volc_access_token") or os.environ.get("VOLC_ACCESS_TOKEN"))
+    )
+    return all_asr_cached or has_volc
+
+
+def _valid_asr_checkpoint(path: Path) -> bool:
+    if not path.is_file():
+        return False
+    try:
+        payload = read_json_file(path)
+    except RuntimeError:
+        return False
+    return isinstance(payload, dict) and isinstance(payload.get("response"), dict) and isinstance(payload.get("segments"), list)
 
 
 @app.exception_handler(Exception)
@@ -788,8 +826,15 @@ def resume_job(job_id: str) -> RedirectResponse:
     if not runtime["ffmpeg_ready"]:
         raise HTTPException(status_code=400, detail=f"视频运行环境不可用：{runtime.get('ffmpeg_error') or 'FFmpeg 自检失败'}")
     pending_items = [item for item in job.get("params", {}).get("items", []) if item.get("status") != "done"]
-    needs_asr = any(not (job_dir / "work" / str(item.get("id") or "001") / "checkpoints" / "asr.json").exists() for item in pending_items)
-    if needs_asr and not (settings.get("volc_app_id") and settings.get("volc_access_token")):
+    needs_asr = any(
+        not _valid_asr_checkpoint(job_dir / "work" / str(item.get("id") or "001") / "checkpoints" / "asr.json")
+        for item in pending_items
+    )
+    has_volc = bool(
+        (settings.get("volc_app_id") or os.environ.get("VOLC_APP_ID"))
+        and (settings.get("volc_access_token") or os.environ.get("VOLC_ACCESS_TOKEN"))
+    )
+    if needs_asr and not has_volc:
         raise HTTPException(status_code=400, detail="继续任务前请先在设置页配置火山 APP ID 和 Access Token")
     _set_job_secrets(job_id, settings)
     _write_job_control(job_dir, pause_requested=False, cancel_requested=False)
@@ -819,8 +864,6 @@ def retry_job(job_id: str) -> RedirectResponse:
         raise HTTPException(status_code=400, detail=f"视频运行环境不可用：{runtime.get('ffmpeg_error') or 'FFmpeg 自检失败'}")
     volc_app_id = settings.get("volc_app_id") or os.environ.get("VOLC_APP_ID") or ""
     volc_token = settings.get("volc_access_token") or os.environ.get("VOLC_ACCESS_TOKEN") or ""
-    if not volc_app_id or not volc_token:
-        raise HTTPException(status_code=400, detail="重新处理前请先在设置页配置火山 APP ID 和 Access Token")
 
     pending = 0
     for item in job.get("params", {}).get("items", []):
@@ -837,14 +880,18 @@ def retry_job(job_id: str) -> RedirectResponse:
             if target.is_relative_to(job_dir.resolve()):
                 shutil.rmtree(target, ignore_errors=True)
                 target.mkdir(parents=True, exist_ok=True)
-    if not pending:
+    pack_only = pending == 0 and job.get("status") == "failed" and bool(job.get("params", {}).get("items"))
+    if not pending and not pack_only:
         raise HTTPException(status_code=409, detail="这个任务没有需要重新处理的视频")
+    if pending and (not volc_app_id or not volc_token):
+        raise HTTPException(status_code=400, detail="重新处理前请先在设置页配置火山 APP ID 和 Access Token")
 
     job["status"] = "queued"
     job["stage"] = "queued"
     job["error"] = None
     job["updated_at"] = _now()
-    job.setdefault("log", []).append({"time": _now(), "message": f"用户重新处理 {pending} 个未完成视频"})
+    retry_message = "用户重新执行输出打包" if pack_only else f"用户重新处理 {pending} 个未完成视频"
+    job.setdefault("log", []).append({"time": _now(), "message": retry_message})
     _write_job(job_dir, job)
     _write_job_control(job_dir, pause_requested=False, cancel_requested=False)
     JOB_SECRETS[job_id] = {
@@ -915,6 +962,35 @@ async def api_save_edit_project(job_id: str, request: Request, item: str = "001"
     except Exception as exc:
         _write_web_traceback(job_dir, "save-edit-project", exc)
         raise HTTPException(status_code=500, detail="保存精修项目失败，诊断信息已写入任务目录") from exc
+
+
+@app.get("/api/jobs/{job_id}/training-feedback")
+def api_training_feedback(job_id: str, item: str = "001") -> dict[str, Any]:
+    job_dir = _job_path(job_id)
+    _read_job(job_id)
+    safe_item = _safe_path_segment(item) or "001"
+    path = job_dir / "work" / safe_item / "training_feedback.json"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="这个视频还没有用户修改记录")
+    value = read_json_file(path)
+    if not isinstance(value, dict):
+        raise HTTPException(status_code=500, detail="用户修改记录格式无效")
+    return value
+
+
+@app.delete("/api/jobs/{job_id}/training-feedback")
+def api_delete_training_feedback(job_id: str, item: str = "001") -> dict[str, Any]:
+    job_dir = _job_path(job_id)
+    _read_job(job_id)
+    safe_item = _safe_path_segment(item) or "001"
+    work_dir = job_dir / "work" / safe_item
+    deleted = []
+    for name in ("training_feedback.json", "auto_edit_baseline.json"):
+        path = work_dir / name
+        if path.is_file():
+            path.unlink()
+            deleted.append(name)
+    return {"ok": True, "deleted": deleted}
 
 
 @app.post("/api/jobs/{job_id}/edit-preview")
@@ -1296,6 +1372,13 @@ def _run_job(job_id: str) -> None:
                 _update_job(job_dir, status="paused", stage="paused", message="当前视频已完成，批量任务已安全暂停")
                 return
 
+        if _cancel_requested(job_dir):
+            _update_job(job_dir, status="cancelled", stage="cancelled", message="任务已在输出打包前取消")
+            return
+        if _pause_requested(job_dir):
+            _update_job(job_dir, status="paused", stage="paused", message="任务已在输出打包前安全暂停")
+            return
+        _update_job(job_dir, status="running", stage="packing", message="正在打包输出文件")
         zip_path = _build_job_zip(job_dir, items)
         outputs = {"batch_zip": str(zip_path)}
         _update_job(job_dir, status="done", stage="done", message="处理完成，已生成 ZIP", outputs=outputs)
@@ -1384,13 +1467,15 @@ def _set_job_items(job_dir: Path, items: list[dict[str, Any]]) -> None:
 def _build_job_zip(job_dir: Path, items: list[dict[str, Any]]) -> Path:
     zip_path = job_dir / "output" / "批量结果.zip"
     zip_path.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    temporary = zip_path.with_name(f".{zip_path.name}.tmp")
+    with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for item in items:
             output_dir = Path(item["output_dir"])
             folder = _safe_zip_folder(item.get("title") or item.get("id") or "video")
             for path in output_dir.glob("*"):
                 if path.is_file():
                     archive.write(path, arcname=f"{folder}/{path.name}")
+    temporary.replace(zip_path)
     return zip_path
 
 
@@ -2044,27 +2129,24 @@ def _write_training_feedback(job_dir: Path, initial: dict[str, Any], final: dict
         except RuntimeError:
             pass
     final_snapshot = _feedback_project_snapshot(final)
-    before = {item["id"]: item for item in baseline.get("sentences", [])}
-    after = {item["id"]: item for item in final_snapshot.get("sentences", [])}
+    user_changes = _feedback_project_changes(baseline, final_snapshot)
     feedback = {
-        "version": 1,
+        "version": 2,
         "job_id": job_dir.name,
         "item_id": item_id,
         "updated_at": _now(),
+        "data_policy": {
+            "storage": "local_only",
+            "training_consent": False,
+            "contains_media": False,
+            "contains_api_credentials": False,
+        },
         "raw_transcript": raw_transcript,
         "ai_decision": analysis,
         "auto_edit_plan": edit_plan,
         "initial_result": baseline,
         "final_result": final_snapshot,
-        "user_changes": {
-            "restored_sentence_ids": [key for key, item in before.items() if item.get("remove_video") and not after.get(key, {}).get("remove_video")],
-            "removed_sentence_ids": [key for key, item in after.items() if item.get("remove_video") and not before.get(key, {}).get("remove_video")],
-            "text_edits": [
-                {"sentence_id": key, "before": before.get(key, {}).get("text", ""), "after": item.get("text", "")}
-                for key, item in after.items()
-                if key in before and item.get("text") != before[key].get("text")
-            ],
-        },
+        "user_changes": user_changes,
     }
     feedback_path.write_text(json.dumps(feedback, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -2072,6 +2154,27 @@ def _write_training_feedback(job_dir: Path, initial: dict[str, Any], final: dict
 def _feedback_project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
     return {
         "style_preset_id": str(project.get("style_preset_id") or ""),
+        "settings": {
+            "subtitle_offset": float((project.get("settings") or {}).get("subtitle_offset") or 0.0),
+        },
+        "cover": {
+            "text": str((project.get("cover") or {}).get("text") or ""),
+            "frame_time": float((project.get("cover") or {}).get("frame_time") or 0.0),
+            "style_preset_id": str((project.get("cover") or {}).get("style_preset_id") or ""),
+            "style_override": (project.get("cover") or {}).get("style_override") or {},
+        },
+        "title_clips": [
+            {
+                "id": str(item.get("id") or ""),
+                "start": float(item.get("start") or 0.0),
+                "end": float(item.get("end") or 0.0),
+                "text": str(item.get("text") or ""),
+                "enabled": bool(item.get("enabled", True)),
+                "style_override": item.get("style_override") or {},
+            }
+            for item in project.get("title_clips", [])
+            if isinstance(item, dict)
+        ],
         "sentences": [
             {
                 "id": str(item.get("id") or ""),
@@ -2082,11 +2185,85 @@ def _feedback_project_snapshot(project: dict[str, Any]) -> dict[str, Any]:
                 "enabled": bool(item.get("enabled", True)),
                 "remove_video": bool(item.get("remove_video", False)),
                 "timeline_order": int(item.get("timeline_order") or 0),
+                "token_ids": [str(token.get("id") or "") for token in item.get("tokens", []) if token.get("id")],
+                "style_override": item.get("style_override") or {},
             }
             for item in project.get("sentences", [])
             if isinstance(item, dict) and not item.get("synthetic_gap")
         ],
     }
+
+
+def _feedback_project_changes(baseline: dict[str, Any], final: dict[str, Any]) -> dict[str, Any]:
+    before = {item["id"]: item for item in baseline.get("sentences", [])}
+    after = {item["id"]: item for item in final.get("sentences", [])}
+    before_boundaries = _feedback_boundary_ids(baseline.get("sentences", []))
+    after_boundaries = _feedback_boundary_ids(final.get("sentences", []))
+    before_titles = {item["id"]: item for item in baseline.get("title_clips", [])}
+    after_titles = {item["id"]: item for item in final.get("title_clips", [])}
+
+    text_edits = [
+        {"sentence_id": key, "before": before[key].get("text", ""), "after": item.get("text", "")}
+        for key, item in after.items()
+        if key in before and item.get("text") != before[key].get("text")
+    ]
+    timing_edits = [
+        {
+            "sentence_id": key,
+            "before": {"start": before[key].get("start"), "end": before[key].get("end")},
+            "after": {"start": item.get("start"), "end": item.get("end")},
+        }
+        for key, item in after.items()
+        if key in before and (item.get("start"), item.get("end")) != (before[key].get("start"), before[key].get("end"))
+    ]
+    title_edits = [
+        {"title_id": key, "before": before_titles.get(key), "after": item}
+        for key, item in after_titles.items()
+        if before_titles.get(key) != item
+    ]
+    title_edits.extend(
+        {"title_id": key, "before": item, "after": None}
+        for key, item in before_titles.items()
+        if key not in after_titles
+    )
+    return {
+        "restored_sentence_ids": [key for key, item in before.items() if item.get("remove_video") and not after.get(key, {}).get("remove_video")],
+        "removed_sentence_ids": [key for key, item in after.items() if item.get("remove_video") and not before.get(key, {}).get("remove_video")],
+        "added_sentence_ids": [key for key in after if key not in before],
+        "missing_sentence_ids": [key for key in before if key not in after],
+        "text_edits": text_edits,
+        "timing_edits": timing_edits,
+        "split_after_token_ids": sorted(after_boundaries - before_boundaries),
+        "merged_after_token_ids": sorted(before_boundaries - after_boundaries),
+        "order_edits": [
+            {"sentence_id": key, "before": before[key].get("timeline_order"), "after": item.get("timeline_order")}
+            for key, item in after.items()
+            if key in before and item.get("timeline_order") != before[key].get("timeline_order")
+        ],
+        "sentence_style_edits": [
+            {"sentence_id": key, "before": before[key].get("style_override", {}), "after": item.get("style_override", {})}
+            for key, item in after.items()
+            if key in before and item.get("style_override", {}) != before[key].get("style_override", {})
+        ],
+        "content_title_edits": title_edits,
+        "cover_edit": None if baseline.get("cover") == final.get("cover") else {"before": baseline.get("cover"), "after": final.get("cover")},
+        "subtitle_preset_edit": None
+        if baseline.get("style_preset_id") == final.get("style_preset_id")
+        else {"before": baseline.get("style_preset_id"), "after": final.get("style_preset_id")},
+        "subtitle_offset_edit": None
+        if baseline.get("settings") == final.get("settings")
+        else {"before": baseline.get("settings"), "after": final.get("settings")},
+    }
+
+
+def _feedback_boundary_ids(sentences: list[dict[str, Any]]) -> set[str]:
+    ordered = sorted(sentences, key=lambda item: int(item.get("timeline_order") or 0))
+    boundaries: set[str] = set()
+    for sentence in ordered[:-1]:
+        token_ids = sentence.get("token_ids") or []
+        if token_ids:
+            boundaries.add(str(token_ids[-1]))
+    return boundaries
 
 
 def _render_edit_project(job_dir: Path, job: dict[str, Any], project: dict[str, Any]) -> list[dict[str, str]]:

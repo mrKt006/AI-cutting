@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from web.app import _write_training_feedback, app  # noqa: E402
+from web.app import _build_job_zip, _write_training_feedback, app, recover_interrupted_jobs  # noqa: E402
 
 
 def _find_job_id() -> str | None:
@@ -84,13 +84,66 @@ def main() -> int:
         (work_dir / "auto_edit_plan.json").write_text(
             json.dumps({"keep_segments": [{"start": 0.2, "end": 2.0}]}), encoding="utf-8"
         )
-        initial = {"item_id": "001", "sentences": [{"id": "s1", "text": "开始", "start": 0, "end": 1}]}
-        final = {"item_id": "001", "sentences": [{"id": "s1", "text": "现在开始", "start": 0, "end": 1}]}
+        initial = {
+            "item_id": "001",
+            "style_preset_id": "default-white",
+            "cover": {"text": "旧封面", "frame_time": 0.2, "style_preset_id": "default-white"},
+            "title_clips": [{"id": "t1", "text": "旧标题", "start": 0, "end": 1, "enabled": True}],
+            "sentences": [
+                {
+                    "id": "s1",
+                    "text": "开始处理",
+                    "start": 0,
+                    "end": 1,
+                    "timeline_order": 1,
+                    "tokens": [{"id": "a", "text": "开"}, {"id": "b", "text": "始"}],
+                },
+                {
+                    "id": "s2",
+                    "text": "任务",
+                    "start": 1,
+                    "end": 2,
+                    "timeline_order": 2,
+                    "tokens": [{"id": "c", "text": "任"}, {"id": "d", "text": "务"}],
+                },
+            ],
+        }
+        final = {
+            **initial,
+            "cover": {"text": "新封面", "frame_time": 0.5, "style_preset_id": "default-white"},
+            "title_clips": [{"id": "t1", "text": "新标题", "start": 0, "end": 1, "enabled": True}],
+            "sentences": [
+                {
+                    **initial["sentences"][0],
+                    "text": "现在开始",
+                    "end": 0.8,
+                    "tokens": [{"id": "a", "text": "开"}],
+                },
+                {
+                    "id": "s-new",
+                    "text": "始处理",
+                    "start": 0.8,
+                    "end": 1,
+                    "timeline_order": 2,
+                    "tokens": [{"id": "b", "text": "始"}],
+                },
+                {**initial["sentences"][1], "timeline_order": 3},
+            ],
+        }
         _write_training_feedback(job_dir, initial, final)
         feedback_text = (work_dir / "training_feedback.json").read_text(encoding="utf-8")
         feedback = json.loads(feedback_text)
         if feedback["user_changes"]["text_edits"][0]["after"] != "现在开始" or "api_key" in feedback_text.lower():
             print("Training feedback persistence check failed.")
+            return 1
+        if (
+            feedback.get("version") != 2
+            or feedback["data_policy"]["training_consent"]
+            or "a" not in feedback["user_changes"]["split_after_token_ids"]
+            or feedback["user_changes"]["cover_edit"]["after"]["text"] != "新封面"
+            or feedback["user_changes"]["content_title_edits"][0]["after"]["text"] != "新标题"
+        ):
+            print("Training feedback change taxonomy check failed.")
             return 1
         if not feedback.get("auto_edit_plan", {}).get("keep_segments"):
             print("Training feedback edit-plan check failed.")
@@ -239,6 +292,77 @@ def main() -> int:
         cancelled = json.loads((pause_job_dir / "job.json").read_text(encoding="utf-8"))
         if cancel_response.status_code != 303 or cancelled.get("status") != "cancelled" or cancelled["params"]["items"][0]["status"] != "cancelled":
             print("Cancel endpoint check failed.")
+            return 1
+
+        item_output = pause_job_dir / "output" / "001"
+        item_output.mkdir(parents=True)
+        (item_output / "成片.mp4").write_bytes(b"finished")
+        cancelled["status"] = "failed"
+        cancelled["stage"] = "failed"
+        cancelled["params"]["items"][0].update(
+            {"status": "done", "output_dir": str(item_output), "title": "测试", "outputs": {"成片.mp4": str(item_output / "成片.mp4")}}
+        )
+        (pause_job_dir / "job.json").write_text(json.dumps(cancelled, ensure_ascii=False), encoding="utf-8")
+        with (
+            patch("web.app.JOBS_DIR", temporary_jobs),
+            patch("web.app._runtime_status", return_value={"ffmpeg_ready": True}),
+            patch("web.app._load_settings", return_value={}),
+            patch("web.app._run_job", return_value=None),
+        ):
+            pack_retry_response = client.post("/jobs/pause-test/retry", follow_redirects=False)
+        pack_retry_job = json.loads((pause_job_dir / "job.json").read_text(encoding="utf-8"))
+        if pack_retry_response.status_code != 303 or pack_retry_job.get("status") != "queued":
+            print("Pack-only retry check failed.")
+            return 1
+        zip_path = _build_job_zip(pause_job_dir, pack_retry_job["params"]["items"])
+        if not zip_path.is_file() or zip_path.with_name(f".{zip_path.name}.tmp").exists():
+            print("Atomic output package check failed.")
+            return 1
+        feedback_dir = pause_job_dir / "work" / "001"
+        feedback_dir.mkdir(parents=True, exist_ok=True)
+        (feedback_dir / "training_feedback.json").write_text(
+            json.dumps({"version": 2, "data_policy": {"training_consent": False}}), encoding="utf-8"
+        )
+        (feedback_dir / "auto_edit_baseline.json").write_text("{}", encoding="utf-8")
+        with patch("web.app.JOBS_DIR", temporary_jobs):
+            feedback_response = client.get("/api/jobs/pause-test/training-feedback?item=001")
+            delete_feedback_response = client.delete("/api/jobs/pause-test/training-feedback?item=001")
+        if (
+            feedback_response.status_code != 200
+            or delete_feedback_response.status_code != 200
+            or (feedback_dir / "training_feedback.json").exists()
+            or (feedback_dir / "auto_edit_baseline.json").exists()
+        ):
+            print("Training feedback retention API check failed.")
+            return 1
+
+        recover_jobs = Path(tmp) / "recover-jobs"
+        cached_job_dir = recover_jobs / "cached-job"
+        uncached_job_dir = recover_jobs / "uncached-job"
+        for recovery_dir, recovery_id in ((cached_job_dir, "cached-job"), (uncached_job_dir, "uncached-job")):
+            recovery_dir.mkdir(parents=True)
+            recovery_job = {
+                "id": recovery_id,
+                "status": "running",
+                "stage": "running",
+                "log": [],
+                "params": {"items": [{"id": "001", "status": "running", "outputs": {}}]},
+            }
+            (recovery_dir / "job.json").write_text(json.dumps(recovery_job), encoding="utf-8")
+        cached_checkpoint = cached_job_dir / "work" / "001" / "checkpoints"
+        cached_checkpoint.mkdir(parents=True)
+        (cached_checkpoint / "asr.json").write_text('{"response": {}, "segments": []}', encoding="utf-8")
+        with (
+            patch("web.app.JOBS_DIR", recover_jobs),
+            patch("web.app._load_settings", return_value={}),
+            patch("web.app._runtime_status", return_value={"ffmpeg_ready": True}),
+            patch("web.app._run_job", return_value=None),
+        ):
+            recover_interrupted_jobs()
+        cached_recovered = json.loads((cached_job_dir / "job.json").read_text(encoding="utf-8"))
+        uncached_recovered = json.loads((uncached_job_dir / "job.json").read_text(encoding="utf-8"))
+        if cached_recovered.get("status") != "queued" or uncached_recovered.get("status") != "paused":
+            print("Service restart recovery check failed.")
             return 1
     jobs_response = client.get("/jobs")
     jobs_required_fragments = ["全部任务", "标题或任务 ID", "全部状态"]

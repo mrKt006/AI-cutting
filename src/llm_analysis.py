@@ -95,7 +95,7 @@ def analyze_transcript(
             if result.get("status") == "ok":
                 _write_cache(cache_dir, cache_key, result)
         else:
-            result = {**result, "cached": True, "usage": _empty_usage(), "latency_ms": 0}
+            result = {**result, "cached": True, "usage": _empty_usage(), "latency_ms": 0, "attempt_count": 0, "retry_errors": []}
         decision_traces.append(_decision_trace("transcript_analysis", chunk, result, endpoint, model))
         if result.get("status") == "ok":
             analyses.append(result)
@@ -144,7 +144,7 @@ def decide_line_layout(
     cache_key = _cache_key("layout", model, user_payload)
     cached = _read_cache(cache_dir, cache_key)
     if cached is not None:
-        result = {**cached, "cached": True, "usage": _empty_usage(), "latency_ms": 0}
+        result = {**cached, "cached": True, "usage": _empty_usage(), "latency_ms": 0, "attempt_count": 0, "retry_errors": []}
         result["decision_trace"] = _decision_trace("subtitle_layout", tokens, result, endpoint, model, constraints)
         return result
     payload = {
@@ -158,6 +158,7 @@ def decide_line_layout(
         ],
     }
     last_error = ""
+    retry_errors: list[str] = []
     for _ in range(1):
         started = time.perf_counter()
         try:
@@ -174,6 +175,8 @@ def decide_line_layout(
             trace_base = {
                 "raw_response": body["choices"][0]["message"]["content"],
                 "latency_ms": round((time.perf_counter() - started) * 1000),
+                "attempt_count": 1,
+                "retry_errors": retry_errors,
             }
             option_ids = parsed.get("option_ids")
             if isinstance(option_ids, list):
@@ -191,7 +194,10 @@ def decide_line_layout(
             urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError,
         ) as exc:
             last_error = exc.__class__.__name__
+            retry_errors.append(last_error)
     failed = {"status": "failed", "reason": last_error or "invalid_response", "sentences": []}
+    failed["attempt_count"] = 1
+    failed["retry_errors"] = retry_errors
     failed["decision_trace"] = _decision_trace("subtitle_layout", tokens, failed, endpoint, model, constraints)
     return failed
 
@@ -226,7 +232,8 @@ def _request_analysis(
         ],
     }
     last_error = ""
-    for _ in range(2):
+    retry_errors: list[str] = []
+    for attempt in range(1, 3):
         started = time.perf_counter()
         try:
             request = urllib.request.Request(
@@ -241,14 +248,19 @@ def _request_analysis(
             result["usage"] = _normalize_usage(body.get("usage"))
             result["raw_response"] = body["choices"][0]["message"]["content"]
             result["latency_ms"] = round((time.perf_counter() - started) * 1000)
+            result["attempt_count"] = attempt
+            result["retry_errors"] = retry_errors
             return result
         except (
             KeyError, IndexError, TypeError, ValueError, RuntimeError, json.JSONDecodeError,
             urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError,
         ) as exc:
             last_error = exc.__class__.__name__
+            retry_errors.append(last_error)
     failed = _empty_analysis(last_error or "invalid_response")
     failed["latency_ms"] = round((time.perf_counter() - started) * 1000)
+    failed["attempt_count"] = 2
+    failed["retry_errors"] = retry_errors
     return failed
 
 
@@ -284,6 +296,8 @@ def _decision_trace(
         "decision": decision,
         "status": result.get("status"),
         "error_type": result.get("reason"),
+        "attempt_count": int(result.get("attempt_count") or 0),
+        "retry_errors": result.get("retry_errors") or [],
         "latency_ms": int(result.get("latency_ms") or 0),
         "usage": result.get("usage") or _empty_usage(),
         "cache_hit": bool(result.get("cached")),

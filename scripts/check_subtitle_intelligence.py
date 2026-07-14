@@ -166,6 +166,8 @@ def main() -> int:
         assert trace["schema_version"]
         assert trace["input"]["token_count"] == len(correction_tokens)
         assert trace["raw_response"]
+        assert trace["attempt_count"] == 1
+        assert trace["retry_errors"] == []
         assert "secret" not in json.dumps(trace)
     with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
         failed = analyze_transcript(correction_tokens, base_url="https://example.test/v1", model="test", api_key="secret")

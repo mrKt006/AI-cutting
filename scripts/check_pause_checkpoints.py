@@ -25,6 +25,7 @@ def main() -> int:
         pipeline._stage_checkpoint(args, "validated")
         state = json.loads((checkpoints / "state.json").read_text(encoding="utf-8"))
         assert state["completed_stage"] == "validated"
+        assert (checkpoints / "stage_validated.json").is_file()
 
         control.write_text(json.dumps({"pause_requested": True}), encoding="utf-8")
         try:
@@ -55,6 +56,14 @@ def main() -> int:
         assert len(restored) == 1
         assert restored[0].text == "AI获客系统"
         assert restored[0].tokens[0]["id"] == "t1"
+
+        restored_ranges = pipeline._segments_from_data([{"start": 0.0, "end": 1.2}, {"start": 2, "end": 1}])
+        assert len(restored_ranges) == 1 and restored_ranges[0].end == 1.2
+        source_artifact = root / "source.jpg"
+        target_artifact = root / "nested" / "cover.jpg"
+        source_artifact.write_bytes(b"\xff\xd8\xff" + b"0" * 256)
+        pipeline._replace_artifact(source_artifact, target_artifact)
+        assert pipeline._valid_image_artifact(target_artifact)
 
     print("Pause checkpoint checks passed.")
     return 0

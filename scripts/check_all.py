@@ -54,6 +54,7 @@ def main() -> int:
         ("Transcript document", [py, "scripts/check_transcript_document.py"]),
         ("Transcript alignment", [py, "scripts/check_transcript_alignment.py"]),
         ("Pause checkpoints", [py, "scripts/check_pause_checkpoints.py"]),
+        ("Pipeline resume", [py, "scripts/check_pipeline_resume.py"]),
         ("Subtitle intelligence", [py, "scripts/check_subtitle_intelligence.py"]),
         ("Web error boundaries", [py, "scripts/check_web_error_boundaries.py"]),
         ("Edit page JS", [py, "scripts/check_edit_page_js.py"]),
