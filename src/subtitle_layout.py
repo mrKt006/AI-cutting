@@ -253,6 +253,12 @@ def analysis_break_sets(
         ids = [str(item) for item in sentence.get("token_ids", []) if str(item) in token_ids]
         if _valid_semantic_span(ids, str(sentence.get("text") or ""), token_by_id, token_position):
             required.add(ids[-1])
+    for token in tokens:
+        token_id = str(token.get("id") or "")
+        if token.get("manual_break_after") or token.get("script_sentence_break_after"):
+            required.add(token_id)
+        elif token.get("script_phrase_break_after"):
+            preferred.add(token_id)
     if tokens:
         required.discard(str(tokens[-1].get("id") or ""))
     preferred.update(required)

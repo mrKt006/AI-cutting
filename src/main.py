@@ -21,6 +21,7 @@ from render_video import burn_subtitles
 from style_presets import get_style_preset
 from subtitle_layout import flatten_segment_tokens, tokens_from_text, wrap_title_text
 from text_utils import read_text, strip_keyword_marks
+from transcript_alignment import align_transcript_tokens
 from volc_asr import convert_utterances, extract_wav, query_until_done, submit_audio
 
 
@@ -32,6 +33,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--video", default="input/video.mp4", help="input video path")
     parser.add_argument("--script", default="input/script.txt", help="input script path")
     parser.add_argument("--title", default=None, help="optional title text or title file path")
+    parser.add_argument("--content-title", default=None, help="video content title text or file path")
+    parser.add_argument("--cover-title", default=None, help="cover title text or file path")
     parser.add_argument("--output-dir", default="output", help="output directory")
     parser.add_argument("--output-basename", default=None, help="output file basename without extension")
     parser.add_argument("--noise", default="-30dB", help="silence threshold, e.g. -30dB")
@@ -71,8 +74,10 @@ def main() -> int:
         require_tool("ffprobe")
         _require_file(video, "video")
         script = read_text(script_path) if script_path.exists() else ""
-        title = _resolve_title(args.title, script_path, script)
-        output_basename = _safe_output_basename(args.output_basename or f"{title}-{datetime.now():%Y%m%d}")
+        legacy_title = _resolve_title(args.title, script_path, script)
+        content_title = _resolve_optional_text(args.content_title) or legacy_title
+        cover_title = _resolve_optional_text(args.cover_title) or content_title
+        output_basename = _safe_output_basename(args.output_basename or f"{cover_title}-{datetime.now():%Y%m%d}")
         style_preset = get_style_preset(args.style_preset, args.style_presets_file)
         subtitle_style = style_preset.get("subtitle", {})
         video_title_style = style_preset.get("video_title", {})
@@ -91,33 +96,36 @@ def main() -> int:
                 max_lines=args.volc_max_lines,
                 timeout=args.volc_timeout,
             )
-            analysis = _run_transcript_analysis(raw_segments, args)
-            ai_removed, removed_token_ids = _ai_removal_segments(raw_segments, analysis, args.auto_edit_mode)
+            aligned_segments, transcript_alignment = _align_segments_to_script(raw_segments, script)
+            analysis = _run_transcript_analysis(aligned_segments, args)
+            analysis["transcript_alignment_status"] = transcript_alignment.get("status")
+            ai_removed, removed_token_ids = _ai_removal_segments(aligned_segments, analysis, args.auto_edit_mode)
             if args.no_cut:
                 removed_segments = []
                 keep_segments = [Segment(0.0, original_duration)]
             else:
                 silences = detect_silences(video, args.noise, args.min_silence)
                 _, silence_removed = build_keep_segments(original_duration, silences, args.padding)
-                silence_removed = _protect_speech_from_silence(silence_removed, raw_segments, removed_token_ids)
+                silence_removed = _protect_speech_from_silence(silence_removed, aligned_segments, removed_token_ids)
                 removed_segments = _merge_removed_segments([*silence_removed, *ai_removed], original_duration)
                 keep_segments = _keep_from_removed(original_duration, removed_segments)
             cut_video(video, working_video, keep_segments)
             output_duration = media_duration(working_video)
             width, height = video_size(working_video)
-            title_lines = [line.strip() for line in title.replace("\r", "").split("\n") if line.strip()]
-            title_tokens = [
-                token
-                for line_index, line in enumerate(title_lines or [title], start=1)
-                for token in tokens_from_text(line, 0.0, 1.0, prefix=f"title-{line_index}")
-            ]
-            title_analysis = _run_transcript_analysis(
-                [TimingSegment(0.0, 1.0, title, tuple(title_tokens))], args
+            content_title_analysis = _analyze_title(content_title, args, prefix="content-title")
+            cover_title_analysis = (
+                content_title_analysis
+                if cover_title == content_title
+                else _analyze_title(cover_title, args, prefix="cover-title")
             )
-            video_title_text, video_title_layout = _intelligent_title(title, video_title_style, width, height, title_analysis, args)
-            cover_title_text, cover_title_layout = _intelligent_title(title, cover_title_style, width, height, title_analysis, args)
+            video_title_text, video_title_layout = _intelligent_title(
+                content_title, video_title_style, width, height, content_title_analysis, args
+            )
+            cover_title_text, cover_title_layout = _intelligent_title(
+                cover_title, cover_title_style, width, height, cover_title_analysis, args
+            )
             subtitle_duration = max(0.2, output_duration - 0.08)
-            external_segments = _map_retained_tokens_to_cut_timeline(raw_segments, keep_segments, removed_token_ids)
+            external_segments = _map_retained_tokens_to_cut_timeline(aligned_segments, keep_segments, removed_token_ids)
             external_segments = _intelligent_segments(
                 external_segments,
                 subtitle_style,
@@ -137,13 +145,19 @@ def main() -> int:
                 (editor_work_dir / "transcript_analysis.json").write_text(
                     json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8"
                 )
+                (editor_work_dir / "transcript_alignment.json").write_text(
+                    json.dumps(transcript_alignment, ensure_ascii=False, indent=2), encoding="utf-8"
+                )
                 (editor_work_dir / "title_layout.json").write_text(
                     json.dumps(
                         {
-                            "source_text": title,
+                            "source_text": legacy_title,
+                            "content_source_text": content_title,
+                            "cover_source_text": cover_title,
                             "video_text": video_title_text,
                             "cover_text": cover_title_text,
-                            "analysis": title_analysis,
+                            "content_analysis": content_title_analysis,
+                            "cover_analysis": cover_title_analysis,
                             "video_layout": video_title_layout,
                             "cover_layout": cover_title_layout,
                         },
@@ -153,6 +167,7 @@ def main() -> int:
                     encoding="utf-8",
                 )
                 _write_timing_segments(raw_segments, editor_work_dir / "raw_transcript_segments.json")
+                _write_timing_segments(aligned_segments, editor_work_dir / "aligned_transcript_segments.json")
                 (editor_work_dir / "auto_edit_plan.json").write_text(
                     json.dumps(
                         {
@@ -203,7 +218,9 @@ def main() -> int:
                 "video": str(video.resolve()),
                 "script": str(script_path.resolve()),
                 "script_exists": script_path.exists(),
-                "title": title,
+                "title": legacy_title,
+                "content_title": content_title,
+                "cover_title": cover_title,
             },
             "outputs": {
                 "final_video": str(final_video.resolve()),
@@ -250,6 +267,7 @@ def main() -> int:
                 "repeat_candidates": disfluency_findings,
             },
             "analysis": analysis,
+            "transcript_alignment": transcript_alignment,
         }
         if args.export_report:
             (output_dir / "edit_report.json").write_text(
@@ -287,6 +305,25 @@ def _resolve_title(title_arg: str | None, script_path: Path, script: str) -> str
     return "未命名视频"
 
 
+def _resolve_optional_text(value: str | None) -> str:
+    if not value:
+        return ""
+    candidate = Path(value)
+    if candidate.exists():
+        return strip_keyword_marks(read_text(candidate)).strip()
+    return strip_keyword_marks(value).strip()
+
+
+def _analyze_title(title: str, args: argparse.Namespace, prefix: str) -> dict:
+    lines = [line.strip() for line in title.replace("\r", "").split("\n") if line.strip()]
+    tokens = [
+        token
+        for line_index, line in enumerate(lines or [title], start=1)
+        for token in tokens_from_text(line, 0.0, 1.0, prefix=f"{prefix}-{line_index}")
+    ]
+    return _run_transcript_analysis([TimingSegment(0.0, 1.0, title, tuple(tokens))], args)
+
+
 def _segment_dict(segment: Segment) -> dict[str, float]:
     return {
         "start": round(segment.start, 3),
@@ -309,6 +346,42 @@ def _write_timing_segments(segments: list[TimingSegment], path: Path) -> None:
         for segment in segments
     ]
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _align_segments_to_script(
+    segments: list[TimingSegment], script: str
+) -> tuple[list[TimingSegment], dict]:
+    source_tokens = flatten_segment_tokens(segments)
+    if not script.strip() or not source_tokens:
+        return segments, {
+            "version": 1,
+            "status": "skipped",
+            "reason": "missing_transcript" if not script.strip() else "missing_asr_tokens",
+            "corrections": [],
+            "asr_only": [],
+            "script_only": [],
+            "ambiguous": [],
+            "manual_break_token_ids": [],
+        }
+    aligned_tokens, report = align_transcript_tokens(source_tokens, script)
+    result: list[TimingSegment] = []
+    cursor = 0
+    for segment in segments:
+        token_count = len(segment.tokens)
+        segment_tokens = aligned_tokens[cursor : cursor + token_count]
+        cursor += token_count
+        if not segment_tokens:
+            result.append(segment)
+            continue
+        result.append(
+            TimingSegment(
+                start=segment.start,
+                end=segment.end,
+                text="".join(str(token.get("text") or "") for token in segment_tokens),
+                tokens=tuple(segment_tokens),
+            )
+        )
+    return result, report
 
 
 def _safe_output_basename(value: str) -> str:

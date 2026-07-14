@@ -370,6 +370,19 @@ small {
   gap: 10px;
 }
 
+.single-item-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.single-item-fields[hidden] {
+  display: none;
+}
+
+.compact-form-grid {
+  grid-template-columns: minmax(240px, 1fr);
+}
+
 .task-title-preview {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
@@ -461,6 +474,28 @@ legend {
   color: var(--text-muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.transcript-upload-field {
+  padding-top: 2px;
+}
+
+.transcript-upload-field em {
+  color: var(--text-muted);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.transcript-upload-field small {
+  min-height: 18px;
+}
+
+.transcript-upload-field small.success {
+  color: var(--success);
+}
+
+.transcript-upload-field small.error {
+  color: var(--danger);
 }
 
 .runtime-grid {
@@ -575,13 +610,11 @@ legend {
 
 .task-title-row {
   display: grid;
-  grid-template-columns: minmax(130px, 0.72fr) minmax(0, 1.28fr);
-  gap: 10px;
-  align-items: center;
-  padding: 9px;
-  background: #ffffff;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  grid-template-columns: minmax(140px, 0.46fr) minmax(0, 1.54fr);
+  gap: 14px;
+  align-items: start;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--line);
 }
 
 .title-row-meta {
@@ -597,14 +630,27 @@ legend {
 }
 
 .task-title-row.is-previewing {
-  border-color: var(--accent);
-  box-shadow: inset 3px 0 0 var(--accent);
+  background: var(--blue-050);
 }
 
 .title-row-meta small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.task-title-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.task-title-editor .transcript-upload-field {
+  grid-column: 1 / -1;
+}
+
+.transcript-upload-field.compact input[type="file"] {
+  min-height: 34px;
 }
 
 .preset-grid,
@@ -3313,6 +3359,7 @@ legend {
   .preset-grid,
   .choice-grid,
   .task-title-row,
+  .task-title-editor,
   .capcut-row,
   .capcut-row.two,
   .preview-controls,

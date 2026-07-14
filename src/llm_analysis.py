@@ -15,6 +15,7 @@ from safe_json import loads_json
 SYSTEM_PROMPT = """你是一名专业中文短视频口播剪辑导演。你的目标是直接生成紧凑、自然、信息密度高的自动剪辑决策，不要把决定交回用户确认。
 只使用输入中的 token ID，不编造文本、音频或时间。区分：ASR 识别错字只改字幕；说话者卡壳、结巴、半句重说、重复表达和无意义填充词应删除对应视频。
 优先保留表达完整、自然、信息更多的一遍。不得删除关键数字、品牌名、产品名、行动指令。删除后必须保持语法和语义连续。
+断句以完整语义成分为单位：完整句、主谓结构、宾语或完整短语结束后可以成为断点，但不要机械地在每个宾语后断开。断点前后都必须能自然朗读，不能留下孤立的否定词、代词、助词或一两个字残句。
 返回严格 JSON 对象：
 corrections: [{token_ids:[...],replacement:string,confidence:0-1,reason:string}]
 break_hints: [{after_token_id:string,confidence:0-1,reason:string}]
@@ -45,6 +46,8 @@ COMPACT_LAYOUT_PROMPT = """
 3. 不得遗漏、重复、交叉或换序。
 4. fill 表示相对舒适宽度；优先 natural=true、fill 接近 1 的句子，同时避免孤立一两个字。
 5. tokens 中的 text 只用于语义判断，不要返回文本。
+6. 优先在完整句、完整主谓结构、宾语或完整短语结束后断开，但不要机械地见宾语就断；断点前后都要自然完整。
+7. 正例：“你买再好的工具｜AI读不到你们业务的上下文”；“AI读不到你们业务的上下文｜也无法替你做出正确判断”。反例：“生意反而做起来不｜是他们突然变勇敢是”。
 """
 
 
@@ -222,7 +225,7 @@ def _request_analysis(
     return _empty_analysis(last_error or "invalid_response")
 
 
-PROMPT_VERSION = "2026-07-13-compact-layout-v1"
+PROMPT_VERSION = "2026-07-15-transcript-aware-layout-v2"
 
 
 def _cache_key(kind: str, model: str, payload: dict[str, Any]) -> str:

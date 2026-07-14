@@ -6,6 +6,7 @@ import sys
 import warnings
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 warnings.filterwarnings("ignore", message=r"Using `httpx` with `starlette\.testclient` is deprecated.*")
 
@@ -97,7 +98,7 @@ def main() -> int:
 
     index_response = client.get("/")
     print(f"index page: {index_response.status_code}")
-    index_required_fragments = ["FFmpeg", "火山", "开始处理"]
+    index_required_fragments = ["FFmpeg", "火山", "开始处理", "内容标题", "封面标题", "逐字稿"]
     missing = [fragment for fragment in index_required_fragments if fragment not in index_response.text]
     if index_response.status_code != 200 or missing:
         print(f"Index page environment status check failed; missing: {', '.join(missing)}")
@@ -109,6 +110,84 @@ def main() -> int:
     if settings_response.status_code != 200 or missing:
         print(f"Settings page runtime status check failed; missing: {', '.join(missing)}")
         return 1
+
+    transcript_markdown = """# 测试文档
+
+## 内容标题
+内容标题测试
+
+## 封面标题
+第一行
+第二行
+
+## 逐字稿
+我们在广西做AI获客系统。
+
+## 备注
+这里不参与匹配。
+"""
+    transcript_response = client.post(
+        "/api/transcripts/parse",
+        files={"file": ("script.md", transcript_markdown.encode("utf-8"), "text/markdown")},
+    )
+    transcript_data = transcript_response.json()
+    if (
+        transcript_response.status_code != 200
+        or transcript_data.get("content_title") != "内容标题测试"
+        or transcript_data.get("cover_title") != "第一行\n第二行"
+        or transcript_data.get("transcript_length") != len("我们在广西做AI获客系统。")
+    ):
+        print(f"Transcript preview API check failed: {transcript_response.status_code} {transcript_response.text}")
+        return 1
+    invalid_transcript = client.post(
+        "/api/transcripts/parse",
+        files={"file": ("script.md", "# 只有标题".encode("utf-8"), "text/markdown")},
+    )
+    if invalid_transcript.status_code != 400 or "有效逐字稿" not in invalid_transcript.text:
+        print(f"Invalid transcript boundary check failed: {invalid_transcript.status_code} {invalid_transcript.text}")
+        return 1
+
+    with tempfile.TemporaryDirectory(prefix="create-job-check-", dir=ROOT) as tmp:
+        temporary_jobs = Path(tmp) / "jobs"
+        with (
+            patch("web.app.JOBS_DIR", temporary_jobs),
+            patch("web.app._runtime_status", return_value={"ffmpeg_ready": True}),
+            patch(
+                "web.app._load_settings",
+                return_value={
+                    "volc_app_id": "test-app",
+                    "volc_access_token": "test-token",
+                    "llm_enabled": False,
+                },
+            ),
+            patch("web.app._run_job", return_value=None),
+        ):
+            create_response = client.post(
+                "/jobs",
+                data={"transcript_indices": "0", "style_preset_id": "default-white"},
+                files=[
+                    ("video", ("video.mp4", b"fake-video", "video/mp4")),
+                    ("transcript_files", ("script.md", transcript_markdown.encode("utf-8"), "text/markdown")),
+                ],
+                follow_redirects=False,
+            )
+        if create_response.status_code != 303:
+            print(f"Transcript job creation failed: {create_response.status_code} {create_response.text}")
+            return 1
+        created_jobs = list(temporary_jobs.glob("*/job.json"))
+        if len(created_jobs) != 1:
+            print("Transcript job creation did not persist exactly one job.")
+            return 1
+        created_job = json.loads(created_jobs[0].read_text(encoding="utf-8"))
+        created_item = created_job["params"]["items"][0]
+        if (
+            created_item.get("content_title") != "内容标题测试"
+            or created_item.get("cover_title") != "第一行\n第二行"
+            or created_item.get("transcript_source") != "逐字稿"
+            or not Path(created_item.get("transcript_path", "")).is_file()
+        ):
+            print(f"Transcript job fields are incorrect: {created_item}")
+            return 1
     jobs_response = client.get("/jobs")
     jobs_required_fragments = ["全部任务", "标题或任务 ID", "全部状态"]
     missing = [fragment for fragment in jobs_required_fragments if fragment not in jobs_response.text]

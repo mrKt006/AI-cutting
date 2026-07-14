@@ -61,13 +61,28 @@
               <span class="file-name" aria-live="polite">未选择文件</span>
             </label>
 
-            <div class="form-grid">
-              <label class="field" id="single-title-field">
-                <span>封面标题</span>
-                <textarea name="title" rows="3" placeholder="普通人怎么学会用 AI 工具&#10;从零开始提高效率" autocomplete="off"></textarea>
-                <small>系统会按语义和所选样式自动换行；按 Enter 可强制指定换行。</small>
+            <section class="single-item-fields" id="single-item-fields">
+              <div class="form-grid">
+                <label class="field">
+                  <span>内容标题</span>
+                  <textarea name="content_title" rows="3" placeholder="视频播放时显示的标题" autocomplete="off"></textarea>
+                  <small>留空时优先读取逐字稿；手动换行会保留。</small>
+                </label>
+                <label class="field">
+                  <span>封面标题</span>
+                  <textarea name="cover_title" rows="3" placeholder="导出封面使用的标题" autocomplete="off"></textarea>
+                  <small>可与内容标题不同；手动换行会保留。</small>
+                </label>
+              </div>
+              <label class="field transcript-upload-field">
+                <span>逐字稿 <em>可选</em></span>
+                <input type="file" name="transcript_files" accept=".md,.txt,text/markdown,text/plain" data-transcript-input>
+                <input type="hidden" name="transcript_indices" value="0" data-transcript-index>
+                <small data-transcript-status>支持 UTF-8 的 .md 和 .txt，用于纠正识别文字并读取标题。</small>
               </label>
+            </section>
 
+            <div class="form-grid compact-form-grid">
               <label class="field">
                 <span>样式预设</span>
                 <select name="style_preset_id">
@@ -93,7 +108,7 @@
             </section>
 
             <fieldset class="per-video-titles" id="per-video-titles" hidden>
-              <legend>每条视频的封面标题</legend>
+              <legend>逐条设置</legend>
               <div class="title-list" id="title-list"></div>
             </fieldset>
 
@@ -179,7 +194,9 @@
     const fileName = document.querySelector(".file-name");
     const perVideoTitles = document.querySelector("#per-video-titles");
     const titleList = document.querySelector("#title-list");
-    const singleTitle = form?.querySelector('textarea[name="title"]');
+    const singleItemFields = document.querySelector("#single-item-fields");
+    const singleContentTitle = form?.querySelector('textarea[name="content_title"]');
+    const singleCoverTitle = form?.querySelector('textarea[name="cover_title"]');
     const stylePreset = form?.querySelector('select[name="style_preset_id"]');
     const taskTitlePreview = document.querySelector("#task-title-preview");
     const taskPreviewVideo = document.querySelector("#task-preview-video");
@@ -208,11 +225,14 @@
       titleList.replaceChildren();
       if (!files || files.length <= 1) {
         perVideoTitles.hidden = true;
+        setSingleItemMode(true);
         return;
       }
 
+      setSingleItemMode(false);
+
       Array.from(files).forEach((file, index) => {
-        const row = document.createElement("label");
+        const row = document.createElement("div");
         row.className = "task-title-row";
 
         const meta = document.createElement("button");
@@ -223,18 +243,43 @@
         meta.querySelector("small").textContent = file.name;
         meta.addEventListener("click", () => selectPreviewItem(index));
 
-        const input = document.createElement("textarea");
-        input.name = "item_titles";
-        input.rows = 3;
-        input.placeholder = `默认：${fileStem(file.name) || `视频 ${index + 1}`}`;
-        input.autocomplete = "off";
-        input.addEventListener("focus", () => selectPreviewItem(index));
-
-        row.append(meta, input);
+        const editor = document.createElement("div");
+        editor.className = "task-title-editor";
+        const contentField = makeTitleField("内容标题", "item_content_titles", "视频播放时显示", index);
+        const coverField = makeTitleField("封面标题", "item_cover_titles", "导出封面使用", index);
+        const transcriptField = document.createElement("label");
+        transcriptField.className = "field transcript-upload-field compact";
+        transcriptField.innerHTML = `<span>逐字稿 <em>可选</em></span><input type="file" name="transcript_files" accept=".md,.txt,text/markdown,text/plain" data-transcript-input><input type="hidden" name="transcript_indices" value="${index}" data-transcript-index><small data-transcript-status>选择对应的 .md 或 .txt</small>`;
+        transcriptField.querySelector("input[type='file']").addEventListener("change", (event) => parseTranscriptInput(event.target, row));
+        editor.append(contentField, coverField, transcriptField);
+        row.append(meta, editor);
         row.dataset.previewIndex = String(index);
         titleList.append(row);
       });
       perVideoTitles.hidden = false;
+    }
+
+    function setSingleItemMode(active) {
+      if (!singleItemFields) return;
+      singleItemFields.hidden = !active;
+      singleItemFields.querySelectorAll("input, textarea").forEach((input) => {
+        input.disabled = !active;
+      });
+    }
+
+    function makeTitleField(label, name, placeholder, index) {
+      const field = document.createElement("label");
+      field.className = "field";
+      const title = document.createElement("span");
+      title.textContent = label;
+      const input = document.createElement("textarea");
+      input.name = name;
+      input.rows = 2;
+      input.placeholder = placeholder;
+      input.autocomplete = "off";
+      input.addEventListener("focus", () => selectPreviewItem(index));
+      field.append(title, input);
+      return field;
     }
 
     function syncFiles(files) {
@@ -261,10 +306,47 @@
     }
 
     function previewTitleValue() {
-      const itemTitles = titleList?.querySelectorAll('textarea[name="item_titles"]');
+      const itemSelector = titlePreviewKind === "cover" ? 'textarea[name="item_cover_titles"]' : 'textarea[name="item_content_titles"]';
+      const itemTitles = titleList?.querySelectorAll(itemSelector);
       const activeItemTitle = itemTitles?.[activePreviewIndex];
       const activeFile = fileInput?.files?.[activePreviewIndex];
+      const singleTitle = titlePreviewKind === "cover" ? singleCoverTitle : singleContentTitle;
       return (activeItemTitle?.value || singleTitle?.value || (activeFile ? fileStem(activeFile.name) : "")).trim();
+    }
+
+    async function parseTranscriptInput(input, row = singleItemFields) {
+      const status = row?.querySelector("[data-transcript-status]");
+      const file = input?.files?.[0];
+      if (!file) {
+        if (status) status.textContent = "选择对应的 .md 或 .txt";
+        return;
+      }
+      if (status) {
+        status.textContent = "正在解析...";
+        status.classList.remove("error", "success");
+      }
+      const body = new FormData();
+      body.append("file", file);
+      try {
+        const response = await fetch("/api/transcripts/parse", {method: "POST", body});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "逐字稿解析失败");
+        const contentInput = row?.querySelector('textarea[name="content_title"], textarea[name="item_content_titles"]');
+        const coverInput = row?.querySelector('textarea[name="cover_title"], textarea[name="item_cover_titles"]');
+        if (contentInput && !contentInput.value.trim() && data.content_title) contentInput.value = data.content_title;
+        if (coverInput && !coverInput.value.trim() && data.cover_title) coverInput.value = data.cover_title;
+        if (status) {
+          const warning = data.warnings?.length ? ` · ${data.warnings.join("；")}` : "";
+          status.textContent = `${data.transcript_source} · ${data.transcript_length} 字${warning}`;
+          status.classList.add("success");
+        }
+        scheduleTitlePreview();
+      } catch (error) {
+        if (status) {
+          status.textContent = error.message || "逐字稿解析失败";
+          status.classList.add("error");
+        }
+      }
     }
 
     function applyPreviewTitleStyle(style = {}) {
@@ -326,8 +408,9 @@
       scheduleTitlePreview();
     });
     form?.addEventListener("input", (event) => {
-      if (event.target.matches('textarea[name="title"], textarea[name="item_titles"]')) scheduleTitlePreview();
+      if (event.target.matches('textarea[name="content_title"], textarea[name="cover_title"], textarea[name="item_content_titles"], textarea[name="item_cover_titles"]')) scheduleTitlePreview();
     });
+    singleItemFields?.querySelector("[data-transcript-input]")?.addEventListener("change", (event) => parseTranscriptInput(event.target));
     stylePreset?.addEventListener("change", scheduleTitlePreview);
     document.querySelectorAll("[data-title-preview-kind]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -367,6 +450,12 @@
     });
 
     form?.addEventListener("submit", () => {
+      form.querySelectorAll("[data-transcript-input]").forEach((input) => {
+        const index = input.parentElement?.querySelector("[data-transcript-index]");
+        const hasFile = Boolean(input.files?.length);
+        input.disabled = !hasFile;
+        if (index) index.disabled = !hasFile;
+      });
       form.classList.add("is-submitting");
       form.querySelector("button[type='submit']")?.setAttribute("disabled", "disabled");
     });

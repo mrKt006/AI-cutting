@@ -43,6 +43,11 @@ from style_presets import (  # noqa: E402
 )
 from subtitle_layout import analysis_break_sets, segment_tokens, text_overflows, tokens_from_text, wrap_title_text  # noqa: E402
 from llm_analysis import analyze_transcript, apply_high_confidence_corrections  # noqa: E402
+from transcript_document import (  # noqa: E402
+    ParsedTranscriptDocument,
+    TranscriptDocumentError,
+    parse_transcript_document,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,6 +67,7 @@ WINDOWS_TOOL_DIRS = [
 SUPPORTED_VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm"}
 MAX_VIDEOS_PER_JOB = 20
 MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024
+MAX_TRANSCRIPT_BYTES = 2 * 1024 * 1024
 
 PRESETS = {
     "natural": {"label": "保守", "decision_label": "AI 保守决策", "noise": "-30dB", "min_silence": 0.45, "padding": 0.12, "auto_edit_mode": "conservative"},
@@ -487,11 +493,23 @@ async def api_title_wrap(request: Request) -> dict[str, Any]:
     return result
 
 
+@app.post("/api/transcripts/parse")
+async def parse_transcript_preview(file: UploadFile = File(...)) -> dict[str, Any]:
+    _, parsed = await _read_transcript_upload(file)
+    return _transcript_preview_payload(parsed, file.filename or "")
+
+
 @app.post("/jobs")
 async def create_job(
     video: list[UploadFile] = File(...),
     title: str = Form(""),
     item_titles: list[str] = Form([]),
+    content_title: str = Form(""),
+    cover_title: str = Form(""),
+    item_content_titles: list[str] = Form([]),
+    item_cover_titles: list[str] = Form([]),
+    transcript_files: list[UploadFile] = File([]),
+    transcript_indices: list[int] = Form([]),
     preset: str = Form("standard"),
     style_preset_id: str = Form("default-white"),
     export_subtitles: str | None = Form(None),
@@ -526,6 +544,18 @@ async def create_job(
         if content_type and not (content_type.startswith("video/") or content_type == "application/octet-stream"):
             raise HTTPException(status_code=400, detail=f"{upload.filename} 的文件类型不是视频")
 
+    uploaded_transcripts = [item for item in transcript_files if item and item.filename]
+    if len(uploaded_transcripts) != len(transcript_indices):
+        raise HTTPException(status_code=400, detail="逐字稿与视频的对应关系无效，请重新选择逐字稿")
+    transcript_records: dict[int, tuple[UploadFile, bytes, ParsedTranscriptDocument]] = {}
+    for upload, video_index in zip(uploaded_transcripts, transcript_indices):
+        if video_index < 0 or video_index >= len(videos):
+            raise HTTPException(status_code=400, detail="逐字稿对应的视频不存在")
+        if video_index in transcript_records:
+            raise HTTPException(status_code=400, detail=f"视频 {video_index + 1} 只能绑定一份逐字稿")
+        raw_document, parsed_document = await _read_transcript_upload(upload)
+        transcript_records[video_index] = (upload, raw_document, parsed_document)
+
     job_id = _new_job_id()
     job_dir = JOBS_DIR / job_id
     input_dir = job_dir / "input"
@@ -533,8 +563,12 @@ async def create_job(
     input_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    base_title = title.strip()
+    legacy_title = title.strip()
+    base_content_title = content_title.strip()
+    base_cover_title = cover_title.strip() or legacy_title
     per_item_titles = [item.strip() for item in item_titles]
+    per_item_content_titles = [item.strip() for item in item_content_titles]
+    per_item_cover_titles = [item.strip() for item in item_cover_titles]
     today = datetime.now().strftime("%Y%m%d")
     items = []
     for index, upload in enumerate(videos, start=1):
@@ -543,24 +577,71 @@ async def create_job(
         item_output_dir = output_dir / item_id
         item_input_dir.mkdir(parents=True, exist_ok=True)
         item_output_dir.mkdir(parents=True, exist_ok=True)
-        item_title = per_item_titles[index - 1] if index - 1 < len(per_item_titles) else ""
-        video_title = item_title or base_title or Path(upload.filename or f"video-{index}").stem
-        if not item_title and base_title and len(videos) > 1:
-            video_title = f"{base_title}-{index:02d}"
-        output_basename = _safe_output_basename(f"{video_title}-{today}")
+        transcript_record = transcript_records.get(index - 1)
+        parsed_document = transcript_record[2] if transcript_record else None
+        legacy_item_title = per_item_titles[index - 1] if index - 1 < len(per_item_titles) else ""
+        explicit_content_title = (
+            per_item_content_titles[index - 1] if index - 1 < len(per_item_content_titles) else ""
+        )
+        explicit_cover_title = (
+            per_item_cover_titles[index - 1] if index - 1 < len(per_item_cover_titles) else ""
+        )
+        filename_title = Path(upload.filename or f"video-{index}").stem
+        video_content_title = (
+            explicit_content_title
+            or (parsed_document.content_title if parsed_document else "")
+            or base_content_title
+            or legacy_item_title
+            or legacy_title
+            or filename_title
+        )
+        video_cover_title = (
+            explicit_cover_title
+            or (parsed_document.cover_title if parsed_document else "")
+            or base_cover_title
+            or video_content_title
+        )
+        output_basename = _safe_output_basename(f"{video_cover_title}-{today}")
         video_path = item_input_dir / _safe_video_name(upload.filename or f"video-{index}.mp4", index=index)
         _save_uploaded_video(upload, video_path)
         if not video_path.exists() or video_path.stat().st_size == 0:
             raise HTTPException(status_code=400, detail=f"{upload.filename} 为空或保存失败")
+        content_title_path = item_input_dir / "content_title.txt"
+        cover_title_path = item_input_dir / "cover_title.txt"
         title_path = item_input_dir / "title.txt"
-        title_path.write_text(video_title, encoding="utf-8")
+        content_title_path.write_text(video_content_title, encoding="utf-8")
+        cover_title_path.write_text(video_cover_title, encoding="utf-8")
+        title_path.write_text(video_content_title, encoding="utf-8")
+        transcript_path = ""
+        transcript_document_path = ""
+        transcript_warnings: list[str] = []
+        transcript_source = ""
+        if transcript_record and parsed_document:
+            transcript_upload, raw_document, parsed_document = transcript_record
+            suffix = Path(transcript_upload.filename or "").suffix.lower()
+            original_path = item_input_dir / f"transcript{suffix}"
+            original_path.write_bytes(raw_document)
+            normalized_path = item_input_dir / "script.txt"
+            normalized_path.write_text(parsed_document.transcript, encoding="utf-8")
+            transcript_path = str(normalized_path)
+            transcript_document_path = str(original_path)
+            transcript_warnings = list(parsed_document.warnings)
+            transcript_source = parsed_document.transcript_source
         items.append(
             {
                 "id": item_id,
                 "source_name": upload.filename or video_path.name,
-                "title": video_title,
+                "title": video_content_title,
+                "content_title": video_content_title,
+                "cover_title": video_cover_title,
                 "video": str(video_path),
                 "title_path": str(title_path),
+                "content_title_path": str(content_title_path),
+                "cover_title_path": str(cover_title_path),
+                "transcript_path": transcript_path,
+                "transcript_document_path": transcript_document_path,
+                "transcript_source": transcript_source,
+                "transcript_warnings": transcript_warnings,
                 "output_dir": str(item_output_dir),
                 "output_basename": output_basename,
                 "status": "queued",
@@ -583,7 +664,7 @@ async def create_job(
         "export_subtitles": bool(export_subtitles),
         "export_asr_json": bool(export_asr_json),
         "export_report": bool(export_report),
-        "title": base_title or (items[0]["title"] if len(items) == 1 else f"批量任务 {len(items)} 个视频"),
+        "title": base_content_title or (items[0]["title"] if len(items) == 1 else f"批量任务 {len(items)} 个视频"),
         "output_dir": str(output_dir),
         "items": items,
         "volc_app_id_source": "settings" if settings.get("volc_app_id") else "environment",
@@ -1022,6 +1103,10 @@ def _run_job(job_id: str) -> None:
                 item["video"],
                 "--title",
                 item["title_path"],
+                "--content-title",
+                item.get("content_title_path") or item["title_path"],
+                "--cover-title",
+                item.get("cover_title_path") or item["title_path"],
                 "--output-dir",
                 item["output_dir"],
                 "--output-basename",
@@ -1044,6 +1129,8 @@ def _run_job(job_id: str) -> None:
                 "--auto-edit-mode",
                 params.get("auto_edit_mode") or "standard",
             ]
+            if item.get("transcript_path"):
+                cmd.extend(["--script", item["transcript_path"]])
             if params["detect_disfluency"]:
                 cmd.append("--detect-disfluency")
             if params.get("llm_enabled"):
@@ -1118,6 +1205,34 @@ def _save_uploaded_video(upload: UploadFile, target: Path) -> None:
     except Exception:
         target.unlink(missing_ok=True)
         raise
+
+
+async def _read_transcript_upload(upload: UploadFile) -> tuple[bytes, ParsedTranscriptDocument]:
+    suffix = Path(upload.filename or "").suffix.lower()
+    raw = await upload.read(MAX_TRANSCRIPT_BYTES + 1)
+    if len(raw) > MAX_TRANSCRIPT_BYTES:
+        raise HTTPException(status_code=413, detail=f"{upload.filename} 超过逐字稿 2 MB 限制")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"{upload.filename} 不是 UTF-8 编码") from exc
+    try:
+        parsed = parse_transcript_document(text, suffix, upload.filename or "")
+    except TranscriptDocumentError as exc:
+        raise HTTPException(status_code=400, detail=f"{upload.filename}：{exc}") from exc
+    return raw, parsed
+
+
+def _transcript_preview_payload(parsed: ParsedTranscriptDocument, filename: str) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "filename": filename,
+        "content_title": parsed.content_title,
+        "cover_title": parsed.cover_title,
+        "transcript_source": parsed.transcript_source,
+        "transcript_length": len(re.sub(r"\s+", "", parsed.transcript)),
+        "warnings": list(parsed.warnings),
+    }
 
 
 def _safe_video_name(name: str, index: int = 1) -> str:
