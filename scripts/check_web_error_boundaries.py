@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 from web.app import (  # noqa: E402
     _aggregate_job_usage,
     _build_job_zip,
+    _feedback_snapshot_hash,
     _inspect_uploaded_video,
     _item_usage,
     _write_training_feedback,
@@ -144,6 +145,23 @@ def main() -> int:
         if feedback["user_changes"]["text_edits"][0]["after"] != "现在开始" or "api_key" in feedback_text.lower():
             print("Training feedback persistence check failed.")
             return 1
+        feedback["review"] = {
+            "status": "completed",
+            "completed_at": "2026-01-01T00:00:00",
+            "reviewed_snapshot_sha256": _feedback_snapshot_hash(feedback["final_result"]),
+        }
+        (work_dir / "training_feedback.json").write_text(json.dumps(feedback, ensure_ascii=False), encoding="utf-8")
+        _write_training_feedback(job_dir, final, final)
+        unchanged_feedback = json.loads((work_dir / "training_feedback.json").read_text(encoding="utf-8"))
+        if unchanged_feedback["review"]["status"] != "completed":
+            print("Completed review preservation check failed.")
+            return 1
+        changed_after_review = {**final, "cover": {**final["cover"], "text": "复核后修改"}}
+        _write_training_feedback(job_dir, final, changed_after_review)
+        invalidated_feedback = json.loads((work_dir / "training_feedback.json").read_text(encoding="utf-8"))
+        if invalidated_feedback["review"]["status"] != "needs_review":
+            print("Review invalidation check failed.")
+            return 1
 
     with tempfile.TemporaryDirectory(prefix="media-probe-check-", dir=ROOT) as tmp:
         fake_media = Path(tmp) / "fake.mp4"
@@ -204,6 +222,10 @@ def main() -> int:
     missing = [fragment for fragment in settings_required_fragments if fragment not in settings_response.text]
     if settings_response.status_code != 200 or missing:
         print(f"Settings page runtime status check failed; missing: {', '.join(missing)}")
+        return 1
+    evaluation_response = client.get("/evaluation")
+    if evaluation_response.status_code != 200 or "本地专业版验收" not in evaluation_response.text or "完成整条复核" not in evaluation_response.text:
+        print("Evaluation page check failed.")
         return 1
 
     transcript_markdown = """# 测试文档
@@ -426,6 +448,49 @@ def main() -> int:
             or (feedback_dir / "auto_edit_baseline.json").exists()
         ):
             print("Training feedback retention API check failed.")
+            return 1
+
+        review_job_dir = temporary_jobs / "review-test"
+        review_job_dir.mkdir(parents=True)
+        review_project = {
+            "version": 4,
+            "item_id": "001",
+            "duration": 1.0,
+            "style_preset_id": "default-white",
+            "settings": {"subtitle_offset": 0.0},
+            "cover": {"text": "测试封面", "frame_time": 0.0, "style_preset_id": "default-white"},
+            "title_clips": [],
+            "sentences": [
+                {
+                    "id": "s1",
+                    "text": "测试字幕",
+                    "original_text": "测试字幕",
+                    "start": 0.0,
+                    "end": 1.0,
+                    "timeline_order": 1,
+                    "enabled": True,
+                    "remove_video": False,
+                    "tokens": [{"id": "t1", "text": "测试", "start": 0.0, "end": 1.0}],
+                }
+            ],
+        }
+        (review_job_dir / "job.json").write_text(
+            json.dumps({"id": "review-test", "status": "done", "params": {"items": [{"id": "001", "status": "done"}]}}),
+            encoding="utf-8",
+        )
+        (review_job_dir / "edit_project_001.json").write_text(json.dumps(review_project, ensure_ascii=False), encoding="utf-8")
+        with patch("web.app.JOBS_DIR", temporary_jobs):
+            complete_review_response = client.post("/api/jobs/review-test/complete-review?item=001")
+        review_feedback = json.loads(
+            (review_job_dir / "work" / "001" / "training_feedback.json").read_text(encoding="utf-8")
+        )
+        if (
+            complete_review_response.status_code != 200
+            or review_feedback["review"]["status"] != "completed"
+            or review_feedback["review"]["reviewed_snapshot_sha256"]
+            != _feedback_snapshot_hash(review_feedback["final_result"])
+        ):
+            print("Complete review endpoint check failed.")
             return 1
 
         recover_jobs = Path(tmp) / "recover-jobs"

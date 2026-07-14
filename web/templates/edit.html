@@ -32,6 +32,7 @@
         <span id="save-state" class="save-state" title="修改会自动保存，也可按 Ctrl+S 立即保存">已自动保存</span>
         <button id="shortcut-help-btn" class="tool-button" type="button" aria-expanded="false" aria-controls="shortcut-panel">快捷键</button>
         <button id="save-btn" class="secondary-action editor-shortcut-only" type="button" tabindex="-1">保存</button>
+        <button id="complete-review-btn" class="secondary-action review-action{% if review_status == 'completed' %} is-complete{% endif %}" type="button" data-status="{{ review_status }}">{{ "已完成复核" if review_status == "completed" else "完成复核" }}</button>
         <button id="render-btn" class="primary-action" type="button" {% if project.preview_source != "clean-no-subtitles" %}disabled title="当前任务没有无字幕精修源，请重新处理后再导出"{% endif %}>导出精修版</button>
       </div>
     </header>
@@ -357,6 +358,7 @@
     const reflowUrl = `/api/jobs/{{ job.id }}/reflow-subtitles?item={{ item_id }}`;
     const coverPreviewUrl = `/api/jobs/{{ job.id }}/cover-preview?item={{ item_id }}`;
     const coverPresetUrl = `/api/jobs/{{ job.id }}/cover-style-preset?item={{ item_id }}`;
+    const completeReviewUrl = `/api/jobs/{{ job.id }}/complete-review?item={{ item_id }}`;
     const renderUrl = `/jobs/{{ job.id }}/render-edited?item={{ item_id }}`;
     const video = document.getElementById("edit-video");
     const timelinePreviewVideo = document.getElementById("timeline-preview-video");
@@ -380,6 +382,7 @@
     const subtitlePreview = document.getElementById("subtitle-preview");
     const titlePreview = document.getElementById("title-preview");
     const saveState = document.getElementById("save-state");
+    const completeReviewBtn = document.getElementById("complete-review-btn");
     const coverTitle = document.getElementById("cover-text");
     const coverPreviewImage = document.getElementById("cover-preview-image");
     const coverInspector = document.getElementById("cover-inspector");
@@ -1918,6 +1921,11 @@
       dirty = value;
       saveState.textContent = dirty ? "等待自动保存" : "已自动保存";
       saveState.classList.toggle("dirty", dirty);
+      if (dirty && completeReviewBtn.dataset.status === "completed") {
+        completeReviewBtn.dataset.status = "needs_review";
+        completeReviewBtn.textContent = "需重新复核";
+        completeReviewBtn.classList.remove("is-complete");
+      }
       if (dirty) scheduleTimelinePreview();
       if (dirty && autosave) {
         clearTimeout(autosaveTimer);
@@ -3607,6 +3615,27 @@
       }
     }
 
+    async function completeReview() {
+      completeReviewBtn.disabled = true;
+      const saved = await saveProject();
+      if (!saved) {
+        completeReviewBtn.disabled = false;
+        return;
+      }
+      try {
+        const response = await fetch(completeReviewUrl, {method: "POST"});
+        if (!response.ok) throw new Error(await responseErrorMessage(response));
+        completeReviewBtn.dataset.status = "completed";
+        completeReviewBtn.textContent = "已完成复核";
+        completeReviewBtn.classList.add("is-complete");
+        setTimelineStatus("这条视频已计入人工复核证据", 1800);
+      } catch (error) {
+        setTimelineStatus(`完成复核失败：${String(error.message || error).slice(0, 80)}`, 2200);
+      } finally {
+        completeReviewBtn.disabled = false;
+      }
+    }
+
     subtitlePreview.addEventListener("beforeinput", () => beginTextHistory(subtitlePreview));
     subtitlePreview.addEventListener("input", () => {
       updateSelectedText(subtitlePreview.textContent || "");
@@ -3951,6 +3980,7 @@
     document.getElementById("next-btn").addEventListener("click", () => selectByOffset(1));
     playBtn.addEventListener("click", togglePlayback);
     playSelectionBtn.addEventListener("click", previewSelectedClip);
+    completeReviewBtn.addEventListener("click", completeReview);
 
     video.addEventListener("play", () => {
       if (!allowSourceClipPlayback && previewClipEndTime === null) {

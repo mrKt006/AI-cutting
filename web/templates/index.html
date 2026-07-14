@@ -25,6 +25,7 @@
       <nav class="nav-links" aria-label="主要导航">
         <a class="nav-link is-active" href="/">任务</a>
         <a class="nav-link" href="/style-presets">样式预设</a>
+        <a class="nav-link" href="/evaluation">质量</a>
         <a class="nav-link" href="/settings">设置</a>
         <span class="service-state {{ 'ok' if env.ffmpeg_ready else 'warn' }}" title="{{ env.ffmpeg_path if env.ffmpeg_ready else env.ffmpeg_error }}">
           <span class="dot"></span>FFmpeg {{ '可用' if env.ffmpeg_ready else '缺失' }}

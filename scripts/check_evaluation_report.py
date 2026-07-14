@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sys
 import tempfile
 from pathlib import Path
@@ -47,10 +48,19 @@ def main() -> int:
                 json.dumps({"applied_deletions": [{"token_ids": ["t1"]}], "rejected_deletions": []}),
                 encoding="utf-8",
             )
+            final_result = {"sentences": [{"id": "s1", "text": f"sample-{index}"}]}
+            serialized_snapshot = json.dumps(final_result, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            review_hash = hashlib.sha256(serialized_snapshot.encode("utf-8")).hexdigest()
             (work_dir / "training_feedback.json").write_text(
                 json.dumps(
                     {
                         "updated_at": "2026-01-01T00:01:10",
+                        "final_result": final_result,
+                        "review": {
+                            "status": "completed",
+                            "completed_at": "2026-01-01T00:01:10",
+                            "reviewed_snapshot_sha256": review_hash,
+                        },
                         "user_changes": {"restored_sentence_ids": ["s1"] if index == 0 else [], "text_edits": []},
                     }
                 ),
@@ -71,6 +81,7 @@ def main() -> int:
         report = build_report(jobs_dir)
         assert report["summary"]["fixed_set_ready"]
         assert report["summary"]["quality_evidence_ready"]
+        assert report["summary"]["items_with_completed_review"] == 20
         assert report["summary"]["unique_eligible_sources"] == 20
         assert report["metrics"]["applied_deletions"] == 20
         assert report["metrics"]["deletion_restore_rate"] == 0.05

@@ -26,6 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from cut_silence import Segment, cut_video  # noqa: E402
 from ai_layout import layout_tokens_with_ai  # noqa: E402
 from ffmpeg_utils import ffmpeg_filter_path, media_duration, probe_media, run as ffmpeg_run, video_size  # noqa: E402
@@ -43,6 +44,7 @@ from style_presets import (  # noqa: E402
 )
 from subtitle_layout import analysis_break_sets, segment_tokens, text_overflows, tokens_from_text, wrap_title_text  # noqa: E402
 from llm_analysis import analyze_transcript, apply_high_confidence_corrections  # noqa: E402
+from build_evaluation_report import build_report  # noqa: E402
 from transcript_document import (  # noqa: E402
     ParsedTranscriptDocument,
     TranscriptDocumentError,
@@ -262,6 +264,23 @@ def jobs_page(request: Request, status: str = "", q: str = "") -> HTMLResponse:
             "query": q.strip(),
             "status_labels": STAGES,
         },
+    )
+
+
+@app.get("/evaluation", response_class=HTMLResponse)
+def evaluation_page(request: Request) -> HTMLResponse:
+    report = build_report(JOBS_DIR)
+    eligible_samples = [sample for sample in report["samples"] if sample.get("eligible")]
+    seen_fingerprints: set[str] = set()
+    for sample in eligible_samples:
+        fingerprint = str(sample.get("source_fingerprint") or "")
+        sample["duplicate_source"] = bool(fingerprint and fingerprint in seen_fingerprints)
+        if fingerprint:
+            seen_fingerprints.add(fingerprint)
+    return templates.TemplateResponse(
+        request=request,
+        name="evaluation.html",
+        context={"request": request, "report": report, "samples": eligible_samples},
     )
 
 
@@ -972,6 +991,14 @@ def edit_page(request: Request, job_id: str, item: str = "001") -> HTMLResponse:
             int(video_info.get("height") or 1920),
         )
     project["output_files"] = [file for file in _output_files(job_id) if file["name"].startswith(f"edited/{project['item_id']}/")]
+    feedback_path = job_dir / "work" / project["item_id"] / "training_feedback.json"
+    review_status = "pending"
+    if feedback_path.is_file():
+        try:
+            feedback = read_json_file(feedback_path)
+            review_status = str((feedback.get("review") or {}).get("status") or "pending") if isinstance(feedback, dict) else "pending"
+        except RuntimeError:
+            pass
     return templates.TemplateResponse(
         request=request,
         name="edit.html",
@@ -987,6 +1014,7 @@ def edit_page(request: Request, job_id: str, item: str = "001") -> HTMLResponse:
             "style_presets": load_style_presets(STYLE_PRESETS_PATH),
             "subtitle_style": style_preset.get("subtitle") or {},
             "title_style": style_preset.get("video_title") or style_preset.get("cover_title") or {},
+            "review_status": review_status,
         },
     )
 
@@ -1042,6 +1070,27 @@ def api_delete_training_feedback(job_id: str, item: str = "001") -> dict[str, An
             path.unlink()
             deleted.append(name)
     return {"ok": True, "deleted": deleted}
+
+
+@app.post("/api/jobs/{job_id}/complete-review")
+def api_complete_review(job_id: str, item: str = "001") -> dict[str, Any]:
+    job_dir = _job_path(job_id)
+    project = _load_or_create_edit_project(job_dir, _read_job(job_id), item)
+    _write_training_feedback(job_dir, project, project)
+    safe_item = _safe_path_segment(item) or "001"
+    feedback_path = job_dir / "work" / safe_item / "training_feedback.json"
+    feedback = read_json_file(feedback_path)
+    if not isinstance(feedback, dict):
+        raise HTTPException(status_code=500, detail="用户修改记录格式无效")
+    final_result = feedback.get("final_result") or {}
+    feedback["review"] = {
+        "status": "completed",
+        "completed_at": _now(),
+        "reviewed_snapshot_sha256": _feedback_snapshot_hash(final_result),
+        "reviewer": "local_user",
+    }
+    feedback_path.write_text(json.dumps(feedback, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True, "review": feedback["review"]}
 
 
 @app.post("/api/jobs/{job_id}/edit-preview")
@@ -2263,6 +2312,21 @@ def _write_training_feedback(job_dir: Path, initial: dict[str, Any], final: dict
             pass
     final_snapshot = _feedback_project_snapshot(final)
     user_changes = _feedback_project_changes(baseline, final_snapshot)
+    previous_review: dict[str, Any] = {}
+    if feedback_path.is_file():
+        try:
+            previous_feedback = read_json_file(feedback_path)
+            if isinstance(previous_feedback, dict) and isinstance(previous_feedback.get("review"), dict):
+                previous_review = dict(previous_feedback["review"])
+        except RuntimeError:
+            pass
+    current_snapshot_hash = _feedback_snapshot_hash(final_snapshot)
+    if previous_review.get("status") == "completed" and previous_review.get("reviewed_snapshot_sha256") != current_snapshot_hash:
+        previous_review = {
+            **previous_review,
+            "status": "needs_review",
+            "invalidated_at": _now(),
+        }
     feedback = {
         "version": 2,
         "job_id": job_dir.name,
@@ -2280,8 +2344,14 @@ def _write_training_feedback(job_dir: Path, initial: dict[str, Any], final: dict
         "initial_result": baseline,
         "final_result": final_snapshot,
         "user_changes": user_changes,
+        "review": previous_review or {"status": "pending"},
     }
     feedback_path.write_text(json.dumps(feedback, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _feedback_snapshot_hash(snapshot: dict[str, Any]) -> str:
+    serialized = json.dumps(snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def _feedback_project_snapshot(project: dict[str, Any]) -> dict[str, Any]:

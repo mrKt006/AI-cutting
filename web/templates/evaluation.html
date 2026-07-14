@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>质量验收 · AI-cutting</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css?v=evaluation-1">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="返回 AI-cutting 首页">
+        <span class="brand-mark" aria-hidden="true">AI</span>
+        <span><strong>AI-cutting</strong><small>本地质量验收</small></span>
+      </a>
+      <nav class="nav-links" aria-label="主要导航">
+        <a class="nav-link" href="/jobs">任务</a>
+        <a class="nav-link" href="/style-presets">样式预设</a>
+        <a class="nav-link is-active" href="/evaluation">质量</a>
+        <a class="nav-link" href="/settings">设置</a>
+      </nav>
+    </header>
+
+    <main class="workspace evaluation-workspace">
+      <div class="page-title evaluation-title">
+        <div><p class="section-kicker">Quality gate</p><h1>本地专业版验收</h1></div>
+        <span class="quality-gate {{ 'ready' if report.summary.fixed_set_ready and report.summary.quality_evidence_ready else 'pending' }}">
+          {{ '达到样本门槛' if report.summary.fixed_set_ready and report.summary.quality_evidence_ready else '仍需真实样本' }}
+        </span>
+      </div>
+
+      <section class="quality-metrics" aria-label="验收进度">
+        <article><span>不同源视频</span><strong>{{ report.summary.unique_eligible_sources }}<small>/20</small></strong></article>
+        <article><span>AI 决策记录</span><strong>{{ report.summary.items_with_ai_decisions }}<small>/20</small></strong></article>
+        <article><span>完成整条复核</span><strong>{{ report.summary.items_with_completed_review }}<small>/20</small></strong></article>
+        <article><span>恢复 AI 删除</span><strong>{{ report.metrics.restored_deletions }}<small>次</small></strong></article>
+      </section>
+
+      {% if report.gaps %}
+      <section class="quality-gaps" aria-label="未达到的验收条件">
+        {% for gap in report.gaps %}<p>{{ gap }}</p>{% endfor %}
+      </section>
+      {% endif %}
+
+      <section class="surface evaluation-list">
+        <div class="evaluation-list-head">
+          <strong>样本明细</strong>
+          <span>只有点击精修台“完成复核”，且之后未再修改的样本才计入复核证据。</span>
+        </div>
+        {% if samples %}
+        <div class="evaluation-table" role="table">
+          <div class="evaluation-row evaluation-header" role="row">
+            <span>视频</span><span>任务</span><span>AI 决策</span><span>人工复核</span><span></span>
+          </div>
+          {% for sample in samples %}
+          <div class="evaluation-row" role="row">
+            <span class="evaluation-source"><strong>{{ sample.source_name or '未命名视频' }}</strong><small>{{ '重复源，不重复计数' if sample.duplicate_source else '有效候选样本' }}</small></span>
+            <span>{{ sample.job_id }}</span>
+            <span class="evidence-state {{ 'done' if sample.has_ai_decisions else 'missing' }}">{{ '有' if sample.has_ai_decisions else '缺少' }}</span>
+            <span class="evidence-state {{ 'done' if sample.has_completed_review else 'missing' }}">{{ '已完成' if sample.has_completed_review else ('已失效' if sample.review_status == 'needs_review' else '待复核') }}</span>
+            <a class="ghost-button small" href="/jobs/{{ sample.job_id }}/edit?item={{ sample.item_id }}">打开精修台</a>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state"><strong>还没有可评估任务</strong><p>先从首页创建并完成一条真实视频任务。</p></div>
+        {% endif %}
+      </section>
+    </main>
+  </div>
+</body>
+</html>
