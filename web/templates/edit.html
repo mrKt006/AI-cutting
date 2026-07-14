@@ -162,7 +162,7 @@
             <input id="timeline-zoom" type="range" min="4" max="180" value="58">
           </label>
           <small>
-            预览源：{{ "无字幕精修源" if project.preview_source == "clean-no-subtitles" else "旧成片兜底" }}
+            预览源：{{ "低清代理" if editor_assets.proxy_url else ("无字幕精修源" if project.preview_source == "clean-no-subtitles" else "旧成片兜底") }}
             · {{ video_info.aspect }} · {{ video_info.width }}x{{ video_info.height }}
           </small>
         </div>

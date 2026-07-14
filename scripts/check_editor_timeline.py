@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -13,8 +14,10 @@ from fastapi import HTTPException  # noqa: E402
 
 from app import (  # noqa: E402
     _build_edit_plan,
+    _build_editor_proxy,
     _coalesced_render_clips,
     _is_clean_editor_source,
+    _editor_proxy_path,
     _render_edit_project,
     _render_timeline_video,
     _sanitize_sentences,
@@ -209,6 +212,15 @@ def main() -> int:
                 str(source),
             ]
         )
+        proxy_job = tmp_dir / "proxy-job"
+        proxy_dir = proxy_job / "work" / "editor_assets" / "001"
+        proxy_dir.mkdir(parents=True)
+        proxy_info = _build_editor_proxy(proxy_dir, source)
+        proxy_path = proxy_dir / proxy_info["file"]
+        assert proxy_path.is_file() and proxy_info["width"] == 160 and proxy_info["height"] == 90
+        assert abs(media_duration(proxy_path) - media_duration(source)) < 0.15
+        (proxy_dir / "manifest.json").write_text(json.dumps({"proxy": proxy_info}), encoding="utf-8")
+        assert _editor_proxy_path(proxy_job, {"item_id": "001"}) == proxy_path.resolve()
         _render_timeline_video(
             source,
             output,

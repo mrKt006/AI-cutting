@@ -21,6 +21,7 @@ from web.app import (  # noqa: E402
     _feedback_snapshot_hash,
     _inspect_uploaded_video,
     _item_usage,
+    _prewarm_job_editor_assets,
     _write_training_feedback,
     app,
     recover_interrupted_jobs,
@@ -491,6 +492,14 @@ def main() -> int:
             != _feedback_snapshot_hash(review_feedback["final_result"])
         ):
             print("Complete review endpoint check failed.")
+            return 1
+        with (
+            patch("web.app.JOBS_DIR", temporary_jobs),
+            patch("web.app._ensure_editor_assets", return_value={"proxy_url": "/proxy.mp4"}) as ensure_assets,
+        ):
+            _prewarm_job_editor_assets("review-test")
+        if ensure_assets.call_count != 1:
+            print("Editor proxy prewarm check failed.")
             return 1
 
         recover_jobs = Path(tmp) / "recover-jobs"

@@ -64,6 +64,7 @@ JOBS_DIR = ROOT / "jobs"
 PYTHON = sys.executable
 JOB_SECRETS: dict[str, dict[str, str]] = {}
 ACTIVE_JOB_IDS: set[str] = set()
+EDITOR_ASSET_LOCKS: dict[str, threading.Lock] = {}
 SETTINGS_PATH = ROOT / "web" / "settings.local.json"
 STYLE_PRESETS_PATH = ROOT / "web" / "style_presets.local.json"
 PREVIEW_DIR = ROOT / "web" / "static" / "style_previews"
@@ -1008,7 +1009,7 @@ def edit_page(request: Request, job_id: str, item: str = "001") -> HTMLResponse:
             "item_id": project["item_id"],
             "project": project,
             "project_json": json.dumps(project, ensure_ascii=False),
-            "video_url": _media_url_for_path(job_dir, video_path),
+            "video_url": editor_assets.get("proxy_url") or _media_url_for_path(job_dir, video_path),
             "video_info": video_info,
             "editor_assets": editor_assets,
             "style_presets": load_style_presets(STYLE_PRESETS_PATH),
@@ -1101,11 +1102,12 @@ async def api_render_edit_preview(job_id: str, request: Request, item: str = "00
         existing = _load_or_create_edit_project(job_dir, job, item)
         payload = await _read_json_object(request, source="生成时间线预览", required=True)
         project = _sanitize_edit_project({**existing, **payload}, existing)
-        source = Path(project.get("render_source_video") or project.get("current_video") or "")
-        if not source.exists():
+        render_source = Path(project.get("render_source_video") or project.get("current_video") or "")
+        if not render_source.exists():
             raise HTTPException(status_code=400, detail="找不到时间线预览源视频")
+        source = _editor_proxy_path(job_dir, project) or render_source
 
-        clips = _timeline_clips(project, float(project.get("duration") or media_duration(source)))
+        clips = _timeline_clips(project, float(project.get("duration") or media_duration(render_source)))
         signature = _timeline_preview_signature(project)
         safe_item = _safe_path_segment(project.get("item_id") or item) or "001"
         preview_dir = job_dir / "work" / "editor_previews" / safe_item
@@ -1485,6 +1487,7 @@ def _run_job(job_id: str) -> None:
         outputs = {"batch_zip": str(zip_path)}
         usage = _aggregate_job_usage(items, zip_path)
         _update_job(job_dir, status="done", stage="done", message="处理完成，已生成 ZIP", outputs=outputs, usage=usage)
+        threading.Thread(target=_prewarm_job_editor_assets, args=(job_id,), daemon=True).start()
     except Exception as exc:
         _update_job(job_dir, status="failed", stage="failed", error=str(exc), message=f"失败: {exc}")
     finally:
@@ -2728,7 +2731,7 @@ def _timeline_preview_signature(project: dict[str, Any]) -> str:
                 "synthetic_gap": bool(sentence.get("synthetic_gap")),
             }
         )
-    payload = "v2:" + json.dumps(timeline, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    payload = "v3-proxy:" + json.dumps(timeline, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
@@ -3049,6 +3052,14 @@ def _safe_editor_assets(job_dir: Path, project: dict[str, Any]) -> dict[str, Any
 
 
 def _ensure_editor_assets(job_dir: Path, project: dict[str, Any]) -> dict[str, Any]:
+    item_id = _safe_path_segment(project.get("item_id") or "001") or "001"
+    lock_key = f"{job_dir.resolve()}::{item_id}"
+    lock = EDITOR_ASSET_LOCKS.setdefault(lock_key, threading.Lock())
+    with lock:
+        return _ensure_editor_assets_unlocked(job_dir, project)
+
+
+def _ensure_editor_assets_unlocked(job_dir: Path, project: dict[str, Any]) -> dict[str, Any]:
     source = Path(project.get("render_source_video") or project.get("current_video") or "")
     if not source.exists():
         return {"thumbs": [], "waveform": [], "duration": project.get("duration") or 0, "error": "source_missing"}
@@ -3061,6 +3072,11 @@ def _ensure_editor_assets(job_dir: Path, project: dict[str, Any]) -> dict[str, A
         try:
             manifest = read_json_file(manifest_path)
             if manifest.get("source_signature") == source_signature:
+                proxy = manifest.get("proxy") if isinstance(manifest.get("proxy"), dict) else {}
+                if not proxy.get("file") or not (asset_dir / str(proxy["file"])).is_file():
+                    manifest["proxy"] = _build_editor_proxy(asset_dir, source)
+                    manifest["version"] = 2
+                    manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2), encoding="utf-8")
                 return _editor_assets_payload(job_dir, item_id, manifest)
         except RuntimeError:
             pass
@@ -3096,8 +3112,9 @@ def _ensure_editor_assets(job_dir: Path, project: dict[str, Any]) -> dict[str, A
         thumbs.append({"time": round(time, 3), "file": filename})
 
     waveform = _build_waveform(asset_dir, source, bars=360)
+    proxy = _build_editor_proxy(asset_dir, source)
     manifest = {
-        "version": 1,
+        "version": 2,
         "item_id": item_id,
         "source": str(source),
         "source_signature": source_signature,
@@ -3105,10 +3122,25 @@ def _ensure_editor_assets(job_dir: Path, project: dict[str, Any]) -> dict[str, A
         "video": {"width": width, "height": height},
         "thumbs": thumbs,
         "waveform": waveform,
+        "proxy": proxy,
         "created_at": _now(),
     }
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=True, indent=2), encoding="utf-8")
     return _editor_assets_payload(job_dir, item_id, manifest)
+
+
+def _prewarm_job_editor_assets(job_id: str) -> None:
+    job_dir = JOBS_DIR / job_id
+    try:
+        job = _load_job(job_dir)
+        for item in job.get("params", {}).get("items", []):
+            if item.get("status") != "done":
+                continue
+            item_id = str(item.get("id") or "001")
+            project = _load_or_create_edit_project(job_dir, job, item_id)
+            _ensure_editor_assets(job_dir, project)
+    except Exception as exc:
+        _write_web_traceback(job_dir, "editor-assets-prewarm", exc)
 
 
 def _editor_assets_payload(job_dir: Path, item_id: str, manifest: dict[str, Any]) -> dict[str, Any]:
@@ -3123,12 +3155,93 @@ def _editor_assets_payload(job_dir: Path, item_id: str, manifest: dict[str, Any]
                 "url": f"/jobs/{job_dir.name}/editor-assets/{quote(item_id)}/{filename}",
             }
         )
+    proxy = manifest.get("proxy") if isinstance(manifest.get("proxy"), dict) else {}
+    proxy_file = str(proxy.get("file") or "")
+    proxy_path = job_dir / "work" / "editor_assets" / item_id / proxy_file if proxy_file else None
     return {
         "duration": float(manifest.get("duration") or 0.0),
         "video": manifest.get("video") if isinstance(manifest.get("video"), dict) else {},
         "thumbs": thumbs,
         "waveform": manifest.get("waveform") if isinstance(manifest.get("waveform"), list) else [],
+        "proxy": proxy,
+        "proxy_url": (
+            f"/jobs/{job_dir.name}/editor-assets/{quote(item_id)}/{quote(proxy_file)}"
+            if proxy_path and proxy_path.is_file()
+            else ""
+        ),
         "error": manifest.get("error") or "",
+    }
+
+
+def _editor_proxy_path(job_dir: Path, project: dict[str, Any]) -> Path | None:
+    item_id = _safe_path_segment(project.get("item_id") or "001") or "001"
+    manifest_path = job_dir / "work" / "editor_assets" / item_id / "manifest.json"
+    if not manifest_path.is_file():
+        return None
+    try:
+        manifest = read_json_file(manifest_path)
+    except RuntimeError:
+        return None
+    proxy = manifest.get("proxy") if isinstance(manifest, dict) and isinstance(manifest.get("proxy"), dict) else {}
+    proxy_file = str(proxy.get("file") or "")
+    if not proxy_file or Path(proxy_file).name != proxy_file:
+        return None
+    candidate = (manifest_path.parent / proxy_file).resolve()
+    if candidate.parent != manifest_path.parent.resolve() or not candidate.is_file():
+        return None
+    return candidate
+
+
+def _build_editor_proxy(asset_dir: Path, source: Path) -> dict[str, Any]:
+    output = asset_dir / "proxy.mp4"
+    temporary = asset_dir / f".proxy-{uuid.uuid4().hex}.mp4"
+    try:
+        ffmpeg_run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-y",
+                "-i",
+                str(source),
+                "-map",
+                "0:v:0",
+                "-map",
+                "0:a:0?",
+                "-vf",
+                "scale=w='min(960,iw)':h='min(960,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-crf",
+                "29",
+                "-g",
+                "30",
+                "-keyint_min",
+                "30",
+                "-sc_threshold",
+                "0",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "96k",
+                "-movflags",
+                "+faststart",
+                str(temporary),
+            ]
+        )
+        temporary.replace(output)
+    finally:
+        temporary.unlink(missing_ok=True)
+    target_width, target_height = video_size(output)
+    return {
+        "file": output.name,
+        "width": target_width,
+        "height": target_height,
+        "bytes": output.stat().st_size,
+        "source_mtime_ns": source.stat().st_mtime_ns,
     }
 
 
