@@ -12,10 +12,7 @@
     <header class="topbar">
       <a class="brand" href="/" aria-label="返回 AI-cutting 首页">
         <span class="brand-mark" aria-hidden="true">AI</span>
-        <span>
-          <strong>AI-cutting</strong>
-          <small>任务详情</small>
-        </span>
+        <span><strong>AI-cutting</strong><small>任务详情</small></span>
       </a>
       <nav class="nav-links" aria-label="主要导航">
         <a class="nav-link" href="/">任务</a>
@@ -25,7 +22,7 @@
     </header>
 
     <main class="workspace">
-      {% set status_labels = {"done": "完成", "running": "处理中", "failed": "失败", "queued": "等待中"} %}
+      {% set status_labels = {"done": "完成", "running": "处理中", "pausing": "正在安全暂停", "paused": "已暂停", "failed": "失败", "queued": "等待中"} %}
       <div class="page-title job-title">
         <div>
           <p class="section-kicker">任务 {{ job.id }}</p>
@@ -34,6 +31,13 @@
         <div class="status-card">
           <span id="job-status" class="status {{ job.status }}">{{ status_labels.get(job.status, stage_label) }}</span>
           <small id="job-updated-at">{{ job.updated_at }}</small>
+          <div id="job-controls" class="job-controls">
+            {% if job.status in ["queued", "running", "pausing"] %}
+            <form method="post" action="/jobs/{{ job.id }}/pause"><button class="secondary-action small" type="submit" {% if job.status == "pausing" %}disabled{% endif %}>{{ "等待当前步骤" if job.status == "pausing" else "暂停任务" }}</button></form>
+            {% elif job.status == "paused" %}
+            <form method="post" action="/jobs/{{ job.id }}/resume"><button class="primary-action small" type="submit">继续任务</button></form>
+            {% endif %}
+          </div>
         </div>
       </div>
 
@@ -50,77 +54,51 @@
           {% set job_items = job.params.get("items", []) %}
           {% if job_items %}
           <div class="surface-block">
-            <div class="surface-head">
-              <div>
-                <p class="section-kicker">视频</p>
-                <h2>任务视频</h2>
-              </div>
-            </div>
+            <div class="surface-head"><div><p class="section-kicker">视频</p><h2>任务视频</h2></div></div>
             <div class="queue-list">
               {% for item in job_items %}
               <div class="queue-item" data-job-item="{{ item.id }}">
-                <span class="queue-main">
-                  <strong>{{ item.title }}</strong>
-                  <small>{{ item.source_name or item.id }}</small>
-                </span>
+                <span class="queue-main"><strong>{{ item.title }}</strong><small>{{ item.source_name or item.id }}</small></span>
                 <span class="queue-actions">
                   <em data-item-status class="{{ item.status }}">{{ status_labels.get(item.status, item.status) }}</em>
-                  {% if item.status == "done" %}
-                  <a class="ghost-link" href="/jobs/{{ job.id }}/edit?item={{ item.id }}">进入精修</a>
-                  {% endif %}
+                  {% if item.status == "done" %}<a class="ghost-link" href="/jobs/{{ job.id }}/edit?item={{ item.id }}">进入精修</a>{% endif %}
                 </span>
               </div>
               {% endfor %}
             </div>
           </div>
           {% elif job.status == "done" %}
-          <div class="surface-block">
-            <a class="primary-action small" href="/jobs/{{ job.id }}/edit?item=001">进入精修</a>
-          </div>
+          <div class="surface-block"><a class="primary-action small" href="/jobs/{{ job.id }}/edit?item=001">进入精修</a></div>
           {% endif %}
 
           <div class="surface-block">
-            <div class="surface-head">
-              <div>
-                <p class="section-kicker">输出</p>
-                <h2>输出文件</h2>
-              </div>
-            </div>
+            <div class="surface-head"><div><p class="section-kicker">输出</p><h2>输出文件</h2></div></div>
             {% if files %}
             <div class="downloads">
               {% for file in files %}
               <a href="/jobs/{{ job.id }}/download/{{ file.name }}" class="download-card">
-                <span>
-                  <strong>{{ file.description }}</strong>
-                  <small>{{ file.name }}</small>
-                </span>
-                <em>{{ file.size }}</em>
+                <span><strong>{{ file.description }}</strong><small>{{ file.name }}</small></span><em>{{ file.size }}</em>
               </a>
               {% endfor %}
             </div>
             {% else %}
-            <div class="empty-state">
-              <strong>输出还没生成</strong>
-              <p>任务完成后，成片、封面和可选导出文件会显示在这里。</p>
-            </div>
+            <div class="empty-state"><strong>输出还没生成</strong><p>任务完成后，成片、封面和可选导出文件会显示在这里。</p></div>
             {% endif %}
           </div>
 
           <details class="surface-block job-log-panel" {% if job.status == "failed" %}open{% endif %}>
             <summary>技术日志</summary>
             <div id="job-log" class="log" aria-live="polite">
-              {% for item in job.log %}
-              <p><time>{{ item.time }}</time>{{ item.message }}</p>
-              {% endfor %}
+              {% for item in job.log %}<p><time>{{ item.time }}</time>{{ item.message }}</p>{% endfor %}
             </div>
           </details>
         </section>
       </div>
     </main>
   </div>
-  {% if job.status in ["queued", "running"] %}
+  {% if job.status in ["queued", "running", "pausing"] %}
   <script>
-    const statusLabels = {done: "完成", running: "处理中", failed: "失败", queued: "等待中"};
+    const statusLabels = {done: "完成", running: "处理中", pausing: "正在安全暂停", paused: "已暂停", failed: "失败", queued: "等待中"};
     const pollJob = async () => {
       try {
         const response = await fetch("/api/jobs/{{ job.id }}", {cache: "no-store"});
@@ -147,12 +125,12 @@
             return row;
           }));
         }
-        if (data.status === "done" || data.status === "failed") {
+        if (["done", "failed", "paused"].includes(data.status)) {
           window.location.reload();
           return;
         }
       } catch {
-        // A transient polling failure must not replace the task page.
+        // 短暂轮询失败时保留当前任务页。
       }
       window.setTimeout(pollJob, 2000);
     };

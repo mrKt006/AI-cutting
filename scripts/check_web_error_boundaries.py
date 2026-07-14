@@ -188,6 +188,48 @@ def main() -> int:
         ):
             print(f"Transcript job fields are incorrect: {created_item}")
             return 1
+
+        pause_job_dir = temporary_jobs / "pause-test"
+        pause_job_dir.mkdir(parents=True)
+        pause_job = {
+            "id": "pause-test",
+            "status": "running",
+            "stage": "running",
+            "created_at": "2026-01-01T00:00:00",
+            "updated_at": "2026-01-01T00:00:00",
+            "log": [],
+            "params": {
+                "title": "暂停测试",
+                "items": [{"id": "001", "status": "running", "outputs": {}, "error": None}],
+            },
+        }
+        (pause_job_dir / "job.json").write_text(json.dumps(pause_job, ensure_ascii=False), encoding="utf-8")
+        with patch("web.app.JOBS_DIR", temporary_jobs):
+            pause_response = client.post("/jobs/pause-test/pause", follow_redirects=False)
+        paused_request = json.loads((pause_job_dir / "job.json").read_text(encoding="utf-8"))
+        control = json.loads((pause_job_dir / "control.json").read_text(encoding="utf-8"))
+        if pause_response.status_code != 303 or paused_request.get("status") != "pausing" or not control.get("pause_requested"):
+            print("Pause request endpoint check failed.")
+            return 1
+
+        paused_request["status"] = "paused"
+        paused_request["stage"] = "paused"
+        paused_request["params"]["items"][0]["status"] = "paused"
+        (pause_job_dir / "job.json").write_text(json.dumps(paused_request, ensure_ascii=False), encoding="utf-8")
+        with (
+            patch("web.app.JOBS_DIR", temporary_jobs),
+            patch("web.app._runtime_status", return_value={"ffmpeg_ready": True}),
+            patch(
+                "web.app._load_settings",
+                return_value={"volc_app_id": "test-app", "volc_access_token": "test-token", "llm_api_key": ""},
+            ),
+            patch("web.app._run_job", return_value=None),
+        ):
+            resume_response = client.post("/jobs/pause-test/resume", follow_redirects=False)
+        resumed = json.loads((pause_job_dir / "job.json").read_text(encoding="utf-8"))
+        if resume_response.status_code != 303 or resumed.get("status") != "queued" or resumed["params"]["items"][0]["status"] != "queued":
+            print("Resume endpoint check failed.")
+            return 1
     jobs_response = client.get("/jobs")
     jobs_required_fragments = ["全部任务", "标题或任务 ID", "全部状态"]
     missing = [fragment for fragment in jobs_required_fragments if fragment not in jobs_response.text]

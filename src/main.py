@@ -58,9 +58,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--export-asr-json", action="store_true", help="keep Volcengine segment JSON in output")
     parser.add_argument("--export-report", action="store_true", help="keep edit_report.json in output")
     parser.add_argument("--editor-work-dir", default=None, help="internal directory for visual editor source assets")
+    parser.add_argument("--control-file", default=None, help="cooperative task control JSON path")
+    parser.add_argument("--checkpoint-dir", default=None, help="persistent stage checkpoint directory")
     parser.add_argument("--no-cut", action="store_true", help="skip silence cutting")
     parser.add_argument("--detect-disfluency", action="store_true", help="report repeated utterance candidates without cutting them")
     return parser.parse_args()
+
+
+class PauseRequested(RuntimeError):
+    pass
 
 
 def main() -> int:
@@ -83,22 +89,48 @@ def main() -> int:
         video_title_style = style_preset.get("video_title", {})
         cover_title_style = style_preset.get("cover_title", {})
         output_dir.mkdir(parents=True, exist_ok=True)
+        checkpoint_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else None
+        _stage_checkpoint(args, "validated")
 
         with tempfile.TemporaryDirectory(prefix="ai-cutting-") as tmp:
             working_video = Path(tmp) / "cut.mp4"
             original_duration = media_duration(video)
-            raw_segments, raw_asr = _transcribe_cut_video_with_volcengine(
-                working_video=video,
-                tmp_dir=Path(tmp),
-                appid=args.volc_appid,
-                token=args.volc_token,
-                words_per_line=args.volc_words_per_line,
-                max_lines=args.volc_max_lines,
-                timeout=args.volc_timeout,
-            )
-            aligned_segments, transcript_alignment = _align_segments_to_script(raw_segments, script)
-            analysis = _run_transcript_analysis(aligned_segments, args)
+            asr_checkpoint = _load_checkpoint(checkpoint_dir, "asr")
+            if asr_checkpoint:
+                raw_segments = _timing_segments_from_data(asr_checkpoint.get("segments"))
+                raw_asr = asr_checkpoint.get("response") or {}
+            else:
+                raw_segments, raw_asr = _transcribe_cut_video_with_volcengine(
+                    working_video=video,
+                    tmp_dir=Path(tmp),
+                    appid=args.volc_appid,
+                    token=args.volc_token,
+                    words_per_line=args.volc_words_per_line,
+                    max_lines=args.volc_max_lines,
+                    timeout=args.volc_timeout,
+                )
+                _save_checkpoint(checkpoint_dir, "asr", {"segments": _timing_segments_data(raw_segments), "response": raw_asr})
+            _stage_checkpoint(args, "asr")
+
+            alignment_checkpoint = _load_checkpoint(checkpoint_dir, "alignment")
+            if alignment_checkpoint:
+                aligned_segments = _timing_segments_from_data(alignment_checkpoint.get("segments"))
+                transcript_alignment = alignment_checkpoint.get("report") or {}
+            else:
+                aligned_segments, transcript_alignment = _align_segments_to_script(raw_segments, script)
+                _save_checkpoint(
+                    checkpoint_dir,
+                    "alignment",
+                    {"segments": _timing_segments_data(aligned_segments), "report": transcript_alignment},
+                )
+            _stage_checkpoint(args, "alignment")
+
+            analysis = _load_checkpoint(checkpoint_dir, "analysis")
+            if not analysis:
+                analysis = _run_transcript_analysis(aligned_segments, args)
+                _save_checkpoint(checkpoint_dir, "analysis", analysis)
             analysis["transcript_alignment_status"] = transcript_alignment.get("status")
+            _stage_checkpoint(args, "analysis")
             ai_removed, removed_token_ids = _ai_removal_segments(aligned_segments, analysis, args.auto_edit_mode)
             if args.no_cut:
                 removed_segments = []
@@ -109,21 +141,44 @@ def main() -> int:
                 silence_removed = _protect_speech_from_silence(silence_removed, aligned_segments, removed_token_ids)
                 removed_segments = _merge_removed_segments([*silence_removed, *ai_removed], original_duration)
                 keep_segments = _keep_from_removed(original_duration, removed_segments)
+            _stage_checkpoint(args, "edit_plan")
             cut_video(video, working_video, keep_segments)
             output_duration = media_duration(working_video)
             width, height = video_size(working_video)
-            content_title_analysis = _analyze_title(content_title, args, prefix="content-title")
-            cover_title_analysis = (
-                content_title_analysis
-                if cover_title == content_title
-                else _analyze_title(cover_title, args, prefix="cover-title")
-            )
-            video_title_text, video_title_layout = _intelligent_title(
-                content_title, video_title_style, width, height, content_title_analysis, args
-            )
-            cover_title_text, cover_title_layout = _intelligent_title(
-                cover_title, cover_title_style, width, height, cover_title_analysis, args
-            )
+            title_checkpoint = _load_checkpoint(checkpoint_dir, "titles")
+            if title_checkpoint:
+                content_title_analysis = title_checkpoint.get("content_analysis") or {}
+                cover_title_analysis = title_checkpoint.get("cover_analysis") or {}
+                video_title_text = str(title_checkpoint.get("video_text") or content_title)
+                cover_title_text = str(title_checkpoint.get("cover_text") or cover_title)
+                video_title_layout = title_checkpoint.get("video_layout") or {}
+                cover_title_layout = title_checkpoint.get("cover_layout") or {}
+            else:
+                content_title_analysis = _analyze_title(content_title, args, prefix="content-title")
+                cover_title_analysis = (
+                    content_title_analysis
+                    if cover_title == content_title
+                    else _analyze_title(cover_title, args, prefix="cover-title")
+                )
+                video_title_text, video_title_layout = _intelligent_title(
+                    content_title, video_title_style, width, height, content_title_analysis, args
+                )
+                cover_title_text, cover_title_layout = _intelligent_title(
+                    cover_title, cover_title_style, width, height, cover_title_analysis, args
+                )
+                _save_checkpoint(
+                    checkpoint_dir,
+                    "titles",
+                    {
+                        "content_analysis": content_title_analysis,
+                        "cover_analysis": cover_title_analysis,
+                        "video_text": video_title_text,
+                        "cover_text": cover_title_text,
+                        "video_layout": video_title_layout,
+                        "cover_layout": cover_title_layout,
+                    },
+                )
+            _stage_checkpoint(args, "title_layout")
             subtitle_duration = max(0.2, output_duration - 0.08)
             external_segments = _map_retained_tokens_to_cut_timeline(aligned_segments, keep_segments, removed_token_ids)
             external_segments = _intelligent_segments(
@@ -210,8 +265,10 @@ def main() -> int:
             final_video = output_dir / f"{output_basename}.mp4"
             burn_subtitles(working_video, subtitle_ass, final_video)
             final_duration = media_duration(final_video)
+            _stage_checkpoint(args, "video_rendered")
             cover_path = output_dir / f"{output_basename}-\u5c01\u9762.jpg"
             make_cover(working_video, cover_title_text, cover_path, style=cover_title_style)
+            _stage_checkpoint(args, "cover_rendered")
 
         report = {
             "input": {
@@ -276,10 +333,55 @@ def main() -> int:
             )
         print(f"Done. Outputs written to {output_dir.resolve()}")
         return 0
+    except PauseRequested as exc:
+        print(f"Paused: {exc}")
+        return 75
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         return 1
+
+
+def _stage_checkpoint(args: argparse.Namespace, stage: str) -> None:
+    checkpoint_dir = Path(args.checkpoint_dir) if args.checkpoint_dir else None
+    if checkpoint_dir:
+        _save_checkpoint(checkpoint_dir, "state", {"completed_stage": stage, "updated_at": datetime.now().isoformat(timespec="seconds")})
+    if not args.control_file:
+        return
+    control_path = Path(args.control_file)
+    if not control_path.exists():
+        return
+    try:
+        control = json.loads(control_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if control.get("pause_requested"):
+        raise PauseRequested(f"已在 {stage} 阶段结束后安全暂停")
+
+
+def _checkpoint_path(checkpoint_dir: Path | None, name: str) -> Path | None:
+    return checkpoint_dir / f"{name}.json" if checkpoint_dir else None
+
+
+def _save_checkpoint(checkpoint_dir: Path | None, name: str, payload: object) -> None:
+    path = _checkpoint_path(checkpoint_dir, name)
+    if not path:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix(".tmp.json")
+    temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp.replace(path)
+
+
+def _load_checkpoint(checkpoint_dir: Path | None, name: str) -> dict:
+    path = _checkpoint_path(checkpoint_dir, name)
+    if not path or not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _require_file(path: Path, label: str) -> None:
@@ -334,7 +436,11 @@ def _segment_dict(segment: Segment) -> dict[str, float]:
 
 def _write_timing_segments(segments: list[TimingSegment], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = [
+    path.write_text(json.dumps(_timing_segments_data(segments), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _timing_segments_data(segments: list[TimingSegment]) -> list[dict]:
+    return [
         {
             "start": round(segment.start, 3),
             "end": round(segment.end, 3),
@@ -345,7 +451,28 @@ def _write_timing_segments(segments: list[TimingSegment], path: Path) -> None:
         }
         for segment in segments
     ]
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _timing_segments_from_data(data: object) -> list[TimingSegment]:
+    if not isinstance(data, list):
+        return []
+    segments: list[TimingSegment] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        try:
+            start_value = item.get("start")
+            end_value = item.get("end")
+            start = float(start_value) if start_value is not None else float(item.get("start_ms", 0)) / 1000
+            end = float(end_value) if end_value is not None else float(item.get("end_ms", 0)) / 1000
+        except (TypeError, ValueError):
+            continue
+        if end <= start:
+            continue
+        raw_tokens = item.get("tokens")
+        tokens = tuple(token for token in raw_tokens if isinstance(token, dict)) if isinstance(raw_tokens, list) else ()
+        segments.append(TimingSegment(start=start, end=end, text=str(item.get("text") or ""), tokens=tokens))
+    return segments
 
 
 def _align_segments_to_script(

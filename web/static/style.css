@@ -215,6 +215,12 @@ small {
   background: #dceafe;
 }
 
+.pausing,
+.paused {
+  color: #344054;
+  background: #eaecf0;
+}
+
 .failed,
 .error {
   color: var(--danger);
@@ -857,6 +863,16 @@ legend {
   justify-items: end;
   gap: 4px;
   min-width: 170px;
+}
+
+.job-controls,
+.job-controls form {
+  display: flex;
+  margin: 0;
+}
+
+.job-controls {
+  margin-top: 4px;
 }
 
 .toast {
