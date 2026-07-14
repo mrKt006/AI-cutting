@@ -159,6 +159,14 @@ def main() -> int:
         analyzed = analyze_transcript(correction_tokens, base_url="https://example.test/v1", model="test", api_key="secret")
         assert analyzed["status"] == "ok"
         assert analyzed["delete_ranges"][0]["type"] == "stutter"
+        trace = analyzed["decision_traces"][0]
+        assert trace["provider"] == "example.test"
+        assert trace["model"] == "test"
+        assert trace["prompt_version"]
+        assert trace["schema_version"]
+        assert trace["input"]["token_count"] == len(correction_tokens)
+        assert trace["raw_response"]
+        assert "secret" not in json.dumps(trace)
     with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("offline")):
         failed = analyze_transcript(correction_tokens, base_url="https://example.test/v1", model="test", api_key="secret")
         assert failed["status"] == "skipped"

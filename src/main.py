@@ -205,6 +205,24 @@ def main() -> int:
                 (editor_work_dir / "transcript_analysis.json").write_text(
                     json.dumps(analysis, ensure_ascii=False, indent=2), encoding="utf-8"
                 )
+                (editor_work_dir / "ai_decisions.json").write_text(
+                    json.dumps(
+                        {
+                            "version": 1,
+                            "transcript_analysis": analysis.get("decision_traces", []),
+                            "subtitle_layout": analysis.get("layout_decision", {}),
+                            "content_title_analysis": content_title_analysis.get("decision_traces", []),
+                            "content_title_layout": video_title_layout,
+                            "cover_title_analysis": cover_title_analysis.get("decision_traces", []),
+                            "cover_title_layout": cover_title_layout,
+                            "applied_deletions": analysis.get("applied_delete_ranges", []),
+                            "rejected_deletions": analysis.get("skipped_delete_ranges", []),
+                        },
+                        ensure_ascii=False,
+                        indent=2,
+                    ),
+                    encoding="utf-8",
+                )
                 (editor_work_dir / "transcript_alignment.json").write_text(
                     json.dumps(transcript_alignment, ensure_ascii=False, indent=2), encoding="utf-8"
                 )

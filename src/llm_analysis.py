@@ -4,12 +4,18 @@ import json
 import http.client
 import hashlib
 import re
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from safe_json import loads_json
+
+
+PROMPT_VERSION = "2026-07-15-transcript-aware-layout-v2"
+SCHEMA_VERSION = "ai-cutting-decisions-v1"
 
 
 SYSTEM_PROMPT = """你是一名专业中文短视频口播剪辑导演。你的目标是直接生成紧凑、自然、信息密度高的自动剪辑决策，不要把决定交回用户确认。
@@ -79,6 +85,7 @@ def analyze_transcript(
             }
         )
     analyses: list[dict[str, Any]] = []
+    decision_traces: list[dict[str, Any]] = []
     errors: list[str] = []
     for chunk in _analysis_chunks(compact_tokens):
         cache_key = _cache_key("analysis", model, {"tokens": chunk})
@@ -88,13 +95,16 @@ def analyze_transcript(
             if result.get("status") == "ok":
                 _write_cache(cache_dir, cache_key, result)
         else:
-            result = {**result, "cached": True, "usage": _empty_usage()}
+            result = {**result, "cached": True, "usage": _empty_usage(), "latency_ms": 0}
+        decision_traces.append(_decision_trace("transcript_analysis", chunk, result, endpoint, model))
         if result.get("status") == "ok":
             analyses.append(result)
         else:
             errors.append(str(result.get("reason") or "invalid_response"))
     if not analyses:
-        return _empty_analysis(errors[0] if errors else "invalid_response")
+        failed = _empty_analysis(errors[0] if errors else "invalid_response")
+        failed["decision_traces"] = decision_traces
+        return failed
     merged = {key: [] for key in _analysis_list_keys()}
     for result in analyses:
         for key in merged:
@@ -105,6 +115,7 @@ def analyze_transcript(
         "warnings": errors,
         "usage": _sum_usage(analyses),
         "cache_hits": sum(1 for result in analyses if result.get("cached")),
+        "decision_traces": decision_traces,
     }
 
 
@@ -133,7 +144,9 @@ def decide_line_layout(
     cache_key = _cache_key("layout", model, user_payload)
     cached = _read_cache(cache_dir, cache_key)
     if cached is not None:
-        return {**cached, "cached": True, "usage": _empty_usage()}
+        result = {**cached, "cached": True, "usage": _empty_usage(), "latency_ms": 0}
+        result["decision_trace"] = _decision_trace("subtitle_layout", tokens, result, endpoint, model, constraints)
+        return result
     payload = {
         "model": model,
         "temperature": 0,
@@ -146,6 +159,7 @@ def decide_line_layout(
     }
     last_error = ""
     for _ in range(1):
+        started = time.perf_counter()
         try:
             request = urllib.request.Request(
                 endpoint,
@@ -157,13 +171,19 @@ def decide_line_layout(
                 body = json.loads(response.read().decode("utf-8"))
             parsed = _parse_json_content(body["choices"][0]["message"]["content"])
             usage = _normalize_usage(body.get("usage"))
+            trace_base = {
+                "raw_response": body["choices"][0]["message"]["content"],
+                "latency_ms": round((time.perf_counter() - started) * 1000),
+            }
             option_ids = parsed.get("option_ids")
             if isinstance(option_ids, list):
-                result = {"status": "ok", "option_ids": [str(option_id) for option_id in option_ids if str(option_id)], "usage": usage}
+                result = {"status": "ok", "option_ids": [str(option_id) for option_id in option_ids if str(option_id)], "usage": usage, **trace_base}
+                result["decision_trace"] = _decision_trace("subtitle_layout", tokens, result, endpoint, model, constraints)
                 _write_cache(cache_dir, cache_key, result)
                 return result
             sentences = _clean_final_sentences(parsed.get("sentences"))
-            result = {"status": "ok", "sentences": sentences, "usage": usage}
+            result = {"status": "ok", "sentences": sentences, "usage": usage, **trace_base}
+            result["decision_trace"] = _decision_trace("subtitle_layout", tokens, result, endpoint, model, constraints)
             _write_cache(cache_dir, cache_key, result)
             return result
         except (
@@ -171,7 +191,9 @@ def decide_line_layout(
             urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError,
         ) as exc:
             last_error = exc.__class__.__name__
-    return {"status": "failed", "reason": last_error or "invalid_response", "sentences": []}
+    failed = {"status": "failed", "reason": last_error or "invalid_response", "sentences": []}
+    failed["decision_trace"] = _decision_trace("subtitle_layout", tokens, failed, endpoint, model, constraints)
+    return failed
 
 
 def _analysis_chunks(tokens: list[dict[str, Any]], limit: int = 100) -> list[list[dict[str, Any]]]:
@@ -205,6 +227,7 @@ def _request_analysis(
     }
     last_error = ""
     for _ in range(2):
+        started = time.perf_counter()
         try:
             request = urllib.request.Request(
                 endpoint,
@@ -216,16 +239,55 @@ def _request_analysis(
                 body = json.loads(response.read().decode("utf-8"))
             result = _sanitize_analysis(_parse_json_content(body["choices"][0]["message"]["content"]))
             result["usage"] = _normalize_usage(body.get("usage"))
+            result["raw_response"] = body["choices"][0]["message"]["content"]
+            result["latency_ms"] = round((time.perf_counter() - started) * 1000)
             return result
         except (
             KeyError, IndexError, TypeError, ValueError, RuntimeError, json.JSONDecodeError,
             urllib.error.URLError, http.client.HTTPException, TimeoutError, OSError,
         ) as exc:
             last_error = exc.__class__.__name__
-    return _empty_analysis(last_error or "invalid_response")
+    failed = _empty_analysis(last_error or "invalid_response")
+    failed["latency_ms"] = round((time.perf_counter() - started) * 1000)
+    return failed
 
 
-PROMPT_VERSION = "2026-07-15-transcript-aware-layout-v2"
+def _decision_trace(
+    task_type: str,
+    tokens: list[dict[str, Any]],
+    result: dict[str, Any],
+    endpoint: str,
+    model: str,
+    constraints: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    token_ids = [str(token.get("id") or "") for token in tokens if token.get("id")]
+    input_text = "".join(str(token.get("text") or "") for token in tokens)
+    decision = {
+        key: result.get(key)
+        for key in (*_analysis_list_keys(), "option_ids", "sentences")
+        if key in result
+    }
+    return {
+        "task_type": task_type,
+        "provider": urlsplit(endpoint).netloc,
+        "model": model,
+        "prompt_version": PROMPT_VERSION,
+        "schema_version": SCHEMA_VERSION,
+        "input": {
+            "first_token_id": token_ids[0] if token_ids else None,
+            "last_token_id": token_ids[-1] if token_ids else None,
+            "token_count": len(token_ids),
+            "text_sha256": hashlib.sha256(input_text.encode("utf-8")).hexdigest(),
+        },
+        "constraints": constraints or None,
+        "raw_response": result.get("raw_response"),
+        "decision": decision,
+        "status": result.get("status"),
+        "error_type": result.get("reason"),
+        "latency_ms": int(result.get("latency_ms") or 0),
+        "usage": result.get("usage") or _empty_usage(),
+        "cache_hit": bool(result.get("cached")),
+    }
 
 
 def _cache_key(kind: str, model: str, payload: dict[str, Any]) -> str:

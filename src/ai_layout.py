@@ -64,6 +64,7 @@ def layout_tokens_with_ai(
             timeout=timeout,
             cache_dir=cache_dir,
         )
+        decision_traces = [response.get("decision_trace")] if response.get("decision_trace") else []
         response = _materialize_options(response, line_options)
         valid, errors, selected = _validate_layout(response, chunk, context, required, forbidden)
         if not valid and budget["calls"] < budget["max_calls"]:
@@ -79,6 +80,8 @@ def layout_tokens_with_ai(
                 validation_errors=errors,
                 cache_dir=cache_dir,
             )
+            if response.get("decision_trace"):
+                decision_traces.append(response["decision_trace"])
             response = _materialize_options(response, line_options)
             valid, errors, selected = _validate_layout(response, chunk, context, required, forbidden)
         if valid:
@@ -90,6 +93,7 @@ def layout_tokens_with_ai(
                     "errors": [],
                     "cached": bool(response.get("cached")),
                     "usage": response.get("usage", {}),
+                    "decision_traces": decision_traces,
                 }
             )
         else:
@@ -125,6 +129,7 @@ def layout_tokens_with_ai(
                         {"token_ids": [str(token.get("id") or "") for token in group], "text": _token_text(group)}
                         for group in local_groups
                     ],
+                    "decision_traces": decision_traces,
                 }
             )
     status = "ai" if audits and all(item["status"] == "ai" for item in audits) else "mixed"
