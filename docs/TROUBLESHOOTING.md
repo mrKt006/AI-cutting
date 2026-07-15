@@ -5,7 +5,7 @@
 1. 在项目目录运行 `python --version`，需要 Python 3.10 或更高版本。
 2. 运行 `python -m pip install -r requirements.txt`。
 3. 运行 `python scripts/check_all.py` 查看第一个失败项目。
-4. 如果 8000 端口被占用，一键脚本会自动尝试 8001-8009。
+4. 如果 AI-cutting 已经运行，一键脚本会直接打开现有页面；如果 8000 被其他程序占用，才会自动尝试 8001-8009。
 
 ## FFmpeg 或 FFprobe 不可用
 

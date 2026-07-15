@@ -19,6 +19,7 @@ from make_cover import make_cover
 from llm_analysis import analyze_transcript, apply_high_confidence_corrections
 from make_subtitle import TimingSegment, make_cues_from_segmented_timings, write_ass, write_srt
 from render_video import burn_subtitles
+from safe_json import write_json_file
 from style_presets import get_style_preset
 from subtitle_layout import flatten_segment_tokens, tokens_from_text, wrap_title_text
 from text_utils import read_text, strip_keyword_marks
@@ -465,9 +466,7 @@ def _save_checkpoint(checkpoint_dir: Path | None, name: str, payload: object) ->
     if not path:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(".tmp.json")
-    temp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    temp.replace(path)
+    write_json_file(path, payload)
 
 
 def _load_checkpoint(checkpoint_dir: Path | None, name: str) -> dict:

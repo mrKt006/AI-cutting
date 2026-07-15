@@ -189,6 +189,11 @@ def main() -> int:
             print("Training feedback edit-plan check failed.")
             return 1
 
+    health_response = client.get("/api/health")
+    if health_response.status_code != 200 or health_response.json() != {"service": "ai-cutting", "status": "ok"}:
+        print(f"Health endpoint check failed: {health_response.status_code} {health_response.text}")
+        return 1
+
     index_response = client.get("/")
     print(f"index page: {index_response.status_code}")
     index_required_fragments = ["FFmpeg", "火山", "开始处理", "内容标题", "封面标题", "逐字稿"]

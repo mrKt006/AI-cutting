@@ -49,6 +49,7 @@ def main() -> int:
         ("Python compile", [py, "-m", "compileall", "web", "src", "scripts"]),
         ("Encoding scan", [py, "scripts/check_encoding.py"]),
         ("Tracked-file secret scan", [py, "scripts/check_secrets.py"]),
+        ("Atomic JSON writes", [py, "scripts/check_atomic_json.py"]),
         ("Web port helper", [py, "scripts/find_web_port.py"]),
         ("Web launcher", [py, "scripts/launch_web.py", "--check"]),
         ("Windows batch launcher", ["cmd.exe", "/d", "/c", "start_web.bat", "--check"]),

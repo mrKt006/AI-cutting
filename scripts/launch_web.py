@@ -1,14 +1,30 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import threading
 import webbrowser
 from pathlib import Path
+from urllib.error import URLError
+from urllib.request import urlopen
 
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+
+def existing_app_url() -> str | None:
+    for port in range(8000, 8010):
+        url = f"http://127.0.0.1:{port}"
+        try:
+            with urlopen(f"{url}/api/health", timeout=0.25) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except (OSError, URLError, UnicodeError, json.JSONDecodeError):
+            continue
+        if response.status == 200 and payload.get("service") == "ai-cutting":
+            return f"{url}/"
+    return None
 
 
 def main() -> int:
@@ -27,6 +43,14 @@ def main() -> int:
         print(f"[错误] 缺少 Python 依赖：{exc.name}")
         print(f'请运行："{sys.executable}" -m pip install -r requirements.txt')
         return 1
+
+    existing_url = existing_app_url()
+    if existing_url:
+        print(f"页面: {existing_url}")
+        print("AI-cutting 已在运行，使用现有服务。")
+        if not args.check:
+            webbrowser.open(existing_url)
+        return 0
 
     port = next((candidate for candidate in range(8000, 8010) if port_available(candidate)), None)
     if port is None:

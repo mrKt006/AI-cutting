@@ -33,7 +33,7 @@ from ffmpeg_utils import ffmpeg_filter_path, media_duration, probe_media, run as
 from make_cover import make_cover  # noqa: E402
 from make_subtitle import SubtitleCue  # noqa: E402
 from render_video import burn_subtitles  # noqa: E402
-from safe_json import read_json_file  # noqa: E402
+from safe_json import read_json_file, write_json_file  # noqa: E402
 from style_presets import (  # noqa: E402
     DEFAULT_STYLE_PRESETS,
     get_style_preset,
@@ -65,6 +65,8 @@ PYTHON = sys.executable
 JOB_SECRETS: dict[str, dict[str, str]] = {}
 ACTIVE_JOB_IDS: set[str] = set()
 EDITOR_ASSET_LOCKS: dict[str, threading.Lock] = {}
+JOB_STATE_LOCKS: dict[str, threading.RLock] = {}
+JOB_STATE_LOCKS_GUARD = threading.Lock()
 SETTINGS_PATH = ROOT / "web" / "settings.local.json"
 STYLE_PRESETS_PATH = ROOT / "web" / "style_presets.local.json"
 PREVIEW_DIR = ROOT / "web" / "static" / "style_previews"
@@ -102,6 +104,13 @@ STAGES = {
 
 app = FastAPI(title="AI-cutting Web")
 templates = Jinja2Templates(directory=str(ROOT / "web" / "templates"))
+
+
+@app.get("/api/health")
+def health() -> dict[str, str]:
+    return {"service": "ai-cutting", "status": "ok"}
+
+
 app.mount("/static", StaticFiles(directory=str(ROOT / "web" / "static")), name="static")
 
 
@@ -163,7 +172,7 @@ def recover_interrupted_jobs() -> None:
             for item in job.get("params", {}).get("items", []):
                 if item.get("status") == "running":
                     item["status"] = "cancelled"
-            job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_file(job_file, job)
             continue
         if job.get("status") == "pausing":
             job["status"] = "paused"
@@ -174,7 +183,7 @@ def recover_interrupted_jobs() -> None:
             for item in job.get("params", {}).get("items", []):
                 if item.get("status") == "running":
                     item["status"] = "paused"
-            job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")
+            write_json_file(job_file, job)
             continue
         job_dir = job_file.parent
         can_resume = bool(runtime.get("ffmpeg_ready")) and _job_has_required_resume_credentials(job_dir, job, settings)
@@ -188,7 +197,7 @@ def recover_interrupted_jobs() -> None:
                 item["error"] = None
         message = "服务重启，任务将从最近检查点自动恢复" if can_resume else "服务重启后任务已暂停，请检查运行环境或接口配置"
         job.setdefault("log", []).append({"time": _now(), "message": message})
-        job_file.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")
+        write_json_file(job_file, job)
         if can_resume:
             _set_job_secrets(str(job.get("id") or job_dir.name), settings)
             _write_job_control(job_dir, pause_requested=False, cancel_requested=False)
@@ -1591,9 +1600,10 @@ def _safe_output_basename(value: str) -> str:
 
 
 def _set_job_items(job_dir: Path, items: list[dict[str, Any]]) -> None:
-    job = _load_job(job_dir)
-    job.setdefault("params", {})["items"] = items
-    _write_job(job_dir, job)
+    with _job_state_lock(job_dir):
+        job = _load_job(job_dir)
+        job.setdefault("params", {})["items"] = items
+        _write_job(job_dir, job)
 
 
 def _item_usage(job_dir: Path, item: dict[str, Any]) -> dict[str, Any]:
@@ -1682,12 +1692,16 @@ def _load_job(job_dir: Path) -> dict[str, Any]:
     return _load_json_file(job_dir / "job.json")
 
 
+def _job_state_lock(job_dir: Path) -> threading.RLock:
+    key = str(job_dir.resolve())
+    with JOB_STATE_LOCKS_GUARD:
+        return JOB_STATE_LOCKS.setdefault(key, threading.RLock())
+
+
 def _write_job(job_dir: Path, job: dict[str, Any]) -> None:
-    job["updated_at"] = _now()
-    target = job_dir / "job.json"
-    temp = job_dir / "job.tmp.json"
-    temp.write_text(json.dumps(job, ensure_ascii=True, indent=2), encoding="utf-8")
-    temp.replace(target)
+    with _job_state_lock(job_dir):
+        job["updated_at"] = _now()
+        write_json_file(job_dir / "job.json", job, ensure_ascii=True)
 
 
 def _job_control_path(job_dir: Path) -> Path:
@@ -1713,9 +1727,7 @@ def _write_job_control(
     if cancel_requested is not None:
         existing["cancel_requested"] = bool(cancel_requested)
     existing["updated_at"] = _now()
-    temp = path.with_suffix(".tmp.json")
-    temp.write_text(json.dumps(existing, ensure_ascii=False, indent=2), encoding="utf-8")
-    temp.replace(path)
+    write_json_file(path, existing)
 
 
 def _pause_requested(job_dir: Path) -> bool:
@@ -1780,17 +1792,19 @@ def _write_web_traceback(job_dir: Path, label: str, exc: BaseException) -> Path:
 
 
 def _update_job(job_dir: Path, **updates: Any) -> None:
-    job = _load_job(job_dir)
-    if "message" in updates:
-        job.setdefault("log", []).append({"time": _now(), "message": updates.pop("message")})
-    job.update(updates)
-    _write_job(job_dir, job)
+    with _job_state_lock(job_dir):
+        job = _load_job(job_dir)
+        if "message" in updates:
+            job.setdefault("log", []).append({"time": _now(), "message": updates.pop("message")})
+        job.update(updates)
+        _write_job(job_dir, job)
 
 
 def _append_log(job_dir: Path, message: str) -> None:
-    job = _load_job(job_dir)
-    job.setdefault("log", []).append({"time": _now(), "message": message})
-    _write_job(job_dir, job)
+    with _job_state_lock(job_dir):
+        job = _load_job(job_dir)
+        job.setdefault("log", []).append({"time": _now(), "message": message})
+        _write_job(job_dir, job)
 
 
 def _load_or_create_edit_project(job_dir: Path, job: dict[str, Any], item_id: str = "001") -> dict[str, Any]:
