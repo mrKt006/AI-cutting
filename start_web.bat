@@ -6,19 +6,19 @@ cd /d "%~dp0"
 echo AI-cutting 正在启动...
 
 if exist ".venv\Scripts\python.exe" (
-  ".venv\Scripts\python.exe" scripts\launch_web.py
+  ".venv\Scripts\python.exe" scripts\launch_web.py %*
   goto :end
 )
 
 where py >nul 2>nul
 if not errorlevel 1 (
-  py -3 scripts\launch_web.py
+  py -3 scripts\launch_web.py %*
   goto :end
 )
 
 where python >nul 2>nul
 if not errorlevel 1 (
-  python scripts\launch_web.py
+  python scripts\launch_web.py %*
   goto :end
 )
 

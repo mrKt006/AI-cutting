@@ -51,6 +51,7 @@ def main() -> int:
         ("Tracked-file secret scan", [py, "scripts/check_secrets.py"]),
         ("Web port helper", [py, "scripts/find_web_port.py"]),
         ("Web launcher", [py, "scripts/launch_web.py", "--check"]),
+        ("Windows batch launcher", ["cmd.exe", "/d", "/c", "start_web.bat", "--check"]),
         ("Editor timeline plan", [py, "scripts/check_editor_timeline.py"]),
         ("Transcript document", [py, "scripts/check_transcript_document.py"]),
         ("Transcript alignment", [py, "scripts/check_transcript_alignment.py"]),
