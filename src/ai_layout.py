@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from llm_analysis import decide_line_layout
+from llm_analysis import decide_line_layout, review_line_layout
 from subtitle_layout import analysis_break_sets, build_layout_context, measure_text, segment_tokens
 
 
@@ -19,7 +19,7 @@ def layout_tokens_with_ai(
     api_key: str,
     timeout: float = 60.0,
     cache_dir: str | Path | None = None,
-    max_calls: int = 48,
+    max_calls: int = 128,
     _retry_depth: int = 0,
     _budget: dict[str, int] | None = None,
 ) -> tuple[list[list[dict[str, Any]]], dict[str, Any]]:
@@ -33,26 +33,37 @@ def layout_tokens_with_ai(
     token_by_id = {str(token.get("id") or ""): token for token in tokens}
     groups: list[list[dict[str, Any]]] = []
     audits: list[dict[str, Any]] = []
-    for chunk in _layout_chunks(tokens, preferred, required):
+    for chunk in _layout_chunks(tokens, preferred, required, forbidden):
         payload_tokens = _layout_payload_tokens(chunk, context)
         line_options = _line_options(chunk, context, preferred, required, forbidden)
         constraints = {
             "token_count": len(chunk),
-            "line_options": [
-                {
-                    "id": option["option_id"],
-                    "start": option["start_index"],
-                    "end": option["end_index"],
-                    "fill": option["fill"],
-                    "natural": option["natural"],
-                }
-                for option in line_options
-            ],
+            "source_text": _token_text(chunk),
+            "comfortable_width_px": round(context.comfort_width, 1),
+            "hard_width_px": round(context.hard_width, 1),
+            "line_end_limits": _line_index_limits(chunk, context, required),
+            "required_ends": [index + 1 for index, token in enumerate(chunk[:-1]) if str(token.get("id") or "") in required],
+            "forbidden_ends": [index + 1 for index, token in enumerate(chunk[:-1]) if str(token.get("id") or "") in forbidden],
         }
         if budget["calls"] >= budget["max_calls"]:
             local_groups = fallback(chunk)
+            local_sentences = [
+                {"token_ids": [str(token.get("id") or "") for token in group], "text": _token_text(group)}
+                for group in local_groups
+            ]
+            local_valid, local_errors, _ = _validate_layout(
+                {"sentences": local_sentences}, chunk, context, required, forbidden
+            )
             groups.extend(local_groups)
-            audits.append({"status": "fallback", "reason": "call_budget_exhausted", "errors": [], "sentences": []})
+            audits.append(
+                {
+                    "status": "fallback",
+                    "reason": "call_budget_exhausted",
+                    "errors": [] if local_valid else local_errors,
+                    "sentences": local_sentences,
+                    "validation": {"valid": local_valid, "errors": local_errors},
+                }
+            )
             continue
         budget["calls"] += 1
         response = decide_line_layout(
@@ -65,8 +76,23 @@ def layout_tokens_with_ai(
             cache_dir=cache_dir,
         )
         decision_traces = [response.get("decision_trace")] if response.get("decision_trace") else []
-        response = _materialize_options(response, line_options)
+        response = _materialize_layout(response, chunk, line_options)
         valid, errors, selected = _validate_layout(response, chunk, context, required, forbidden)
+        review = {"status": "skipped", "approved": False, "issues": []}
+        if valid and budget["calls"] < budget["max_calls"]:
+            budget["calls"] += 1
+            review = review_line_layout(
+                payload_tokens,
+                response.get("sentences", []),
+                base_url=base_url,
+                model=model,
+                api_key=api_key,
+                timeout=timeout,
+                cache_dir=cache_dir,
+            )
+            valid = review.get("status") == "ok" and review.get("approved") is True
+            if not valid:
+                errors.extend(f"语义复核：{issue}" for issue in review.get("issues", []))
         if not valid and budget["calls"] < budget["max_calls"]:
             budget["calls"] += 1
             response = decide_line_layout(
@@ -82,8 +108,22 @@ def layout_tokens_with_ai(
             )
             if response.get("decision_trace"):
                 decision_traces.append(response["decision_trace"])
-            response = _materialize_options(response, line_options)
+            response = _materialize_layout(response, chunk, line_options)
             valid, errors, selected = _validate_layout(response, chunk, context, required, forbidden)
+            if valid and budget["calls"] < budget["max_calls"]:
+                budget["calls"] += 1
+                review = review_line_layout(
+                    payload_tokens,
+                    response.get("sentences", []),
+                    base_url=base_url,
+                    model=model,
+                    api_key=api_key,
+                    timeout=timeout,
+                    cache_dir=cache_dir,
+                )
+                valid = review.get("status") == "ok" and review.get("approved") is True
+                if not valid:
+                    errors.extend(f"语义复核：{issue}" for issue in review.get("issues", []))
         if valid:
             groups.extend([[token_by_id[token_id] for token_id in ids] for ids in selected])
             audits.append(
@@ -92,11 +132,53 @@ def layout_tokens_with_ai(
                     "sentences": response.get("sentences", []),
                     "errors": [],
                     "cached": bool(response.get("cached")),
-                    "usage": response.get("usage", {}),
+                    "usage": {
+                        key: int(response.get("usage", {}).get(key, 0)) + int(review.get("usage", {}).get(key, 0))
+                        for key in ("prompt_tokens", "completion_tokens", "total_tokens")
+                    },
                     "decision_traces": decision_traces,
+                    "semantic_review": review,
                 }
             )
         else:
+            # The deterministic wrapper may propose a balanced physical layout,
+            # but it is never trusted on its own. A separate model call must
+            # approve the exact final lines before this can count as AI output.
+            local_groups = fallback(chunk)
+            local_sentences = [
+                {"token_ids": [str(token.get("id") or "") for token in group], "text": _token_text(group)}
+                for group in local_groups
+            ]
+            local_valid, local_errors, local_selected = _validate_layout(
+                {"sentences": local_sentences}, chunk, context, required, forbidden
+            )
+            local_review = {"status": "skipped", "approved": False, "issues": []}
+            if local_valid and budget["calls"] < budget["max_calls"]:
+                budget["calls"] += 1
+                local_review = review_line_layout(
+                    payload_tokens,
+                    local_sentences,
+                    base_url=base_url,
+                    model=model,
+                    api_key=api_key,
+                    timeout=timeout,
+                    cache_dir=cache_dir,
+                )
+            if local_valid and local_review.get("status") == "ok" and local_review.get("approved") is True:
+                groups.extend([[token_by_id[token_id] for token_id in ids] for ids in local_selected])
+                audits.append(
+                    {
+                        "status": "ai",
+                        "source": "ai_verified_local",
+                        "sentences": local_sentences,
+                        "errors": [],
+                        "cached": bool(local_review.get("cached")),
+                        "usage": local_review.get("usage", {}),
+                        "decision_traces": decision_traces,
+                        "semantic_review": local_review,
+                    }
+                )
+                continue
             split_chunks = _split_failed_chunk(chunk, preferred, required, forbidden) if _retry_depth < 2 else []
             if split_chunks:
                 for subchunk in split_chunks:
@@ -118,18 +200,16 @@ def layout_tokens_with_ai(
                     groups.extend(subgroups)
                     audits.extend(subaudit.get("chunks", []))
                 continue
-            local_groups = fallback(chunk)
             groups.extend(local_groups)
             audits.append(
                 {
                     "status": "fallback",
                     "reason": response.get("reason") or "validation_failed",
-                    "errors": errors,
-                    "sentences": [
-                        {"token_ids": [str(token.get("id") or "") for token in group], "text": _token_text(group)}
-                        for group in local_groups
-                    ],
+                    "errors": errors + local_errors,
+                    "sentences": local_sentences,
+                    "validation": {"valid": local_valid, "errors": local_errors},
                     "decision_traces": decision_traces,
+                    "semantic_review": local_review,
                 }
             )
     status = "ai" if audits and all(item["status"] == "ai" for item in audits) else "mixed"
@@ -163,6 +243,12 @@ def _split_failed_chunk(
             for index, token in enumerate(tokens[:-1])
             if str(token.get("id") or "") in preferred and str(token.get("id") or "") not in forbidden
         ]
+    if not candidates:
+        candidates = [
+            index + 1
+            for index, token in enumerate(tokens[:-1])
+            if _safe_chunk_boundary(tokens, index, forbidden)
+        ]
     split_at = min(candidates, key=lambda value: abs(value - midpoint)) if candidates else midpoint
     if split_at <= 0 or split_at >= len(tokens):
         return []
@@ -170,7 +256,7 @@ def _split_failed_chunk(
 
 
 def _layout_chunks(
-    tokens: list[dict[str, Any]], preferred: set[str], required: set[str], limit: int = 45
+    tokens: list[dict[str, Any]], preferred: set[str], required: set[str], forbidden: set[str], limit: int = 45
 ) -> list[list[dict[str, Any]]]:
     chunks: list[list[dict[str, Any]]] = []
     start = 0
@@ -191,10 +277,37 @@ def _layout_chunks(
                     if str(tokens[index].get("id") or "") in preferred
                     or float(tokens[index + 1].get("start", 0)) - float(tokens[index].get("end", 0)) >= 0.25
                 ]
+            candidates = [
+                value for value in candidates
+                if _safe_chunk_boundary(tokens, value - 1, forbidden)
+            ]
+            if not candidates:
+                candidates = [
+                    index + 1
+                    for index in range(start + max(1, limit // 2), hard_end)
+                    if _safe_chunk_boundary(tokens, index, forbidden)
+                ]
             end = candidates[-1] if candidates else hard_end
         chunks.append(tokens[start:end])
         start = end
     return chunks
+
+
+def _safe_chunk_boundary(tokens: list[dict[str, Any]], left_index: int, forbidden: set[str]) -> bool:
+    if left_index < 0 or left_index + 1 >= len(tokens):
+        return False
+    left = tokens[left_index]
+    right = tokens[left_index + 1]
+    if str(left.get("id") or "") in forbidden:
+        return False
+    right_text = str(right.get("text") or "").strip()
+    if right_text[:1] in {"的", "了", "系", "品", "角"}:
+        return False
+    left_text = str(left.get("text") or "").strip()
+    if left_text and right_text and left_text[-1:].isascii() and right_text[:1].isascii():
+        if left_text[-1:].isalnum() and right_text[:1].isalnum():
+            return False
+    return True
 
 
 def _layout_payload_tokens(tokens: list[dict[str, Any]], context: Any) -> list[dict[str, Any]]:
@@ -237,6 +350,26 @@ def _line_end_limits(tokens: list[dict[str, Any]], context: Any, required: set[s
             }
         )
     return result
+
+
+def _line_index_limits(tokens: list[dict[str, Any]], context: Any, required: set[str]) -> list[dict[str, int]]:
+    """Expose exact font-measured limits without letting local code choose semantic breaks."""
+    limits: list[dict[str, int]] = []
+    for start in range(len(tokens)):
+        comfortable_end = start + 1
+        hard_end = start + 1
+        for end in range(start + 1, len(tokens) + 1):
+            measured = measure_text(_token_text(tokens[start:end]), context)
+            if measured <= context.comfort_width + 0.5:
+                comfortable_end = end
+            if measured <= context.hard_width + 0.5:
+                hard_end = end
+            else:
+                break
+            if str(tokens[end - 1].get("id") or "") in required:
+                break
+        limits.append({"start": start, "comfortable_end": comfortable_end, "hard_end": hard_end})
+    return limits
 
 
 def _line_options(
@@ -322,6 +455,32 @@ def _materialize_options(response: dict[str, Any], options: list[dict[str, Any]]
     return {**response, "sentences": sentences}
 
 
+def _materialize_layout(
+    response: dict[str, Any], tokens: list[dict[str, Any]], options: list[dict[str, Any]]
+) -> dict[str, Any]:
+    line_ends = response.get("line_ends") if isinstance(response, dict) else None
+    if not isinstance(line_ends, list):
+        return _materialize_options(response, options)
+    sentences: list[dict[str, Any]] = []
+    start = 0
+    for raw_end in line_ends:
+        try:
+            end = int(raw_end)
+        except (TypeError, ValueError):
+            continue
+        if end <= start or end > len(tokens):
+            continue
+        row = tokens[start:end]
+        sentences.append({
+            "token_ids": [str(token.get("id") or "") for token in row],
+            "text": _token_text(row),
+            "start_index": start,
+            "end_index": end,
+        })
+        start = end
+    return {**response, "sentences": sentences}
+
+
 def _validate_layout(
     response: dict[str, Any],
     tokens: list[dict[str, Any]],
@@ -344,6 +503,10 @@ def _validate_layout(
             errors.append(f"第 {index} 句 text 与 token_ids 不一致")
         if measure_text(actual_text, context) > context.hard_width + 0.5:
             errors.append(f"第 {index} 句宽度 {measure_text(actual_text, context):.1f}px 超过 {context.hard_width:.1f}px")
+        if index > 1 and len(actual_text) <= 8 and actual_text[:1] in {"的", "了", "系", "品", "角"}:
+            errors.append(f"第 {index} 句以承接字“{actual_text[:1]}”开头")
+        if len(actual_text) <= 2 and index not in {1, len(response.get("sentences", []))}:
+            errors.append(f"第 {index} 句是孤立短句“{actual_text}”")
     flattened = [token_id for ids in selected for token_id in ids]
     if flattened != expected:
         errors.append("token_ids 必须完整、连续且与输入顺序一致，不能丢字、加字、重复或换序")

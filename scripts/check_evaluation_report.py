@@ -16,6 +16,8 @@ from build_evaluation_report import build_report  # noqa: E402
 def main() -> int:
     with tempfile.TemporaryDirectory(prefix="evaluation-check-", dir=ROOT) as raw_tmp:
         jobs_dir = Path(raw_tmp) / "jobs"
+        gold_dir = Path(raw_tmp) / "evaluation" / "gold"
+        gold_dir.mkdir(parents=True)
         for index in range(20):
             job_dir = jobs_dir / f"job-{index:02d}"
             work_dir = job_dir / "work" / "001"
@@ -45,7 +47,16 @@ def main() -> int:
                 encoding="utf-8",
             )
             (work_dir / "ai_decisions.json").write_text(
-                json.dumps({"applied_deletions": [{"token_ids": ["t1"]}], "rejected_deletions": []}),
+                json.dumps(
+                    {
+                        "version": 2,
+                        "applied_deletions": [{"token_ids": ["t1"]}],
+                        "verified_deletions": [{"token_ids": ["t1"], "start": 0.0, "end": 0.1}],
+                        "rejected_deletions": [],
+                        "fallbacks": {"layout": None, "unverified": []},
+                        "quality_gate": {"passed": True, "blockers": []},
+                    }
+                ),
                 encoding="utf-8",
             )
             final_result = {"sentences": [{"id": "s1", "text": f"sample-{index}"}]}
@@ -77,6 +88,21 @@ def main() -> int:
             )
             (work_dir / "auto_edit_baseline.json").write_text(
                 json.dumps({"captured_at": "2026-01-01T00:01:00"}), encoding="utf-8"
+            )
+            (work_dir / "volcengine_segments.json").write_text(
+                json.dumps([{"text": "sample", "tokens": [{"id": "t1", "text": "sample"}]}]), encoding="utf-8"
+            )
+            (gold_dir / f"source-{index:02d}.json").write_text(
+                json.dumps(
+                    {
+                        "review": {"status": "completed"},
+                        "correct_terms": [],
+                        "protected_phrases": [],
+                        "breakpoints": [{"after_token_id": "t1"}],
+                        "deletion_labels": [{"token_ids": ["t1"], "expected_delete": True}],
+                    }
+                ),
+                encoding="utf-8",
             )
         report = build_report(jobs_dir)
         assert report["summary"]["fixed_set_ready"]

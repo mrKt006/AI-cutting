@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "source": "5.mp4",
+  "source_sha256": "f06080f1317ba0aedc417a9242393186605c72002d145977729698a08a4012c5",
+  "source_bytes": 427842899,
+  "status": "draft_pending_review",
+  "generated_at": "2026-07-15T23:39:45",
+  "transcript": {
+    "text": "",
+    "segments": [],
+    "source_job": ""
+  },
+  "correct_terms": [],
+  "protected_phrases": [],
+  "breakpoints": [],
+  "deletion_labels": [],
+  "forbidden_deletions": [],
+  "cover_safe_zones": {
+    "avoid_top_ratio": 0.1,
+    "person_safe_center_width_ratio": 0.45,
+    "title_regions": [
+      "top",
+      "bottom"
+    ],
+    "reviewed": false
+  },
+  "review": {
+    "status": "pending",
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "notes": "研发验收用；未完成逐段审校前不得计入发布门。"
+  }
+}

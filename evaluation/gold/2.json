@@ -1,0 +1,5546 @@
+{
+  "version": 1,
+  "source": "2.mp4",
+  "source_sha256": "29fae8ac7a5ff21e6f191c031ffba7edc05836d0403718b90382102b3684ac2a",
+  "source_bytes": 159928234,
+  "status": "draft_pending_review",
+  "generated_at": "2026-07-15T23:39:44",
+  "transcript": {
+    "text": "别再说视频号做不起来了现在的视频号是三个平台里最好做的一个大部分老板在视频号上没拿到结果其实都是用错了方法先别着急拍短视频先别着急开直播更别去抄什么对不上号你这样干三个月大概率也是白干我们帮企业做ai获客落地跑通了从零到一的流程今天我给你拆清楚第一步先定位你是谁你的客户是谁你解决了什么问题定位歪了后面全都是无用功第二步搭建你的ai知识库把你所有的产品案例客户信息全部都喂给ai让ai彻底的搞懂你的业务第三步用ai批量产出精准的获客视频从策划选题到写文案再到数字分身的出镜ai全列入搞定你只需要审核第四步找到一条验证过的爆款视频用ai做矩阵一键放大几十倍第五步最关键的一步发布的时候点左下角挂载起微刷到客户刷到感兴趣点一下三秒加吼三秒加好友完全没有流失你看我这条视频的左下角是不是有一个企业是不是也有一个企业微信的按钮你点一下试试看你点一下试试看是不是直接就跳转了就这么简单你的视频号是不是做不起来你的视频号不是做不起来是没有用这套方法想知道怎么落地左下角找我",
+    "segments": [
+      {
+        "start": 1.76,
+        "end": 3.72,
+        "start_ms": 1760,
+        "end_ms": 3720,
+        "text": "别再说视频号做不起来了",
+        "tokens": [
+          {
+            "id": "u0001-w0001",
+            "text": "别",
+            "original_text": "别",
+            "start": 1.76,
+            "end": 2.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0001-w0002",
+            "text": "再",
+            "original_text": "再",
+            "start": 2.04,
+            "end": 2.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0001-w0003",
+            "text": "说",
+            "original_text": "说",
+            "start": 2.24,
+            "end": 2.44,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0001-w0004",
+            "text": "视",
+            "original_text": "视",
+            "start": 2.44,
+            "end": 2.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0001-w0005",
+            "text": "频",
+            "original_text": "频",
+            "start": 2.56,
+            "end": 2.64,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0001-w0006",
+            "text": "号",
+            "original_text": "号",
+            "start": 2.64,
+            "end": 2.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0001-w0007",
+            "text": "做",
+            "original_text": "做",
+            "start": 2.8,
+            "end": 2.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0001-w0008",
+            "text": "不",
+            "original_text": "不",
+            "start": 2.92,
+            "end": 3.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0001-w0009",
+            "text": "起",
+            "original_text": "起",
+            "start": 3.04,
+            "end": 3.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0001-w0010",
+            "text": "来",
+            "original_text": "来",
+            "start": 3.12,
+            "end": 3.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0001-w0011",
+            "text": "了",
+            "original_text": "了",
+            "start": 3.28,
+            "end": 3.72,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 3.72,
+        "end": 4.64,
+        "start_ms": 3720,
+        "end_ms": 4640,
+        "text": "现在的视频号",
+        "tokens": [
+          {
+            "id": "u0002-w0001",
+            "text": "现",
+            "original_text": "现",
+            "start": 3.72,
+            "end": 4.0,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0002-w0002",
+            "text": "在",
+            "original_text": "在",
+            "start": 4.0,
+            "end": 4.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0002-w0003",
+            "text": "的",
+            "original_text": "的",
+            "start": 4.12,
+            "end": 4.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0002-w0004",
+            "text": "视",
+            "original_text": "视",
+            "start": 4.2,
+            "end": 4.32,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0002-w0005",
+            "text": "频",
+            "original_text": "频",
+            "start": 4.32,
+            "end": 4.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0002-w0006",
+            "text": "号",
+            "original_text": "号",
+            "start": 4.4,
+            "end": 4.64,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 4.64,
+        "end": 7.46,
+        "start_ms": 4640,
+        "end_ms": 7460,
+        "text": "是三个平台里最好做的一个",
+        "tokens": [
+          {
+            "id": "u0003-w0001",
+            "text": "是",
+            "original_text": "是",
+            "start": 4.64,
+            "end": 4.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0003-w0002",
+            "text": "三",
+            "original_text": "三",
+            "start": 4.88,
+            "end": 5.16,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0003-w0003",
+            "text": "个",
+            "original_text": "个",
+            "start": 5.16,
+            "end": 5.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0003-w0004",
+            "text": "平",
+            "original_text": "平",
+            "start": 5.4,
+            "end": 5.64,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0003-w0005",
+            "text": "台",
+            "original_text": "台",
+            "start": 5.64,
+            "end": 5.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0003-w0006",
+            "text": "里",
+            "original_text": "里",
+            "start": 5.84,
+            "end": 6.0,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0003-w0007",
+            "text": "最",
+            "original_text": "最",
+            "start": 6.04,
+            "end": 6.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0003-w0008",
+            "text": "好",
+            "original_text": "好",
+            "start": 6.28,
+            "end": 6.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0003-w0009",
+            "text": "做",
+            "original_text": "做",
+            "start": 6.52,
+            "end": 6.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0003-w0010",
+            "text": "的",
+            "original_text": "的",
+            "start": 6.68,
+            "end": 6.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0003-w0011",
+            "text": "一",
+            "original_text": "一",
+            "start": 6.8,
+            "end": 6.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0003-w0012",
+            "text": "个",
+            "original_text": "个",
+            "start": 6.96,
+            "end": 7.46,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 7.52,
+        "end": 9.96,
+        "start_ms": 7520,
+        "end_ms": 9960,
+        "text": "大部分老板在视频号上没拿到结果",
+        "tokens": [
+          {
+            "id": "u0004-w0001",
+            "text": "大",
+            "original_text": "大",
+            "start": 7.52,
+            "end": 7.72,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0002",
+            "text": "部",
+            "original_text": "部",
+            "start": 7.72,
+            "end": 7.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0003",
+            "text": "分",
+            "original_text": "分",
+            "start": 7.84,
+            "end": 7.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0004",
+            "text": "老",
+            "original_text": "老",
+            "start": 7.96,
+            "end": 8.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0005",
+            "text": "板",
+            "original_text": "板",
+            "start": 8.12,
+            "end": 8.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0006",
+            "text": "在",
+            "original_text": "在",
+            "start": 8.28,
+            "end": 8.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0007",
+            "text": "视",
+            "original_text": "视",
+            "start": 8.56,
+            "end": 8.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0008",
+            "text": "频",
+            "original_text": "频",
+            "start": 8.72,
+            "end": 8.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0009",
+            "text": "号",
+            "original_text": "号",
+            "start": 8.8,
+            "end": 8.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0010",
+            "text": "上",
+            "original_text": "上",
+            "start": 8.92,
+            "end": 9.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0011",
+            "text": "没",
+            "original_text": "没",
+            "start": 9.08,
+            "end": 9.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0012",
+            "text": "拿",
+            "original_text": "拿",
+            "start": 9.24,
+            "end": 9.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0013",
+            "text": "到",
+            "original_text": "到",
+            "start": 9.4,
+            "end": 9.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0014",
+            "text": "结",
+            "original_text": "结",
+            "start": 9.52,
+            "end": 9.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0004-w0015",
+            "text": "果",
+            "original_text": "果",
+            "start": 9.68,
+            "end": 9.96,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 9.96,
+        "end": 11.82,
+        "start_ms": 9960,
+        "end_ms": 11820,
+        "text": "其实都是用错了方法",
+        "tokens": [
+          {
+            "id": "u0005-w0001",
+            "text": "其",
+            "original_text": "其",
+            "start": 9.96,
+            "end": 10.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0005-w0002",
+            "text": "实",
+            "original_text": "实",
+            "start": 10.24,
+            "end": 10.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0005-w0003",
+            "text": "都",
+            "original_text": "都",
+            "start": 10.48,
+            "end": 10.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0005-w0004",
+            "text": "是",
+            "original_text": "是",
+            "start": 10.6,
+            "end": 10.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0005-w0005",
+            "text": "用",
+            "original_text": "用",
+            "start": 10.76,
+            "end": 10.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0005-w0006",
+            "text": "错",
+            "original_text": "错",
+            "start": 10.92,
+            "end": 11.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0005-w0007",
+            "text": "了",
+            "original_text": "了",
+            "start": 11.04,
+            "end": 11.16,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0005-w0008",
+            "text": "方",
+            "original_text": "方",
+            "start": 11.16,
+            "end": 11.32,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0005-w0009",
+            "text": "法",
+            "original_text": "法",
+            "start": 11.32,
+            "end": 11.82,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 11.88,
+        "end": 13.56,
+        "start_ms": 11880,
+        "end_ms": 13560,
+        "text": "先别着急拍短视频",
+        "tokens": [
+          {
+            "id": "u0006-w0001",
+            "text": "先",
+            "original_text": "先",
+            "start": 11.88,
+            "end": 12.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0006-w0002",
+            "text": "别",
+            "original_text": "别",
+            "start": 12.12,
+            "end": 12.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0006-w0003",
+            "text": "着",
+            "original_text": "着",
+            "start": 12.28,
+            "end": 12.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0006-w0004",
+            "text": "急",
+            "original_text": "急",
+            "start": 12.52,
+            "end": 12.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0006-w0005",
+            "text": "拍",
+            "original_text": "拍",
+            "start": 12.68,
+            "end": 12.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0006-w0006",
+            "text": "短",
+            "original_text": "短",
+            "start": 12.88,
+            "end": 13.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0006-w0007",
+            "text": "视",
+            "original_text": "视",
+            "start": 13.08,
+            "end": 13.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0006-w0008",
+            "text": "频",
+            "original_text": "频",
+            "start": 13.2,
+            "end": 13.56,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 13.56,
+        "end": 15.08,
+        "start_ms": 13560,
+        "end_ms": 15080,
+        "text": "先别着急开直播",
+        "tokens": [
+          {
+            "id": "u0007-w0001",
+            "text": "先",
+            "original_text": "先",
+            "start": 13.56,
+            "end": 13.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0007-w0002",
+            "text": "别",
+            "original_text": "别",
+            "start": 13.8,
+            "end": 13.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0007-w0003",
+            "text": "着",
+            "original_text": "着",
+            "start": 13.96,
+            "end": 14.16,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0007-w0004",
+            "text": "急",
+            "original_text": "急",
+            "start": 14.16,
+            "end": 14.32,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0007-w0005",
+            "text": "开",
+            "original_text": "开",
+            "start": 14.32,
+            "end": 14.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0007-w0006",
+            "text": "直",
+            "original_text": "直",
+            "start": 14.48,
+            "end": 14.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0007-w0007",
+            "text": "播",
+            "original_text": "播",
+            "start": 14.6,
+            "end": 15.08,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 15.08,
+        "end": 17.42,
+        "start_ms": 15080,
+        "end_ms": 17420,
+        "text": "更别去抄什么对不上号",
+        "tokens": [
+          {
+            "id": "u0008-w0001",
+            "text": "更",
+            "original_text": "更",
+            "start": 15.08,
+            "end": 15.32,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0008-w0002",
+            "text": "别",
+            "original_text": "别",
+            "start": 15.4,
+            "end": 15.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0008-w0003",
+            "text": "去",
+            "original_text": "去",
+            "start": 15.6,
+            "end": 15.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0008-w0004",
+            "text": "抄",
+            "original_text": "抄",
+            "start": 15.88,
+            "end": 16.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0008-w0005",
+            "text": "什",
+            "original_text": "什",
+            "start": 16.16,
+            "end": 16.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0008-w0006",
+            "text": "么",
+            "original_text": "么",
+            "start": 16.28,
+            "end": 16.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0008-w0007",
+            "text": "对",
+            "original_text": "对",
+            "start": 16.52,
+            "end": 16.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0008-w0008",
+            "text": "不",
+            "original_text": "不",
+            "start": 16.68,
+            "end": 16.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0008-w0009",
+            "text": "上",
+            "original_text": "上",
+            "start": 16.8,
+            "end": 16.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0008-w0010",
+            "text": "号",
+            "original_text": "号",
+            "start": 16.88,
+            "end": 17.42,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 17.92,
+        "end": 19.28,
+        "start_ms": 17920,
+        "end_ms": 19280,
+        "text": "你这样干三个月",
+        "tokens": [
+          {
+            "id": "u0009-w0001",
+            "text": "你",
+            "original_text": "你",
+            "start": 17.92,
+            "end": 18.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0009-w0002",
+            "text": "这",
+            "original_text": "这",
+            "start": 18.08,
+            "end": 18.16,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0009-w0003",
+            "text": "样",
+            "original_text": "样",
+            "start": 18.16,
+            "end": 18.32,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0009-w0004",
+            "text": "干",
+            "original_text": "干",
+            "start": 18.36,
+            "end": 18.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0009-w0005",
+            "text": "三",
+            "original_text": "三",
+            "start": 18.6,
+            "end": 18.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0009-w0006",
+            "text": "个",
+            "original_text": "个",
+            "start": 18.84,
+            "end": 18.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0009-w0007",
+            "text": "月",
+            "original_text": "月",
+            "start": 18.96,
+            "end": 19.28,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 19.28,
+        "end": 20.78,
+        "start_ms": 19280,
+        "end_ms": 20780,
+        "text": "大概率也是白干",
+        "tokens": [
+          {
+            "id": "u0010-w0001",
+            "text": "大",
+            "original_text": "大",
+            "start": 19.28,
+            "end": 19.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0010-w0002",
+            "text": "概",
+            "original_text": "概",
+            "start": 19.6,
+            "end": 19.72,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0010-w0003",
+            "text": "率",
+            "original_text": "率",
+            "start": 19.72,
+            "end": 19.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0010-w0004",
+            "text": "也",
+            "original_text": "也",
+            "start": 19.88,
+            "end": 20.0,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0010-w0005",
+            "text": "是",
+            "original_text": "是",
+            "start": 20.0,
+            "end": 20.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0010-w0006",
+            "text": "白",
+            "original_text": "白",
+            "start": 20.12,
+            "end": 20.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0010-w0007",
+            "text": "干",
+            "original_text": "干",
+            "start": 20.28,
+            "end": 20.78,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 21.88,
+        "end": 24.78,
+        "start_ms": 21880,
+        "end_ms": 24780,
+        "text": "我们帮企业做ai获客落地",
+        "tokens": [
+          {
+            "id": "u0011-w0001",
+            "text": "我",
+            "original_text": "我",
+            "start": 21.88,
+            "end": 22.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0011-w0002",
+            "text": "们",
+            "original_text": "们",
+            "start": 22.12,
+            "end": 22.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0011-w0003",
+            "text": "帮",
+            "original_text": "帮",
+            "start": 22.28,
+            "end": 22.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0011-w0004",
+            "text": "企",
+            "original_text": "企",
+            "start": 22.56,
+            "end": 22.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0011-w0005",
+            "text": "业",
+            "original_text": "业",
+            "start": 22.84,
+            "end": 23.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0011-w0006",
+            "text": "做",
+            "original_text": "做",
+            "start": 23.04,
+            "end": 23.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0011-w0007",
+            "text": "ai",
+            "original_text": "ai",
+            "start": 23.32,
+            "end": 23.72,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0011-w0008",
+            "text": "获",
+            "original_text": "获",
+            "start": 23.8,
+            "end": 23.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0011-w0009",
+            "text": "客",
+            "original_text": "客",
+            "start": 23.92,
+            "end": 24.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0011-w0010",
+            "text": "落",
+            "original_text": "落",
+            "start": 24.16,
+            "end": 24.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0011-w0011",
+            "text": "地",
+            "original_text": "地",
+            "start": 24.28,
+            "end": 24.78,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 24.88,
+        "end": 27.08,
+        "start_ms": 24880,
+        "end_ms": 27080,
+        "text": "跑通了从零到一的流程",
+        "tokens": [
+          {
+            "id": "u0012-w0001",
+            "text": "跑",
+            "original_text": "跑",
+            "start": 24.88,
+            "end": 25.16,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0012-w0002",
+            "text": "通",
+            "original_text": "通",
+            "start": 25.16,
+            "end": 25.32,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0012-w0003",
+            "text": "了",
+            "original_text": "了",
+            "start": 25.32,
+            "end": 25.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0012-w0004",
+            "text": "从",
+            "original_text": "从",
+            "start": 25.48,
+            "end": 25.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0012-w0005",
+            "text": "零",
+            "original_text": "零",
+            "start": 25.72,
+            "end": 25.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0012-w0006",
+            "text": "到",
+            "original_text": "到",
+            "start": 25.96,
+            "end": 26.16,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0012-w0007",
+            "text": "一",
+            "original_text": "一",
+            "start": 26.16,
+            "end": 26.32,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0012-w0008",
+            "text": "的",
+            "original_text": "的",
+            "start": 26.32,
+            "end": 26.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0012-w0009",
+            "text": "流",
+            "original_text": "流",
+            "start": 26.56,
+            "end": 26.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0012-w0010",
+            "text": "程",
+            "original_text": "程",
+            "start": 26.76,
+            "end": 27.08,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 27.08,
+        "end": 28.7,
+        "start_ms": 27080,
+        "end_ms": 28700,
+        "text": "今天我给你拆清楚",
+        "tokens": [
+          {
+            "id": "u0013-w0001",
+            "text": "今",
+            "original_text": "今",
+            "start": 27.08,
+            "end": 27.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0013-w0002",
+            "text": "天",
+            "original_text": "天",
+            "start": 27.28,
+            "end": 27.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0013-w0003",
+            "text": "我",
+            "original_text": "我",
+            "start": 27.4,
+            "end": 27.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0013-w0004",
+            "text": "给",
+            "original_text": "给",
+            "start": 27.52,
+            "end": 27.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0013-w0005",
+            "text": "你",
+            "original_text": "你",
+            "start": 27.6,
+            "end": 27.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0013-w0006",
+            "text": "拆",
+            "original_text": "拆",
+            "start": 27.76,
+            "end": 28.0,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0013-w0007",
+            "text": "清",
+            "original_text": "清",
+            "start": 28.0,
+            "end": 28.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0013-w0008",
+            "text": "楚",
+            "original_text": "楚",
+            "start": 28.2,
+            "end": 28.7,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 28.84,
+        "end": 30.96,
+        "start_ms": 28840,
+        "end_ms": 30960,
+        "text": "第一步先定位你是谁",
+        "tokens": [
+          {
+            "id": "u0014-w0001",
+            "text": "第",
+            "original_text": "第",
+            "start": 28.84,
+            "end": 28.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0014-w0002",
+            "text": "一",
+            "original_text": "一",
+            "start": 28.92,
+            "end": 28.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0014-w0003",
+            "text": "步",
+            "original_text": "步",
+            "start": 28.96,
+            "end": 29.16,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0014-w0004",
+            "text": "先",
+            "original_text": "先",
+            "start": 29.36,
+            "end": 29.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0014-w0005",
+            "text": "定",
+            "original_text": "定",
+            "start": 29.6,
+            "end": 29.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0014-w0006",
+            "text": "位",
+            "original_text": "位",
+            "start": 29.8,
+            "end": 30.0,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0014-w0007",
+            "text": "你",
+            "original_text": "你",
+            "start": 30.24,
+            "end": 30.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0014-w0008",
+            "text": "是",
+            "original_text": "是",
+            "start": 30.48,
+            "end": 30.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0014-w0009",
+            "text": "谁",
+            "original_text": "谁",
+            "start": 30.68,
+            "end": 30.96,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 30.96,
+        "end": 31.96,
+        "start_ms": 30960,
+        "end_ms": 31960,
+        "text": "你的客户是谁",
+        "tokens": [
+          {
+            "id": "u0015-w0001",
+            "text": "你",
+            "original_text": "你",
+            "start": 30.96,
+            "end": 31.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0015-w0002",
+            "text": "的",
+            "original_text": "的",
+            "start": 31.12,
+            "end": 31.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0015-w0003",
+            "text": "客",
+            "original_text": "客",
+            "start": 31.2,
+            "end": 31.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0015-w0004",
+            "text": "户",
+            "original_text": "户",
+            "start": 31.4,
+            "end": 31.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0015-w0005",
+            "text": "是",
+            "original_text": "是",
+            "start": 31.52,
+            "end": 31.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0015-w0006",
+            "text": "谁",
+            "original_text": "谁",
+            "start": 31.68,
+            "end": 31.96,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 31.96,
+        "end": 33.64,
+        "start_ms": 31960,
+        "end_ms": 33640,
+        "text": "你解决了什么问题",
+        "tokens": [
+          {
+            "id": "u0016-w0001",
+            "text": "你",
+            "original_text": "你",
+            "start": 31.96,
+            "end": 32.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0016-w0002",
+            "text": "解",
+            "original_text": "解",
+            "start": 32.28,
+            "end": 32.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0016-w0003",
+            "text": "决",
+            "original_text": "决",
+            "start": 32.52,
+            "end": 32.72,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0016-w0004",
+            "text": "了",
+            "original_text": "了",
+            "start": 32.72,
+            "end": 32.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0016-w0005",
+            "text": "什",
+            "original_text": "什",
+            "start": 32.76,
+            "end": 32.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0016-w0006",
+            "text": "么",
+            "original_text": "么",
+            "start": 32.88,
+            "end": 32.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0016-w0007",
+            "text": "问",
+            "original_text": "问",
+            "start": 32.96,
+            "end": 33.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0016-w0008",
+            "text": "题",
+            "original_text": "题",
+            "start": 33.12,
+            "end": 33.64,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 33.64,
+        "end": 34.44,
+        "start_ms": 33640,
+        "end_ms": 34440,
+        "text": "定位歪了",
+        "tokens": [
+          {
+            "id": "u0017-w0001",
+            "text": "定",
+            "original_text": "定",
+            "start": 33.64,
+            "end": 33.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0017-w0002",
+            "text": "位",
+            "original_text": "位",
+            "start": 33.84,
+            "end": 34.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0017-w0003",
+            "text": "歪",
+            "original_text": "歪",
+            "start": 34.04,
+            "end": 34.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0017-w0004",
+            "text": "了",
+            "original_text": "了",
+            "start": 34.2,
+            "end": 34.44,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 34.44,
+        "end": 36.36,
+        "start_ms": 34440,
+        "end_ms": 36360,
+        "text": "后面全都是无用功",
+        "tokens": [
+          {
+            "id": "u0018-w0001",
+            "text": "后",
+            "original_text": "后",
+            "start": 34.44,
+            "end": 34.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0018-w0002",
+            "text": "面",
+            "original_text": "面",
+            "start": 34.68,
+            "end": 34.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0018-w0003",
+            "text": "全",
+            "original_text": "全",
+            "start": 35.12,
+            "end": 35.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0018-w0004",
+            "text": "都",
+            "original_text": "都",
+            "start": 35.36,
+            "end": 35.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0018-w0005",
+            "text": "是",
+            "original_text": "是",
+            "start": 35.48,
+            "end": 35.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0018-w0006",
+            "text": "无",
+            "original_text": "无",
+            "start": 35.6,
+            "end": 35.72,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0018-w0007",
+            "text": "用",
+            "original_text": "用",
+            "start": 35.72,
+            "end": 35.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0018-w0008",
+            "text": "功",
+            "original_text": "功",
+            "start": 35.84,
+            "end": 36.36,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 36.36,
+        "end": 38.88,
+        "start_ms": 36360,
+        "end_ms": 38880,
+        "text": "第二步搭建你的ai知识库",
+        "tokens": [
+          {
+            "id": "u0019-w0001",
+            "text": "第",
+            "original_text": "第",
+            "start": 36.36,
+            "end": 36.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0019-w0002",
+            "text": "二",
+            "original_text": "二",
+            "start": 36.52,
+            "end": 36.64,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0019-w0003",
+            "text": "步",
+            "original_text": "步",
+            "start": 36.64,
+            "end": 36.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0019-w0004",
+            "text": "搭",
+            "original_text": "搭",
+            "start": 37.04,
+            "end": 37.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0019-w0005",
+            "text": "建",
+            "original_text": "建",
+            "start": 37.28,
+            "end": 37.44,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0019-w0006",
+            "text": "你",
+            "original_text": "你",
+            "start": 37.44,
+            "end": 37.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0019-w0007",
+            "text": "的",
+            "original_text": "的",
+            "start": 37.56,
+            "end": 37.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0019-w0008",
+            "text": "ai",
+            "original_text": "ai",
+            "start": 37.76,
+            "end": 38.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0019-w0009",
+            "text": "知",
+            "original_text": "知",
+            "start": 38.08,
+            "end": 38.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0019-w0010",
+            "text": "识",
+            "original_text": "识",
+            "start": 38.24,
+            "end": 38.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0019-w0011",
+            "text": "库",
+            "original_text": "库",
+            "start": 38.4,
+            "end": 38.88,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 38.88,
+        "end": 41.22,
+        "start_ms": 38880,
+        "end_ms": 41220,
+        "text": "把你所有的产品案例",
+        "tokens": [
+          {
+            "id": "u0020-w0001",
+            "text": "把",
+            "original_text": "把",
+            "start": 38.88,
+            "end": 39.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0020-w0002",
+            "text": "你",
+            "original_text": "你",
+            "start": 39.08,
+            "end": 39.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0020-w0003",
+            "text": "所",
+            "original_text": "所",
+            "start": 39.32,
+            "end": 39.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0020-w0004",
+            "text": "有",
+            "original_text": "有",
+            "start": 39.52,
+            "end": 39.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0020-w0005",
+            "text": "的",
+            "original_text": "的",
+            "start": 39.6,
+            "end": 39.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0020-w0006",
+            "text": "产",
+            "original_text": "产",
+            "start": 39.8,
+            "end": 40.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0020-w0007",
+            "text": "品",
+            "original_text": "品",
+            "start": 40.04,
+            "end": 40.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0020-w0008",
+            "text": "案",
+            "original_text": "案",
+            "start": 40.44,
+            "end": 40.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0020-w0009",
+            "text": "例",
+            "original_text": "例",
+            "start": 40.68,
+            "end": 41.22,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 42.36,
+        "end": 44.76,
+        "start_ms": 42360,
+        "end_ms": 44760,
+        "text": "客户信息全部都喂给ai",
+        "tokens": [
+          {
+            "id": "u0021-w0001",
+            "text": "客",
+            "original_text": "客",
+            "start": 42.36,
+            "end": 42.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0021-w0002",
+            "text": "户",
+            "original_text": "户",
+            "start": 42.56,
+            "end": 42.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0021-w0003",
+            "text": "信",
+            "original_text": "信",
+            "start": 42.6,
+            "end": 42.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0021-w0004",
+            "text": "息",
+            "original_text": "息",
+            "start": 42.8,
+            "end": 42.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0021-w0005",
+            "text": "全",
+            "original_text": "全",
+            "start": 43.04,
+            "end": 43.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0021-w0006",
+            "text": "部",
+            "original_text": "部",
+            "start": 43.36,
+            "end": 43.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0021-w0007",
+            "text": "都",
+            "original_text": "都",
+            "start": 43.52,
+            "end": 43.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0021-w0008",
+            "text": "喂",
+            "original_text": "喂",
+            "start": 43.72,
+            "end": 43.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0021-w0009",
+            "text": "给",
+            "original_text": "给",
+            "start": 43.92,
+            "end": 44.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0021-w0010",
+            "text": "ai",
+            "original_text": "ai",
+            "start": 44.12,
+            "end": 44.76,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 44.76,
+        "end": 47.5,
+        "start_ms": 44760,
+        "end_ms": 47500,
+        "text": "让ai彻底的搞懂你的业务",
+        "tokens": [
+          {
+            "id": "u0022-w0001",
+            "text": "让",
+            "original_text": "让",
+            "start": 44.76,
+            "end": 44.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0022-w0002",
+            "text": "ai",
+            "original_text": "ai",
+            "start": 45.08,
+            "end": 45.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0022-w0003",
+            "text": "彻",
+            "original_text": "彻",
+            "start": 45.52,
+            "end": 45.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0022-w0004",
+            "text": "底",
+            "original_text": "底",
+            "start": 45.84,
+            "end": 46.0,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0022-w0005",
+            "text": "的",
+            "original_text": "的",
+            "start": 46.0,
+            "end": 46.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0022-w0006",
+            "text": "搞",
+            "original_text": "搞",
+            "start": 46.24,
+            "end": 46.44,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0022-w0007",
+            "text": "懂",
+            "original_text": "懂",
+            "start": 46.48,
+            "end": 46.64,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0022-w0008",
+            "text": "你",
+            "original_text": "你",
+            "start": 46.64,
+            "end": 46.72,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0022-w0009",
+            "text": "的",
+            "original_text": "的",
+            "start": 46.72,
+            "end": 46.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0022-w0010",
+            "text": "业",
+            "original_text": "业",
+            "start": 46.84,
+            "end": 47.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0022-w0011",
+            "text": "务",
+            "original_text": "务",
+            "start": 47.04,
+            "end": 47.5,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 47.52,
+        "end": 48.28,
+        "start_ms": 47520,
+        "end_ms": 48280,
+        "text": "第三步",
+        "tokens": [
+          {
+            "id": "u0023-w0001",
+            "text": "第",
+            "original_text": "第",
+            "start": 47.52,
+            "end": 47.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0023-w0002",
+            "text": "三",
+            "original_text": "三",
+            "start": 47.68,
+            "end": 47.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0023-w0003",
+            "text": "步",
+            "original_text": "步",
+            "start": 47.88,
+            "end": 48.28,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 48.28,
+        "end": 51.54,
+        "start_ms": 48280,
+        "end_ms": 51540,
+        "text": "用ai批量产出精准的获客视频",
+        "tokens": [
+          {
+            "id": "u0024-w0001",
+            "text": "用",
+            "original_text": "用",
+            "start": 48.28,
+            "end": 48.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0002",
+            "text": "ai",
+            "original_text": "ai",
+            "start": 48.6,
+            "end": 48.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0003",
+            "text": "批",
+            "original_text": "批",
+            "start": 48.96,
+            "end": 49.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0004",
+            "text": "量",
+            "original_text": "量",
+            "start": 49.24,
+            "end": 49.44,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0005",
+            "text": "产",
+            "original_text": "产",
+            "start": 49.48,
+            "end": 49.72,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0006",
+            "text": "出",
+            "original_text": "出",
+            "start": 49.76,
+            "end": 49.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0007",
+            "text": "精",
+            "original_text": "精",
+            "start": 50.04,
+            "end": 50.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0008",
+            "text": "准",
+            "original_text": "准",
+            "start": 50.32,
+            "end": 50.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0009",
+            "text": "的",
+            "original_text": "的",
+            "start": 50.48,
+            "end": 50.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0010",
+            "text": "获",
+            "original_text": "获",
+            "start": 50.68,
+            "end": 50.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0011",
+            "text": "客",
+            "original_text": "客",
+            "start": 50.84,
+            "end": 50.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0012",
+            "text": "视",
+            "original_text": "视",
+            "start": 50.92,
+            "end": 51.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0024-w0013",
+            "text": "频",
+            "original_text": "频",
+            "start": 51.04,
+            "end": 51.54,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 51.6,
+        "end": 53.16,
+        "start_ms": 51600,
+        "end_ms": 53160,
+        "text": "从策划选题",
+        "tokens": [
+          {
+            "id": "u0025-w0001",
+            "text": "从",
+            "original_text": "从",
+            "start": 51.6,
+            "end": 51.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0025-w0002",
+            "text": "策",
+            "original_text": "策",
+            "start": 51.88,
+            "end": 52.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0025-w0003",
+            "text": "划",
+            "original_text": "划",
+            "start": 52.16,
+            "end": 52.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0025-w0004",
+            "text": "选",
+            "original_text": "选",
+            "start": 52.52,
+            "end": 52.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0025-w0005",
+            "text": "题",
+            "original_text": "题",
+            "start": 52.8,
+            "end": 53.16,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 53.16,
+        "end": 54.08,
+        "start_ms": 53160,
+        "end_ms": 54080,
+        "text": "到写文案",
+        "tokens": [
+          {
+            "id": "u0026-w0001",
+            "text": "到",
+            "original_text": "到",
+            "start": 53.16,
+            "end": 53.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0026-w0002",
+            "text": "写",
+            "original_text": "写",
+            "start": 53.48,
+            "end": 53.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0026-w0003",
+            "text": "文",
+            "original_text": "文",
+            "start": 53.68,
+            "end": 53.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0026-w0004",
+            "text": "案",
+            "original_text": "案",
+            "start": 53.8,
+            "end": 54.08,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 54.08,
+        "end": 56.18,
+        "start_ms": 54080,
+        "end_ms": 56180,
+        "text": "再到数字分身的出镜",
+        "tokens": [
+          {
+            "id": "u0027-w0001",
+            "text": "再",
+            "original_text": "再",
+            "start": 54.08,
+            "end": 54.32,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0027-w0002",
+            "text": "到",
+            "original_text": "到",
+            "start": 54.32,
+            "end": 54.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0027-w0003",
+            "text": "数",
+            "original_text": "数",
+            "start": 54.56,
+            "end": 54.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0027-w0004",
+            "text": "字",
+            "original_text": "字",
+            "start": 54.8,
+            "end": 55.0,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0027-w0005",
+            "text": "分",
+            "original_text": "分",
+            "start": 55.0,
+            "end": 55.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0027-w0006",
+            "text": "身",
+            "original_text": "身",
+            "start": 55.2,
+            "end": 55.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0027-w0007",
+            "text": "的",
+            "original_text": "的",
+            "start": 55.36,
+            "end": 55.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0027-w0008",
+            "text": "出",
+            "original_text": "出",
+            "start": 55.52,
+            "end": 55.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0027-w0009",
+            "text": "镜",
+            "original_text": "镜",
+            "start": 55.68,
+            "end": 56.18,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 56.36,
+        "end": 58.26,
+        "start_ms": 56360,
+        "end_ms": 58260,
+        "text": "ai全列入搞定",
+        "tokens": [
+          {
+            "id": "u0028-w0001",
+            "text": "ai",
+            "original_text": "ai",
+            "start": 56.36,
+            "end": 56.72,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0028-w0002",
+            "text": "全",
+            "original_text": "全",
+            "start": 56.84,
+            "end": 57.16,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0028-w0003",
+            "text": "列",
+            "original_text": "列",
+            "start": 57.2,
+            "end": 57.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0028-w0004",
+            "text": "入",
+            "original_text": "入",
+            "start": 57.36,
+            "end": 57.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0028-w0005",
+            "text": "搞",
+            "original_text": "搞",
+            "start": 57.6,
+            "end": 57.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0028-w0006",
+            "text": "定",
+            "original_text": "定",
+            "start": 57.76,
+            "end": 58.26,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 58.48,
+        "end": 59.82,
+        "start_ms": 58480,
+        "end_ms": 59820,
+        "text": "你只需要审核",
+        "tokens": [
+          {
+            "id": "u0029-w0001",
+            "text": "你",
+            "original_text": "你",
+            "start": 58.48,
+            "end": 58.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0029-w0002",
+            "text": "只",
+            "original_text": "只",
+            "start": 58.56,
+            "end": 58.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0029-w0003",
+            "text": "需",
+            "original_text": "需",
+            "start": 58.76,
+            "end": 58.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0029-w0004",
+            "text": "要",
+            "original_text": "要",
+            "start": 58.92,
+            "end": 59.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0029-w0005",
+            "text": "审",
+            "original_text": "审",
+            "start": 59.04,
+            "end": 59.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0029-w0006",
+            "text": "核",
+            "original_text": "核",
+            "start": 59.24,
+            "end": 59.82,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 59.84,
+        "end": 60.6,
+        "start_ms": 59840,
+        "end_ms": 60600,
+        "text": "第四步",
+        "tokens": [
+          {
+            "id": "u0030-w0001",
+            "text": "第",
+            "original_text": "第",
+            "start": 59.84,
+            "end": 60.0,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0030-w0002",
+            "text": "四",
+            "original_text": "四",
+            "start": 60.0,
+            "end": 60.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0030-w0003",
+            "text": "步",
+            "original_text": "步",
+            "start": 60.2,
+            "end": 60.6,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 60.6,
+        "end": 63.2,
+        "start_ms": 60600,
+        "end_ms": 63200,
+        "text": "找到一条验证过的爆款视频",
+        "tokens": [
+          {
+            "id": "u0031-w0001",
+            "text": "找",
+            "original_text": "找",
+            "start": 60.6,
+            "end": 60.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0031-w0002",
+            "text": "到",
+            "original_text": "到",
+            "start": 60.84,
+            "end": 60.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0031-w0003",
+            "text": "一",
+            "original_text": "一",
+            "start": 60.96,
+            "end": 61.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0031-w0004",
+            "text": "条",
+            "original_text": "条",
+            "start": 61.08,
+            "end": 61.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0031-w0005",
+            "text": "验",
+            "original_text": "验",
+            "start": 61.36,
+            "end": 61.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0031-w0006",
+            "text": "证",
+            "original_text": "证",
+            "start": 61.64,
+            "end": 61.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0031-w0007",
+            "text": "过",
+            "original_text": "过",
+            "start": 61.88,
+            "end": 62.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0031-w0008",
+            "text": "的",
+            "original_text": "的",
+            "start": 62.08,
+            "end": 62.32,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0031-w0009",
+            "text": "爆",
+            "original_text": "爆",
+            "start": 62.32,
+            "end": 62.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0031-w0010",
+            "text": "款",
+            "original_text": "款",
+            "start": 62.56,
+            "end": 62.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0031-w0011",
+            "text": "视",
+            "original_text": "视",
+            "start": 62.76,
+            "end": 62.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0031-w0012",
+            "text": "频",
+            "original_text": "频",
+            "start": 62.92,
+            "end": 63.2,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 63.2,
+        "end": 64.74,
+        "start_ms": 63200,
+        "end_ms": 64740,
+        "text": "用ai做矩阵",
+        "tokens": [
+          {
+            "id": "u0032-w0001",
+            "text": "用",
+            "original_text": "用",
+            "start": 63.2,
+            "end": 63.44,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0032-w0002",
+            "text": "ai",
+            "original_text": "ai",
+            "start": 63.48,
+            "end": 63.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0032-w0003",
+            "text": "做",
+            "original_text": "做",
+            "start": 63.96,
+            "end": 64.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0032-w0004",
+            "text": "矩",
+            "original_text": "矩",
+            "start": 64.12,
+            "end": 64.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0032-w0005",
+            "text": "阵",
+            "original_text": "阵",
+            "start": 64.28,
+            "end": 64.74,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 64.84,
+        "end": 66.62,
+        "start_ms": 64840,
+        "end_ms": 66620,
+        "text": "一键放大几十倍",
+        "tokens": [
+          {
+            "id": "u0033-w0001",
+            "text": "一",
+            "original_text": "一",
+            "start": 64.84,
+            "end": 65.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0033-w0002",
+            "text": "键",
+            "original_text": "键",
+            "start": 65.12,
+            "end": 65.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0033-w0003",
+            "text": "放",
+            "original_text": "放",
+            "start": 65.32,
+            "end": 65.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0033-w0004",
+            "text": "大",
+            "original_text": "大",
+            "start": 65.56,
+            "end": 65.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0033-w0005",
+            "text": "几",
+            "original_text": "几",
+            "start": 65.76,
+            "end": 65.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0033-w0006",
+            "text": "十",
+            "original_text": "十",
+            "start": 65.92,
+            "end": 66.16,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0033-w0007",
+            "text": "倍",
+            "original_text": "倍",
+            "start": 66.16,
+            "end": 66.62,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 66.76,
+        "end": 68.8,
+        "start_ms": 66760,
+        "end_ms": 68800,
+        "text": "第五步最关键的一步",
+        "tokens": [
+          {
+            "id": "u0034-w0001",
+            "text": "第",
+            "original_text": "第",
+            "start": 66.76,
+            "end": 66.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0034-w0002",
+            "text": "五",
+            "original_text": "五",
+            "start": 66.96,
+            "end": 67.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0034-w0003",
+            "text": "步",
+            "original_text": "步",
+            "start": 67.08,
+            "end": 67.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0034-w0004",
+            "text": "最",
+            "original_text": "最",
+            "start": 67.48,
+            "end": 67.72,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0034-w0005",
+            "text": "关",
+            "original_text": "关",
+            "start": 67.72,
+            "end": 67.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0034-w0006",
+            "text": "键",
+            "original_text": "键",
+            "start": 68.0,
+            "end": 68.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0034-w0007",
+            "text": "的",
+            "original_text": "的",
+            "start": 68.12,
+            "end": 68.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0034-w0008",
+            "text": "一",
+            "original_text": "一",
+            "start": 68.24,
+            "end": 68.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0034-w0009",
+            "text": "步",
+            "original_text": "步",
+            "start": 68.36,
+            "end": 68.8,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 68.8,
+        "end": 70.96,
+        "start_ms": 68800,
+        "end_ms": 70960,
+        "text": "发布的时候点左下角",
+        "tokens": [
+          {
+            "id": "u0035-w0001",
+            "text": "发",
+            "original_text": "发",
+            "start": 68.8,
+            "end": 69.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0035-w0002",
+            "text": "布",
+            "original_text": "布",
+            "start": 69.08,
+            "end": 69.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0035-w0003",
+            "text": "的",
+            "original_text": "的",
+            "start": 69.2,
+            "end": 69.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0035-w0004",
+            "text": "时",
+            "original_text": "时",
+            "start": 69.36,
+            "end": 69.44,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0035-w0005",
+            "text": "候",
+            "original_text": "候",
+            "start": 69.44,
+            "end": 69.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0035-w0006",
+            "text": "点",
+            "original_text": "点",
+            "start": 69.68,
+            "end": 69.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0035-w0007",
+            "text": "左",
+            "original_text": "左",
+            "start": 70.04,
+            "end": 70.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0035-w0008",
+            "text": "下",
+            "original_text": "下",
+            "start": 70.32,
+            "end": 70.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0035-w0009",
+            "text": "角",
+            "original_text": "角",
+            "start": 70.6,
+            "end": 70.96,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 70.96,
+        "end": 72.5,
+        "start_ms": 70960,
+        "end_ms": 72500,
+        "text": "挂载起微",
+        "tokens": [
+          {
+            "id": "u0036-w0001",
+            "text": "挂",
+            "original_text": "挂",
+            "start": 70.96,
+            "end": 71.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0036-w0002",
+            "text": "载",
+            "original_text": "载",
+            "start": 71.28,
+            "end": 71.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0036-w0003",
+            "text": "起",
+            "original_text": "起",
+            "start": 71.64,
+            "end": 71.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0036-w0004",
+            "text": "微",
+            "original_text": "微",
+            "start": 72.0,
+            "end": 72.5,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 74.0,
+        "end": 76.4,
+        "start_ms": 74000,
+        "end_ms": 76400,
+        "text": "刷到客户刷到感兴趣",
+        "tokens": [
+          {
+            "id": "u0037-w0001",
+            "text": "刷",
+            "original_text": "刷",
+            "start": 74.0,
+            "end": 74.16,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0037-w0002",
+            "text": "到",
+            "original_text": "到",
+            "start": 74.16,
+            "end": 74.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0037-w0003",
+            "text": "客",
+            "original_text": "客",
+            "start": 75.0,
+            "end": 75.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0037-w0004",
+            "text": "户",
+            "original_text": "户",
+            "start": 75.2,
+            "end": 75.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0037-w0005",
+            "text": "刷",
+            "original_text": "刷",
+            "start": 75.4,
+            "end": 75.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0037-w0006",
+            "text": "到",
+            "original_text": "到",
+            "start": 75.52,
+            "end": 75.72,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0037-w0007",
+            "text": "感",
+            "original_text": "感",
+            "start": 75.72,
+            "end": 75.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0037-w0008",
+            "text": "兴",
+            "original_text": "兴",
+            "start": 75.96,
+            "end": 76.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0037-w0009",
+            "text": "趣",
+            "original_text": "趣",
+            "start": 76.12,
+            "end": 76.4,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 76.4,
+        "end": 78.34,
+        "start_ms": 76400,
+        "end_ms": 78340,
+        "text": "点一下三秒加吼",
+        "tokens": [
+          {
+            "id": "u0038-w0001",
+            "text": "点",
+            "original_text": "点",
+            "start": 76.4,
+            "end": 76.64,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0038-w0002",
+            "text": "一",
+            "original_text": "一",
+            "start": 76.64,
+            "end": 76.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0038-w0003",
+            "text": "下",
+            "original_text": "下",
+            "start": 76.76,
+            "end": 76.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0038-w0004",
+            "text": "三",
+            "original_text": "三",
+            "start": 77.04,
+            "end": 77.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0038-w0005",
+            "text": "秒",
+            "original_text": "秒",
+            "start": 77.36,
+            "end": 77.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0038-w0006",
+            "text": "加",
+            "original_text": "加",
+            "start": 77.64,
+            "end": 77.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0038-w0007",
+            "text": "吼",
+            "original_text": "吼",
+            "start": 77.84,
+            "end": 78.34,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 78.6,
+        "end": 80.02,
+        "start_ms": 78600,
+        "end_ms": 80020,
+        "text": "三秒加好友",
+        "tokens": [
+          {
+            "id": "u0039-w0001",
+            "text": "三",
+            "original_text": "三",
+            "start": 78.6,
+            "end": 78.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0039-w0002",
+            "text": "秒",
+            "original_text": "秒",
+            "start": 78.92,
+            "end": 79.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0039-w0003",
+            "text": "加",
+            "original_text": "加",
+            "start": 79.16,
+            "end": 79.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0039-w0004",
+            "text": "好",
+            "original_text": "好",
+            "start": 79.36,
+            "end": 79.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0039-w0005",
+            "text": "友",
+            "original_text": "友",
+            "start": 79.52,
+            "end": 80.02,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 80.24,
+        "end": 81.82,
+        "start_ms": 80240,
+        "end_ms": 81820,
+        "text": "完全没有流失",
+        "tokens": [
+          {
+            "id": "u0040-w0001",
+            "text": "完",
+            "original_text": "完",
+            "start": 80.24,
+            "end": 80.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0040-w0002",
+            "text": "全",
+            "original_text": "全",
+            "start": 80.48,
+            "end": 80.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0040-w0003",
+            "text": "没",
+            "original_text": "没",
+            "start": 80.76,
+            "end": 80.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0040-w0004",
+            "text": "有",
+            "original_text": "有",
+            "start": 80.88,
+            "end": 81.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0040-w0005",
+            "text": "流",
+            "original_text": "流",
+            "start": 81.04,
+            "end": 81.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0040-w0006",
+            "text": "失",
+            "original_text": "失",
+            "start": 81.24,
+            "end": 81.82,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 81.84,
+        "end": 84.24,
+        "start_ms": 81840,
+        "end_ms": 84240,
+        "text": "你看我这条视频的左下角",
+        "tokens": [
+          {
+            "id": "u0041-w0001",
+            "text": "你",
+            "original_text": "你",
+            "start": 81.84,
+            "end": 82.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0041-w0002",
+            "text": "看",
+            "original_text": "看",
+            "start": 82.04,
+            "end": 82.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0041-w0003",
+            "text": "我",
+            "original_text": "我",
+            "start": 82.2,
+            "end": 82.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0041-w0004",
+            "text": "这",
+            "original_text": "这",
+            "start": 82.4,
+            "end": 82.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0041-w0005",
+            "text": "条",
+            "original_text": "条",
+            "start": 82.6,
+            "end": 82.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0041-w0006",
+            "text": "视",
+            "original_text": "视",
+            "start": 82.96,
+            "end": 83.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0041-w0007",
+            "text": "频",
+            "original_text": "频",
+            "start": 83.12,
+            "end": 83.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0041-w0008",
+            "text": "的",
+            "original_text": "的",
+            "start": 83.28,
+            "end": 83.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0041-w0009",
+            "text": "左",
+            "original_text": "左",
+            "start": 83.48,
+            "end": 83.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0041-w0010",
+            "text": "下",
+            "original_text": "下",
+            "start": 83.68,
+            "end": 83.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0041-w0011",
+            "text": "角",
+            "original_text": "角",
+            "start": 83.8,
+            "end": 84.24,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 84.24,
+        "end": 86.02,
+        "start_ms": 84240,
+        "end_ms": 86020,
+        "text": "是不是有一个企业",
+        "tokens": [
+          {
+            "id": "u0042-w0001",
+            "text": "是",
+            "original_text": "是",
+            "start": 84.24,
+            "end": 84.44,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0042-w0002",
+            "text": "不",
+            "original_text": "不",
+            "start": 84.44,
+            "end": 84.52,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0042-w0003",
+            "text": "是",
+            "original_text": "是",
+            "start": 84.52,
+            "end": 84.64,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0042-w0004",
+            "text": "有",
+            "original_text": "有",
+            "start": 84.64,
+            "end": 84.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0042-w0005",
+            "text": "一",
+            "original_text": "一",
+            "start": 84.8,
+            "end": 84.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0042-w0006",
+            "text": "个",
+            "original_text": "个",
+            "start": 84.88,
+            "end": 85.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0042-w0007",
+            "text": "企",
+            "original_text": "企",
+            "start": 85.16,
+            "end": 85.44,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0042-w0008",
+            "text": "业",
+            "original_text": "业",
+            "start": 85.48,
+            "end": 86.02,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 86.76,
+        "end": 89.1,
+        "start_ms": 86760,
+        "end_ms": 89100,
+        "text": "是不是也有一个企业微信的按钮",
+        "tokens": [
+          {
+            "id": "u0043-w0001",
+            "text": "是",
+            "original_text": "是",
+            "start": 86.76,
+            "end": 86.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0002",
+            "text": "不",
+            "original_text": "不",
+            "start": 86.92,
+            "end": 87.0,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0003",
+            "text": "是",
+            "original_text": "是",
+            "start": 87.0,
+            "end": 87.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0004",
+            "text": "也",
+            "original_text": "也",
+            "start": 87.12,
+            "end": 87.28,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0005",
+            "text": "有",
+            "original_text": "有",
+            "start": 87.28,
+            "end": 87.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0006",
+            "text": "一",
+            "original_text": "一",
+            "start": 87.36,
+            "end": 87.44,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0007",
+            "text": "个",
+            "original_text": "个",
+            "start": 87.44,
+            "end": 87.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0008",
+            "text": "企",
+            "original_text": "企",
+            "start": 87.64,
+            "end": 87.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0009",
+            "text": "业",
+            "original_text": "业",
+            "start": 87.88,
+            "end": 88.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0010",
+            "text": "微",
+            "original_text": "微",
+            "start": 88.04,
+            "end": 88.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0011",
+            "text": "信",
+            "original_text": "信",
+            "start": 88.24,
+            "end": 88.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0012",
+            "text": "的",
+            "original_text": "的",
+            "start": 88.36,
+            "end": 88.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0013",
+            "text": "按",
+            "original_text": "按",
+            "start": 88.48,
+            "end": 88.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0043-w0014",
+            "text": "钮",
+            "original_text": "钮",
+            "start": 88.6,
+            "end": 89.1,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 89.16,
+        "end": 90.54,
+        "start_ms": 89160,
+        "end_ms": 90540,
+        "text": "你点一下试试看",
+        "tokens": [
+          {
+            "id": "u0044-w0001",
+            "text": "你",
+            "original_text": "你",
+            "start": 89.16,
+            "end": 89.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0044-w0002",
+            "text": "点",
+            "original_text": "点",
+            "start": 89.4,
+            "end": 89.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0044-w0003",
+            "text": "一",
+            "original_text": "一",
+            "start": 89.6,
+            "end": 89.64,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0044-w0004",
+            "text": "下",
+            "original_text": "下",
+            "start": 89.64,
+            "end": 89.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0044-w0005",
+            "text": "试",
+            "original_text": "试",
+            "start": 89.8,
+            "end": 89.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0044-w0006",
+            "text": "试",
+            "original_text": "试",
+            "start": 89.84,
+            "end": 90.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0044-w0007",
+            "text": "看",
+            "original_text": "看",
+            "start": 90.04,
+            "end": 90.54,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 92.52,
+        "end": 93.76,
+        "start_ms": 92520,
+        "end_ms": 93760,
+        "text": "你点一下试试看",
+        "tokens": [
+          {
+            "id": "u0045-w0001",
+            "text": "你",
+            "original_text": "你",
+            "start": 92.52,
+            "end": 92.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0045-w0002",
+            "text": "点",
+            "original_text": "点",
+            "start": 92.8,
+            "end": 92.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0045-w0003",
+            "text": "一",
+            "original_text": "一",
+            "start": 92.96,
+            "end": 93.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0045-w0004",
+            "text": "下",
+            "original_text": "下",
+            "start": 93.04,
+            "end": 93.16,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0045-w0005",
+            "text": "试",
+            "original_text": "试",
+            "start": 93.16,
+            "end": 93.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0045-w0006",
+            "text": "试",
+            "original_text": "试",
+            "start": 93.2,
+            "end": 93.4,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0045-w0007",
+            "text": "看",
+            "original_text": "看",
+            "start": 93.4,
+            "end": 93.76,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 93.76,
+        "end": 95.56,
+        "start_ms": 93760,
+        "end_ms": 95560,
+        "text": "是不是直接就跳转了",
+        "tokens": [
+          {
+            "id": "u0046-w0001",
+            "text": "是",
+            "original_text": "是",
+            "start": 93.76,
+            "end": 93.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0046-w0002",
+            "text": "不",
+            "original_text": "不",
+            "start": 93.96,
+            "end": 94.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0046-w0003",
+            "text": "是",
+            "original_text": "是",
+            "start": 94.08,
+            "end": 94.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0046-w0004",
+            "text": "直",
+            "original_text": "直",
+            "start": 94.24,
+            "end": 94.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0046-w0005",
+            "text": "接",
+            "original_text": "接",
+            "start": 94.48,
+            "end": 94.64,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0046-w0006",
+            "text": "就",
+            "original_text": "就",
+            "start": 94.64,
+            "end": 94.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0046-w0007",
+            "text": "跳",
+            "original_text": "跳",
+            "start": 94.76,
+            "end": 94.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0046-w0008",
+            "text": "转",
+            "original_text": "转",
+            "start": 94.96,
+            "end": 95.12,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0046-w0009",
+            "text": "了",
+            "original_text": "了",
+            "start": 95.12,
+            "end": 95.56,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 95.56,
+        "end": 96.48,
+        "start_ms": 95560,
+        "end_ms": 96480,
+        "text": "就这么简单",
+        "tokens": [
+          {
+            "id": "u0047-w0001",
+            "text": "就",
+            "original_text": "就",
+            "start": 95.56,
+            "end": 95.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0047-w0002",
+            "text": "这",
+            "original_text": "这",
+            "start": 95.76,
+            "end": 95.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0047-w0003",
+            "text": "么",
+            "original_text": "么",
+            "start": 95.84,
+            "end": 95.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0047-w0004",
+            "text": "简",
+            "original_text": "简",
+            "start": 95.96,
+            "end": 96.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0047-w0005",
+            "text": "单",
+            "original_text": "单",
+            "start": 96.08,
+            "end": 96.48,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 96.48,
+        "end": 98.74,
+        "start_ms": 96480,
+        "end_ms": 98740,
+        "text": "你的视频号是不是做不起来",
+        "tokens": [
+          {
+            "id": "u0048-w0001",
+            "text": "你",
+            "original_text": "你",
+            "start": 96.48,
+            "end": 96.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0048-w0002",
+            "text": "的",
+            "original_text": "的",
+            "start": 96.76,
+            "end": 96.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0048-w0003",
+            "text": "视",
+            "original_text": "视",
+            "start": 96.88,
+            "end": 97.0,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0048-w0004",
+            "text": "频",
+            "original_text": "频",
+            "start": 97.0,
+            "end": 97.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0048-w0005",
+            "text": "号",
+            "original_text": "号",
+            "start": 97.08,
+            "end": 97.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0048-w0006",
+            "text": "是",
+            "original_text": "是",
+            "start": 97.24,
+            "end": 97.36,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0048-w0007",
+            "text": "不",
+            "original_text": "不",
+            "start": 97.36,
+            "end": 97.44,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0048-w0008",
+            "text": "是",
+            "original_text": "是",
+            "start": 97.44,
+            "end": 97.64,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0048-w0009",
+            "text": "做",
+            "original_text": "做",
+            "start": 97.64,
+            "end": 97.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0048-w0010",
+            "text": "不",
+            "original_text": "不",
+            "start": 97.84,
+            "end": 98.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0048-w0011",
+            "text": "起",
+            "original_text": "起",
+            "start": 98.04,
+            "end": 98.24,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0048-w0012",
+            "text": "来",
+            "original_text": "来",
+            "start": 98.24,
+            "end": 98.74,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 99.44,
+        "end": 101.28,
+        "start_ms": 99440,
+        "end_ms": 101280,
+        "text": "你的视频号不是做不起来",
+        "tokens": [
+          {
+            "id": "u0049-w0001",
+            "text": "你",
+            "original_text": "你",
+            "start": 99.44,
+            "end": 99.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0049-w0002",
+            "text": "的",
+            "original_text": "的",
+            "start": 99.68,
+            "end": 99.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0049-w0003",
+            "text": "视",
+            "original_text": "视",
+            "start": 99.8,
+            "end": 99.92,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0049-w0004",
+            "text": "频",
+            "original_text": "频",
+            "start": 99.92,
+            "end": 100.04,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0049-w0005",
+            "text": "号",
+            "original_text": "号",
+            "start": 100.04,
+            "end": 100.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0049-w0006",
+            "text": "不",
+            "original_text": "不",
+            "start": 100.2,
+            "end": 100.44,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0049-w0007",
+            "text": "是",
+            "original_text": "是",
+            "start": 100.44,
+            "end": 100.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0049-w0008",
+            "text": "做",
+            "original_text": "做",
+            "start": 100.6,
+            "end": 100.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0049-w0009",
+            "text": "不",
+            "original_text": "不",
+            "start": 100.76,
+            "end": 100.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0049-w0010",
+            "text": "起",
+            "original_text": "起",
+            "start": 100.88,
+            "end": 100.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0049-w0011",
+            "text": "来",
+            "original_text": "来",
+            "start": 100.96,
+            "end": 101.28,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 101.28,
+        "end": 103.3,
+        "start_ms": 101280,
+        "end_ms": 103300,
+        "text": "是没有用这套方法",
+        "tokens": [
+          {
+            "id": "u0050-w0001",
+            "text": "是",
+            "original_text": "是",
+            "start": 101.28,
+            "end": 101.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0050-w0002",
+            "text": "没",
+            "original_text": "没",
+            "start": 101.6,
+            "end": 101.88,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0050-w0003",
+            "text": "有",
+            "original_text": "有",
+            "start": 101.88,
+            "end": 102.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0050-w0004",
+            "text": "用",
+            "original_text": "用",
+            "start": 102.08,
+            "end": 102.32,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0050-w0005",
+            "text": "这",
+            "original_text": "这",
+            "start": 102.32,
+            "end": 102.48,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0050-w0006",
+            "text": "套",
+            "original_text": "套",
+            "start": 102.48,
+            "end": 102.6,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0050-w0007",
+            "text": "方",
+            "original_text": "方",
+            "start": 102.6,
+            "end": 102.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0050-w0008",
+            "text": "法",
+            "original_text": "法",
+            "start": 102.8,
+            "end": 103.3,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 103.32,
+        "end": 104.48,
+        "start_ms": 103320,
+        "end_ms": 104480,
+        "text": "想知道怎么落地",
+        "tokens": [
+          {
+            "id": "u0051-w0001",
+            "text": "想",
+            "original_text": "想",
+            "start": 103.32,
+            "end": 103.56,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0051-w0002",
+            "text": "知",
+            "original_text": "知",
+            "start": 103.56,
+            "end": 103.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0051-w0003",
+            "text": "道",
+            "original_text": "道",
+            "start": 103.68,
+            "end": 103.76,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0051-w0004",
+            "text": "怎",
+            "original_text": "怎",
+            "start": 103.76,
+            "end": 103.84,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0051-w0005",
+            "text": "么",
+            "original_text": "么",
+            "start": 103.84,
+            "end": 103.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0051-w0006",
+            "text": "落",
+            "original_text": "落",
+            "start": 103.96,
+            "end": 104.08,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0051-w0007",
+            "text": "地",
+            "original_text": "地",
+            "start": 104.08,
+            "end": 104.48,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      },
+      {
+        "start": 104.48,
+        "end": 105.66,
+        "start_ms": 104480,
+        "end_ms": 105660,
+        "text": "左下角找我",
+        "tokens": [
+          {
+            "id": "u0052-w0001",
+            "text": "左",
+            "original_text": "左",
+            "start": 104.48,
+            "end": 104.68,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0052-w0002",
+            "text": "下",
+            "original_text": "下",
+            "start": 104.68,
+            "end": 104.8,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0052-w0003",
+            "text": "角",
+            "original_text": "角",
+            "start": 104.8,
+            "end": 104.96,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0052-w0004",
+            "text": "找",
+            "original_text": "找",
+            "start": 105.04,
+            "end": 105.2,
+            "timing_source": "asr",
+            "edited": false
+          },
+          {
+            "id": "u0052-w0005",
+            "text": "我",
+            "original_text": "我",
+            "start": 105.2,
+            "end": 105.66,
+            "timing_source": "asr",
+            "edited": false
+          }
+        ]
+      }
+    ],
+    "source_job": "20260715-203027-7e0e5b"
+  },
+  "correct_terms": [],
+  "protected_phrases": [
+    {
+      "token_ids": [
+        "u0001-w0001",
+        "u0001-w0002",
+        "u0001-w0003"
+      ],
+      "text": "别再说",
+      "confidence": 0.9,
+      "reason": "否定短语"
+    },
+    {
+      "token_ids": [
+        "u0001-w0004",
+        "u0001-w0005",
+        "u0001-w0006"
+      ],
+      "text": "视频号",
+      "confidence": 0.9,
+      "reason": "专有名词"
+    },
+    {
+      "token_ids": [
+        "u0001-w0007",
+        "u0001-w0008",
+        "u0001-w0009",
+        "u0001-w0010",
+        "u0001-w0011"
+      ],
+      "text": "做不起来了",
+      "confidence": 0.9,
+      "reason": "固定搭配"
+    },
+    {
+      "token_ids": [
+        "u0002-w0001",
+        "u0002-w0002",
+        "u0002-w0003",
+        "u0002-w0004",
+        "u0002-w0005",
+        "u0002-w0006"
+      ],
+      "text": "现在的视频号",
+      "confidence": 0.9,
+      "reason": "名词短语"
+    },
+    {
+      "token_ids": [
+        "u0003-w0001",
+        "u0003-w0002",
+        "u0003-w0003"
+      ],
+      "text": "是三个",
+      "confidence": 0.9,
+      "reason": "数量短语"
+    },
+    {
+      "token_ids": [
+        "u0003-w0004",
+        "u0003-w0005",
+        "u0003-w0006"
+      ],
+      "text": "平台里",
+      "confidence": 0.9,
+      "reason": "方位短语"
+    },
+    {
+      "token_ids": [
+        "u0003-w0007",
+        "u0003-w0008",
+        "u0003-w0009",
+        "u0003-w0010",
+        "u0003-w0011",
+        "u0003-w0012"
+      ],
+      "text": "最好做的一个",
+      "confidence": 0.9,
+      "reason": "固定搭配"
+    },
+    {
+      "token_ids": [
+        "u0004-w0001",
+        "u0004-w0002",
+        "u0004-w0003",
+        "u0004-w0004",
+        "u0004-w0005"
+      ],
+      "text": "大部分老板",
+      "confidence": 0.9,
+      "reason": "名词短语"
+    },
+    {
+      "token_ids": [
+        "u0004-w0006",
+        "u0004-w0007",
+        "u0004-w0008",
+        "u0004-w0009",
+        "u0004-w0010"
+      ],
+      "text": "在视频号上",
+      "confidence": 0.9,
+      "reason": "介词短语"
+    },
+    {
+      "token_ids": [
+        "u0004-w0011",
+        "u0004-w0012",
+        "u0004-w0013",
+        "u0004-w0014",
+        "u0004-w0015"
+      ],
+      "text": "没拿到结果",
+      "confidence": 0.9,
+      "reason": "动宾短语"
+    },
+    {
+      "token_ids": [
+        "u0005-w0001",
+        "u0005-w0002",
+        "u0005-w0003",
+        "u0005-w0004",
+        "u0005-w0005",
+        "u0005-w0006",
+        "u0005-w0007",
+        "u0005-w0008",
+        "u0005-w0009"
+      ],
+      "text": "其实都是用错了方法",
+      "confidence": 0.9,
+      "reason": "完整句"
+    },
+    {
+      "token_ids": [
+        "u0006-w0001",
+        "u0006-w0002",
+        "u0006-w0003",
+        "u0006-w0004"
+      ],
+      "text": "先别着急",
+      "confidence": 0.9,
+      "reason": "固定搭配"
+    },
+    {
+      "token_ids": [
+        "u0006-w0005",
+        "u0006-w0006",
+        "u0006-w0007",
+        "u0006-w0008"
+      ],
+      "text": "拍短视频",
+      "confidence": 0.9,
+      "reason": "动宾短语"
+    },
+    {
+      "token_ids": [
+        "u0007-w0001",
+        "u0007-w0002",
+        "u0007-w0003",
+        "u0007-w0004"
+      ],
+      "text": "先别着急",
+      "confidence": 0.9,
+      "reason": "固定搭配"
+    },
+    {
+      "token_ids": [
+        "u0007-w0005",
+        "u0007-w0006",
+        "u0007-w0007"
+      ],
+      "text": "开直播",
+      "confidence": 0.9,
+      "reason": "动宾短语"
+    },
+    {
+      "token_ids": [
+        "u0008-w0001",
+        "u0008-w0002",
+        "u0008-w0003"
+      ],
+      "text": "更别去",
+      "confidence": 0.9,
+      "reason": "否定短语"
+    },
+    {
+      "token_ids": [
+        "u0008-w0004",
+        "u0008-w0005",
+        "u0008-w0006",
+        "u0008-w0007",
+        "u0008-w0008",
+        "u0008-w0009",
+        "u0008-w0010"
+      ],
+      "text": "抄什么对不上号",
+      "confidence": 0.9,
+      "reason": "固定搭配"
+    },
+    {
+      "token_ids": [
+        "u0009-w0001",
+        "u0009-w0002",
+        "u0009-w0003",
+        "u0009-w0004"
+      ],
+      "text": "你这样干",
+      "confidence": 0.9,
+      "reason": "主谓短语"
+    },
+    {
+      "token_ids": [
+        "u0009-w0005",
+        "u0009-w0006",
+        "u0009-w0007"
+      ],
+      "text": "三个月",
+      "confidence": 0.9,
+      "reason": "时间短语"
+    },
+    {
+      "token_ids": [
+        "u0010-w0001",
+        "u0010-w0002",
+        "u0010-w0003",
+        "u0010-w0004",
+        "u0010-w0005",
+        "u0010-w0006",
+        "u0010-w0007"
+      ],
+      "text": "大概率也是白干",
+      "confidence": 0.9,
+      "reason": "完整句"
+    },
+    {
+      "token_ids": [
+        "u0011-w0001",
+        "u0011-w0002"
+      ],
+      "text": "我们",
+      "confidence": 1.0,
+      "reason": "代词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0011-w0004",
+        "u0011-w0005"
+      ],
+      "text": "企业",
+      "confidence": 1.0,
+      "reason": "名词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0011-w0008",
+        "u0011-w0009"
+      ],
+      "text": "获客",
+      "confidence": 1.0,
+      "reason": "固定搭配"
+    },
+    {
+      "token_ids": [
+        "u0011-w0010",
+        "u0011-w0011"
+      ],
+      "text": "落地",
+      "confidence": 1.0,
+      "reason": "固定搭配"
+    },
+    {
+      "token_ids": [
+        "u0012-w0004",
+        "u0012-w0005",
+        "u0012-w0006",
+        "u0012-w0007"
+      ],
+      "text": "从零到一",
+      "confidence": 1.0,
+      "reason": "固定短语"
+    },
+    {
+      "token_ids": [
+        "u0012-w0009",
+        "u0012-w0010"
+      ],
+      "text": "流程",
+      "confidence": 1.0,
+      "reason": "名词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0013-w0001",
+        "u0013-w0002"
+      ],
+      "text": "今天",
+      "confidence": 1.0,
+      "reason": "时间词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0013-w0003",
+        "u0013-w0004",
+        "u0013-w0005"
+      ],
+      "text": "我给你",
+      "confidence": 1.0,
+      "reason": "主谓宾结构不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0014-w0001",
+        "u0014-w0002",
+        "u0014-w0003"
+      ],
+      "text": "第一步",
+      "confidence": 1.0,
+      "reason": "序数词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0014-w0004",
+        "u0014-w0005",
+        "u0014-w0006"
+      ],
+      "text": "先定位",
+      "confidence": 1.0,
+      "reason": "动词短语不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0014-w0007",
+        "u0014-w0008",
+        "u0014-w0009"
+      ],
+      "text": "你是谁",
+      "confidence": 1.0,
+      "reason": "疑问句不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0015-w0001",
+        "u0015-w0002",
+        "u0015-w0003",
+        "u0015-w0004",
+        "u0015-w0005",
+        "u0015-w0006"
+      ],
+      "text": "你的客户是谁",
+      "confidence": 1.0,
+      "reason": "完整问句不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0016-w0001",
+        "u0016-w0002",
+        "u0016-w0003",
+        "u0016-w0004",
+        "u0016-w0005",
+        "u0016-w0006",
+        "u0016-w0007",
+        "u0016-w0008"
+      ],
+      "text": "你解决了什么问题",
+      "confidence": 1.0,
+      "reason": "完整问句不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0017-w0001",
+        "u0017-w0002",
+        "u0017-w0003",
+        "u0017-w0004"
+      ],
+      "text": "定位歪了",
+      "confidence": 1.0,
+      "reason": "主谓结构不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0018-w0001",
+        "u0018-w0002"
+      ],
+      "text": "后面",
+      "confidence": 1.0,
+      "reason": "方位词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0018-w0003",
+        "u0018-w0004",
+        "u0018-w0005"
+      ],
+      "text": "全都是",
+      "confidence": 1.0,
+      "reason": "副词短语不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0018-w0006",
+        "u0018-w0007",
+        "u0018-w0008"
+      ],
+      "text": "无用功",
+      "confidence": 1.0,
+      "reason": "固定搭配"
+    },
+    {
+      "token_ids": [
+        "u0019-w0001",
+        "u0019-w0002",
+        "u0019-w0003"
+      ],
+      "text": "第二步",
+      "confidence": 1.0,
+      "reason": "序数词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0019-w0004",
+        "u0019-w0005"
+      ],
+      "text": "搭建",
+      "confidence": 1.0,
+      "reason": "动词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0019-w0006",
+        "u0019-w0007"
+      ],
+      "text": "你的",
+      "confidence": 1.0,
+      "reason": "代词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0019-w0009",
+        "u0019-w0010",
+        "u0019-w0011"
+      ],
+      "text": "知识库",
+      "confidence": 1.0,
+      "reason": "名词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0020-w0001",
+        "u0020-w0002",
+        "u0020-w0003",
+        "u0020-w0004",
+        "u0020-w0005"
+      ],
+      "text": "把你所有的",
+      "confidence": 1.0,
+      "reason": "介词短语不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0020-w0006",
+        "u0020-w0007"
+      ],
+      "text": "产品",
+      "confidence": 1.0,
+      "reason": "名词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0020-w0008",
+        "u0020-w0009"
+      ],
+      "text": "案例",
+      "confidence": 1.0,
+      "reason": "名词不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0021-w0001",
+        "u0021-w0002",
+        "u0021-w0003",
+        "u0021-w0004"
+      ],
+      "text": "客户信息",
+      "confidence": 0.95,
+      "reason": "专有名词短语"
+    },
+    {
+      "token_ids": [
+        "u0021-w0005",
+        "u0021-w0006",
+        "u0021-w0007"
+      ],
+      "text": "全部都",
+      "confidence": 0.9,
+      "reason": "副词短语"
+    },
+    {
+      "token_ids": [
+        "u0021-w0008",
+        "u0021-w0009",
+        "u0021-w0010"
+      ],
+      "text": "喂给ai",
+      "confidence": 0.95,
+      "reason": "动词短语"
+    },
+    {
+      "token_ids": [
+        "u0022-w0002",
+        "u0022-w0003",
+        "u0022-w0004",
+        "u0022-w0005",
+        "u0022-w0006",
+        "u0022-w0007",
+        "u0022-w0008",
+        "u0022-w0009",
+        "u0022-w0010",
+        "u0022-w0011"
+      ],
+      "text": "ai彻底的搞懂你的业务",
+      "confidence": 0.95,
+      "reason": "完整从句"
+    },
+    {
+      "token_ids": [
+        "u0023-w0001",
+        "u0023-w0002",
+        "u0023-w0003"
+      ],
+      "text": "第三步",
+      "confidence": 0.95,
+      "reason": "步骤标记"
+    },
+    {
+      "token_ids": [
+        "u0024-w0001",
+        "u0024-w0002",
+        "u0024-w0003",
+        "u0024-w0004",
+        "u0024-w0005",
+        "u0024-w0006"
+      ],
+      "text": "用ai批量产出",
+      "confidence": 0.9,
+      "reason": "动词短语"
+    },
+    {
+      "token_ids": [
+        "u0024-w0007",
+        "u0024-w0008",
+        "u0024-w0009",
+        "u0024-w0010",
+        "u0024-w0011",
+        "u0024-w0012",
+        "u0024-w0013"
+      ],
+      "text": "精准的获客视频",
+      "confidence": 0.95,
+      "reason": "名词短语"
+    },
+    {
+      "token_ids": [
+        "u0025-w0001",
+        "u0025-w0002",
+        "u0025-w0003",
+        "u0025-w0004",
+        "u0025-w0005"
+      ],
+      "text": "从策划选题",
+      "confidence": 0.9,
+      "reason": "介词短语"
+    },
+    {
+      "token_ids": [
+        "u0026-w0001",
+        "u0026-w0002",
+        "u0026-w0003",
+        "u0026-w0004"
+      ],
+      "text": "到写文案",
+      "confidence": 0.9,
+      "reason": "介词短语"
+    },
+    {
+      "token_ids": [
+        "u0027-w0001",
+        "u0027-w0002",
+        "u0027-w0003",
+        "u0027-w0004",
+        "u0027-w0005",
+        "u0027-w0006",
+        "u0027-w0007",
+        "u0027-w0008",
+        "u0027-w0009"
+      ],
+      "text": "再到数字分身的出镜",
+      "confidence": 0.95,
+      "reason": "介词短语"
+    },
+    {
+      "token_ids": [
+        "u0028-w0001",
+        "u0028-w0002",
+        "u0028-w0003",
+        "u0028-w0004",
+        "u0028-w0005",
+        "u0028-w0006"
+      ],
+      "text": "ai全列入搞定",
+      "confidence": 0.95,
+      "reason": "完整句"
+    },
+    {
+      "token_ids": [
+        "u0029-w0001",
+        "u0029-w0002",
+        "u0029-w0003",
+        "u0029-w0004",
+        "u0029-w0005",
+        "u0029-w0006"
+      ],
+      "text": "你只需要审核",
+      "confidence": 0.95,
+      "reason": "完整句"
+    },
+    {
+      "token_ids": [
+        "u0030-w0001",
+        "u0030-w0002",
+        "u0030-w0003"
+      ],
+      "text": "第四步",
+      "confidence": 0.95,
+      "reason": "步骤标记"
+    },
+    {
+      "token_ids": [
+        "u0031-w0001",
+        "u0031-w0002",
+        "u0031-w0003",
+        "u0031-w0004",
+        "u0031-w0005",
+        "u0031-w0006",
+        "u0031-w0007",
+        "u0031-w0008",
+        "u0031-w0009",
+        "u0031-w0010",
+        "u0031-w0011",
+        "u0031-w0012"
+      ],
+      "text": "找到一条验证过的爆款视频",
+      "confidence": 0.95,
+      "reason": "动词短语"
+    },
+    {
+      "token_ids": [
+        "u0032-w0001",
+        "u0032-w0002",
+        "u0032-w0003",
+        "u0032-w0004",
+        "u0032-w0005"
+      ],
+      "text": "用ai做矩阵",
+      "confidence": 0.95,
+      "reason": "动词短语"
+    },
+    {
+      "token_ids": [
+        "u0033-w0001",
+        "u0033-w0002",
+        "u0033-w0003",
+        "u0033-w0004",
+        "u0033-w0005",
+        "u0033-w0006",
+        "u0033-w0007"
+      ],
+      "text": "一键放大几十倍",
+      "confidence": 0.95,
+      "reason": "动词短语"
+    },
+    {
+      "token_ids": [
+        "u0034-w0001",
+        "u0034-w0002",
+        "u0034-w0003"
+      ],
+      "text": "第五步",
+      "confidence": 0.95,
+      "reason": "步骤标记"
+    },
+    {
+      "token_ids": [
+        "u0034-w0004",
+        "u0034-w0005",
+        "u0034-w0006"
+      ],
+      "text": "最关键",
+      "confidence": 0.9,
+      "reason": "形容词短语"
+    },
+    {
+      "token_ids": [
+        "u0034-w0007",
+        "u0034-w0008",
+        "u0034-w0009"
+      ],
+      "text": "的一步",
+      "confidence": 0.9,
+      "reason": "完整短语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0035-w0001",
+        "u0035-w0002",
+        "u0035-w0003",
+        "u0035-w0004",
+        "u0035-w0005"
+      ],
+      "text": "发布的时候",
+      "confidence": 0.9,
+      "reason": "完整短语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0035-w0006",
+        "u0035-w0007",
+        "u0035-w0008",
+        "u0035-w0009"
+      ],
+      "text": "点左下角",
+      "confidence": 0.9,
+      "reason": "完整短语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0036-w0001",
+        "u0036-w0002",
+        "u0036-w0003",
+        "u0036-w0004"
+      ],
+      "text": "挂载起微",
+      "confidence": 0.9,
+      "reason": "完整短语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0037-w0001",
+        "u0037-w0002"
+      ],
+      "text": "刷到",
+      "confidence": 0.9,
+      "reason": "动词+补语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0037-w0003",
+        "u0037-w0004"
+      ],
+      "text": "客户",
+      "confidence": 0.9,
+      "reason": "名词，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0037-w0005",
+        "u0037-w0006"
+      ],
+      "text": "刷到",
+      "confidence": 0.9,
+      "reason": "动词+补语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0037-w0007",
+        "u0037-w0008",
+        "u0037-w0009"
+      ],
+      "text": "感兴趣",
+      "confidence": 0.9,
+      "reason": "完整短语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0038-w0001",
+        "u0038-w0002",
+        "u0038-w0003"
+      ],
+      "text": "点一下",
+      "confidence": 0.9,
+      "reason": "动词+补语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0038-w0004",
+        "u0038-w0005"
+      ],
+      "text": "三秒",
+      "confidence": 0.9,
+      "reason": "数量短语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0038-w0006",
+        "u0038-w0007"
+      ],
+      "text": "加吼",
+      "confidence": 0.9,
+      "reason": "动词+宾语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0039-w0001",
+        "u0039-w0002"
+      ],
+      "text": "三秒",
+      "confidence": 0.9,
+      "reason": "数量短语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0039-w0003",
+        "u0039-w0004",
+        "u0039-w0005"
+      ],
+      "text": "加好友",
+      "confidence": 0.9,
+      "reason": "动词+宾语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0040-w0001",
+        "u0040-w0002",
+        "u0040-w0003",
+        "u0040-w0004",
+        "u0040-w0005",
+        "u0040-w0006"
+      ],
+      "text": "完全没有流失",
+      "confidence": 0.9,
+      "reason": "完整句子，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0041-w0001",
+        "u0041-w0002",
+        "u0041-w0003",
+        "u0041-w0004",
+        "u0041-w0005",
+        "u0041-w0006",
+        "u0041-w0007",
+        "u0041-w0008",
+        "u0041-w0009",
+        "u0041-w0010",
+        "u0041-w0011"
+      ],
+      "text": "你看我这条视频的左下角",
+      "confidence": 0.9,
+      "reason": "完整短语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0042-w0001",
+        "u0042-w0002",
+        "u0042-w0003",
+        "u0042-w0004",
+        "u0042-w0005",
+        "u0042-w0006",
+        "u0042-w0007",
+        "u0042-w0008"
+      ],
+      "text": "是不是有一个企业",
+      "confidence": 0.9,
+      "reason": "完整短语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0043-w0001",
+        "u0043-w0002",
+        "u0043-w0003",
+        "u0043-w0004",
+        "u0043-w0005",
+        "u0043-w0006",
+        "u0043-w0007",
+        "u0043-w0008",
+        "u0043-w0009",
+        "u0043-w0010",
+        "u0043-w0011",
+        "u0043-w0012",
+        "u0043-w0013",
+        "u0043-w0014"
+      ],
+      "text": "是不是也有一个企业微信的按钮",
+      "confidence": 0.9,
+      "reason": "完整短语，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0044-w0001",
+        "u0044-w0002",
+        "u0044-w0003",
+        "u0044-w0004",
+        "u0044-w0005",
+        "u0044-w0006",
+        "u0044-w0007"
+      ],
+      "text": "你点一下试试看",
+      "confidence": 0.9,
+      "reason": "完整句子，不可拆分"
+    },
+    {
+      "token_ids": [
+        "u0045-w0001",
+        "u0045-w0002",
+        "u0045-w0003",
+        "u0045-w0004",
+        "u0045-w0005",
+        "u0045-w0006",
+        "u0045-w0007"
+      ],
+      "text": "你点一下试试看",
+      "confidence": 1.0,
+      "reason": "完整短语"
+    },
+    {
+      "token_ids": [
+        "u0046-w0001",
+        "u0046-w0002",
+        "u0046-w0003",
+        "u0046-w0004",
+        "u0046-w0005",
+        "u0046-w0006",
+        "u0046-w0007",
+        "u0046-w0008",
+        "u0046-w0009"
+      ],
+      "text": "是不是直接就跳转了",
+      "confidence": 1.0,
+      "reason": "完整短语"
+    },
+    {
+      "token_ids": [
+        "u0047-w0001",
+        "u0047-w0002",
+        "u0047-w0003",
+        "u0047-w0004",
+        "u0047-w0005"
+      ],
+      "text": "就这么简单",
+      "confidence": 1.0,
+      "reason": "完整短语"
+    },
+    {
+      "token_ids": [
+        "u0048-w0001",
+        "u0048-w0002",
+        "u0048-w0003",
+        "u0048-w0004",
+        "u0048-w0005",
+        "u0048-w0006",
+        "u0048-w0007",
+        "u0048-w0008",
+        "u0048-w0009",
+        "u0048-w0010",
+        "u0048-w0011",
+        "u0048-w0012"
+      ],
+      "text": "你的视频号是不是做不起来",
+      "confidence": 1.0,
+      "reason": "完整短语"
+    },
+    {
+      "token_ids": [
+        "u0049-w0001",
+        "u0049-w0002",
+        "u0049-w0003",
+        "u0049-w0004",
+        "u0049-w0005",
+        "u0049-w0006",
+        "u0049-w0007",
+        "u0049-w0008",
+        "u0049-w0009",
+        "u0049-w0010",
+        "u0049-w0011"
+      ],
+      "text": "你的视频号不是做不起来",
+      "confidence": 1.0,
+      "reason": "完整短语"
+    },
+    {
+      "token_ids": [
+        "u0050-w0001",
+        "u0050-w0002",
+        "u0050-w0003",
+        "u0050-w0004",
+        "u0050-w0005",
+        "u0050-w0006",
+        "u0050-w0007",
+        "u0050-w0008"
+      ],
+      "text": "是没有用这套方法",
+      "confidence": 1.0,
+      "reason": "完整短语"
+    },
+    {
+      "token_ids": [
+        "u0051-w0001",
+        "u0051-w0002",
+        "u0051-w0003",
+        "u0051-w0004",
+        "u0051-w0005",
+        "u0051-w0006",
+        "u0051-w0007"
+      ],
+      "text": "想知道怎么落地",
+      "confidence": 1.0,
+      "reason": "完整短语"
+    },
+    {
+      "token_ids": [
+        "u0052-w0001",
+        "u0052-w0002",
+        "u0052-w0003",
+        "u0052-w0004",
+        "u0052-w0005"
+      ],
+      "text": "左下角找我",
+      "confidence": 1.0,
+      "reason": "完整短语"
+    }
+  ],
+  "breakpoints": [
+    {
+      "after_token_id": "u0001-w0011",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0002-w0006",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0003-w0012",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0004-w0015",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0005-w0009",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0006-w0008",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0007-w0007",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0008-w0010",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0009-w0007",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0010-w0007",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0011-w0011",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0012-w0010",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0013-w0008",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0014-w0009",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0015-w0006",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0016-w0008",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0017-w0004",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0018-w0008",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0019-w0011",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0020-w0009",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0021-w0010",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0022-w0011",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0023-w0003",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0024-w0013",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0025-w0005",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0026-w0004",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0027-w0009",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0028-w0006",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0029-w0006",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0030-w0003",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0031-w0012",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0032-w0005",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0033-w0007",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0034-w0003",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0034-w0006",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0036-w0004",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0037-w0009",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0038-w0007",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0039-w0005",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0040-w0006",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0041-w0011",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0042-w0008",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0043-w0014",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0044-w0007",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0045-w0007",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0046-w0009",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0047-w0005",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0048-w0012",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0049-w0011",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0050-w0008",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0051-w0007",
+      "source": "ai_draft"
+    },
+    {
+      "after_token_id": "u0052-w0005",
+      "source": "ai_draft"
+    }
+  ],
+  "deletion_labels": [],
+  "forbidden_deletions": [],
+  "cover_safe_zones": {
+    "avoid_top_ratio": 0.1,
+    "person_safe_center_width_ratio": 0.45,
+    "title_regions": [
+      "top",
+      "bottom"
+    ],
+    "reviewed": false
+  },
+  "review": {
+    "status": "pending",
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "notes": "研发验收用；未完成逐段审校前不得计入发布门。"
+  }
+}

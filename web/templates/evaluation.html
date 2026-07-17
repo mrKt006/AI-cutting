@@ -24,16 +24,18 @@
 
     <main class="workspace evaluation-workspace">
       <div class="page-title evaluation-title">
-        <div><p class="section-kicker">Quality gate</p><h1>本地专业版验收</h1></div>
+        <div><p class="section-kicker">自动质量门</p><h1>本地专业版验收</h1></div>
         <span class="quality-gate {{ 'ready' if report.summary.fixed_set_ready and report.summary.quality_evidence_ready else 'pending' }}">
           {{ '达到样本门槛' if report.summary.fixed_set_ready and report.summary.quality_evidence_ready else '仍需真实样本' }}
         </span>
       </div>
 
       <section class="quality-metrics" aria-label="验收进度">
-        <article><span>不同源视频</span><strong>{{ report.summary.unique_eligible_sources }}<small>/20</small></strong></article>
-        <article><span>AI 决策记录</span><strong>{{ report.summary.items_with_ai_decisions }}<small>/20</small></strong></article>
-        <article><span>完成整条复核</span><strong>{{ report.summary.items_with_completed_review }}<small>/20</small></strong></article>
+        <article><span>不同源视频</span><strong>{{ report.summary.unique_eligible_sources }}<small>/{{ report.summary.fixed_set_target }}</small></strong></article>
+        <article><span>AI 决策记录</span><strong>{{ report.summary.items_with_ai_decisions }}<small>/{{ report.summary.fixed_set_target }}</small></strong></article>
+        <article><span>质量门通过</span><strong>{{ report.metrics.quality_gate_passed }}<small>/{{ report.summary.fixed_set_target }}</small></strong></article>
+        <article><span>完成整条复核</span><strong>{{ report.summary.items_with_completed_review }}<small>/{{ report.summary.fixed_set_target }}</small></strong></article>
+        <article><span>金标准审校</span><strong>{{ report.summary.reviewed_gold_samples }}<small>/{{ report.summary.fixed_set_target }}</small></strong></article>
         <article><span>恢复 AI 删除</span><strong>{{ report.metrics.restored_deletions }}<small>次</small></strong></article>
       </section>
 

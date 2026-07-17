@@ -233,6 +233,15 @@ def main() -> int:
     if evaluation_response.status_code != 200 or "本地专业版验收" not in evaluation_response.text or "完成整条复核" not in evaluation_response.text:
         print("Evaluation page check failed.")
         return 1
+    ai_lab_response = client.get("/ai-lab")
+    if (
+        ai_lab_response.status_code != 200
+        or "AI 字幕实验室" not in ai_lab_response.text
+        or "只模拟决策与校验" not in ai_lab_response.text
+        or "llm_api_key" in ai_lab_response.text
+    ):
+        print("AI subtitle lab page or credential isolation check failed.")
+        return 1
 
     transcript_markdown = """# 测试文档
 
@@ -541,6 +550,10 @@ def main() -> int:
     if jobs_response.status_code != 200 or missing:
         print(f"Jobs page check failed; missing: {', '.join(missing)}")
         return 1
+    job_detail_response = client.get(f"/jobs/{job_id}")
+    if job_detail_response.status_code != 200 or "输出文件" not in job_detail_response.text:
+        print(f"Job detail page check failed: {job_detail_response.status_code}")
+        return 1
     styles_response = client.get("/style-presets")
     style_fragments = ["内容标题", "在成片中显示内容标题", "仅开头显示", "精确预览失败，点击重试", "确定删除这个预设吗"]
     missing = [fragment for fragment in style_fragments if fragment not in styles_response.text]
@@ -589,6 +602,20 @@ def main() -> int:
             "bad cover preview json",
             "post",
             f"/api/jobs/{job_id}/cover-preview?item=001",
+            {"content": "{bad", "headers": {"content-type": "application/json"}},
+            400,
+        ),
+        (
+            "empty AI lab prompt",
+            "post",
+            "/api/ai-lab/run",
+            {"json": {"job_id": job_id, "item_id": "001", "prompt": ""}},
+            400,
+        ),
+        (
+            "bad AI lab json",
+            "post",
+            "/api/ai-lab/run",
             {"content": "{bad", "headers": {"content-type": "application/json"}},
             400,
         ),

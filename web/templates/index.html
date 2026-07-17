@@ -25,7 +25,6 @@
       <nav class="nav-links" aria-label="主要导航">
         <a class="nav-link is-active" href="/">任务</a>
         <a class="nav-link" href="/style-presets">样式预设</a>
-        <a class="nav-link" href="/evaluation">质量</a>
         <a class="nav-link" href="/settings">设置</a>
         <span class="service-state {{ 'ok' if env.ffmpeg_ready else 'warn' }}" title="{{ env.ffmpeg_path if env.ffmpeg_ready else env.ffmpeg_error }}">
           <span class="dot"></span>FFmpeg {{ '可用' if env.ffmpeg_ready else '缺失' }}
@@ -58,9 +57,18 @@
                 <strong>拖拽视频到这里</strong>
                 <small>支持多个视频。默认导出成片和封面。</small>
               </span>
-              <input class="drop-input" type="file" name="video" accept="video/*" multiple required>
+              <input class="drop-input" type="file" name="video" accept="video/*" multiple>
               <span class="file-name" aria-live="polite">未选择文件</span>
+              <span class="upload-feedback" id="upload-feedback" role="status" aria-live="polite"></span>
             </label>
+            <details class="local-path-import">
+              <summary>浏览器无法选择文件？使用本机路径导入</summary>
+              <label class="field">
+                <span>视频完整路径<em>每行一个</em></span>
+                <textarea name="local_video_paths" rows="3" placeholder="G:\视频\素材01.mp4"></textarea>
+                <small>仅在本机运行模式可用；文件仍会复制到任务目录，不会上传到远程服务。</small>
+              </label>
+            </details>
 
             <section class="single-item-fields" id="single-item-fields">
               <div class="form-grid">
@@ -90,6 +98,13 @@
                   {% for item in style_presets %}
                   <option value="{{ item.id }}">{{ item.name }}</option>
                   {% endfor %}
+                </select>
+              </label>
+              <label class="field">
+                <span>导出档位</span>
+                <select name="output_profile">
+                  <option value="platform" selected>平台发布 · 30fps / 约 5Mbps</option>
+                  <option value="master">高质量母版 · 保留最高 60fps</option>
                 </select>
               </label>
             </div>
@@ -193,6 +208,7 @@
     const dropBox = document.querySelector(".upload-box");
     const fileInput = document.querySelector(".drop-input");
     const fileName = document.querySelector(".file-name");
+    const uploadFeedback = document.querySelector("#upload-feedback");
     const perVideoTitles = document.querySelector("#per-video-titles");
     const titleList = document.querySelector("#title-list");
     const singleItemFields = document.querySelector("#single-item-fields");
@@ -284,6 +300,26 @@
     }
 
     function syncFiles(files) {
+      if (!files?.length) {
+        if (fileName) fileName.textContent = "未选择文件";
+        if (uploadFeedback) {
+          uploadFeedback.textContent = "没有选择视频，请重试。";
+          uploadFeedback.className = "upload-feedback error";
+        }
+        return;
+      }
+      const invalid = Array.from(files).filter((file) => !file.type.startsWith("video/") && !/\.(mp4|mov|m4v|avi|mkv|webm)$/i.test(file.name));
+      if (invalid.length) {
+        if (uploadFeedback) {
+          uploadFeedback.textContent = `不支持：${invalid.map((file) => file.name).join("、")}`;
+          uploadFeedback.className = "upload-feedback error";
+        }
+        return;
+      }
+      if (uploadFeedback) {
+        uploadFeedback.textContent = "视频已就绪。";
+        uploadFeedback.className = "upload-feedback success";
+      }
       showFileName(files);
       renderPerVideoTitles(files);
       activePreviewIndex = 0;
@@ -394,6 +430,12 @@
       titlePreviewTimer = window.setTimeout(updateTitlePreview, 650);
     }
 
+    fileInput?.addEventListener("click", () => {
+      if (uploadFeedback) {
+        uploadFeedback.textContent = "请选择一个或多个视频；关闭窗口后可重新选择。";
+        uploadFeedback.className = "upload-feedback";
+      }
+    });
     fileInput?.addEventListener("change", () => syncFiles(fileInput.files));
     taskPreviewVideo?.addEventListener("loadedmetadata", () => {
       const ratio = taskPreviewVideo.videoWidth / Math.max(1, taskPreviewVideo.videoHeight);
@@ -450,7 +492,17 @@
       syncFiles(fileInput.files);
     });
 
-    form?.addEventListener("submit", () => {
+    form?.addEventListener("submit", (event) => {
+      const localPaths = form.querySelector('textarea[name="local_video_paths"]')?.value.trim();
+      if (!fileInput?.files?.length && !localPaths) {
+        event.preventDefault();
+        if (uploadFeedback) {
+          uploadFeedback.textContent = "请选择视频，或展开本机路径导入并填写完整路径。";
+          uploadFeedback.className = "upload-feedback error";
+        }
+        fileInput?.focus();
+        return;
+      }
       form.querySelectorAll("[data-transcript-input]").forEach((input) => {
         const index = input.parentElement?.querySelector("[data-transcript-index]");
         const hasFile = Boolean(input.files?.length);

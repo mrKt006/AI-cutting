@@ -28,10 +28,9 @@ from fastapi.templating import Jinja2Templates
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from cut_silence import Segment, cut_video  # noqa: E402
-from ai_layout import layout_tokens_with_ai  # noqa: E402
 from ffmpeg_utils import ffmpeg_filter_path, media_duration, probe_media, run as ffmpeg_run, video_size  # noqa: E402
 from make_cover import make_cover  # noqa: E402
-from make_subtitle import SubtitleCue  # noqa: E402
+from make_subtitle import SubtitleCue, TimingSegment  # noqa: E402
 from render_video import burn_subtitles  # noqa: E402
 from safe_json import read_json_file, write_json_file  # noqa: E402
 from style_presets import (  # noqa: E402
@@ -42,9 +41,16 @@ from style_presets import (  # noqa: E402
     subtitle_override,
     subtitle_to_ass_style,
 )
-from subtitle_layout import analysis_break_sets, segment_tokens, text_overflows, tokens_from_text, wrap_title_text  # noqa: E402
-from llm_analysis import analyze_transcript, apply_high_confidence_corrections  # noqa: E402
+from subtitle_layout import build_layout_capacity, analysis_break_sets, segment_tokens, text_overflows, tokens_from_text, wrap_title_text  # noqa: E402
+from llm_analysis import (  # noqa: E402
+    HOLISTIC_PROMPT,
+    PROMPT_VERSION,
+    analyze_transcript,
+    apply_high_confidence_corrections,
+    build_markup_request,
+)
 from build_evaluation_report import build_report  # noqa: E402
+from main import _ai_removal_segments, _build_automatic_quality_gate  # noqa: E402
 from transcript_document import (  # noqa: E402
     ParsedTranscriptDocument,
     TranscriptDocumentError,
@@ -73,6 +79,14 @@ PREVIEW_DIR = ROOT / "web" / "static" / "style_previews"
 LLM_CACHE_DIR = ROOT / "web" / ".cache" / "llm"
 TITLE_WRAP_CACHE: dict[str, dict[str, Any]] = {}
 WINDOWS_TOOL_DIRS = [
+    *(
+        [Path(os.environ["AI_CUTTING_FFMPEG_DIR"])]
+        if os.environ.get("AI_CUTTING_FFMPEG_DIR")
+        else []
+    ),
+    Path(os.environ.get("APPDATA", "")) / "SpleeterGUI",
+    Path(os.environ.get("LOCALAPPDATA", "")) / "SpleeterGUI",
+    *(Path(f"{drive}:/AppData/Roaming/SpleeterGUI") for drive in "CDEFG"),
     Path.home() / "AppData" / "Local" / "Microsoft" / "WinGet" / "Links",
     Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links",
 ]
@@ -101,6 +115,14 @@ STAGES = {
     "done": "完成",
     "failed": "失败",
 }
+
+PIPELINE_STEPS = (
+    ("validated", "检查素材"), ("asr", "语音识别"), ("alignment", "逐字稿对齐"),
+    ("analysis", "AI 语义分析"), ("edit_plan", "剪辑决策"), ("video_cut", "裁切视频"),
+    ("title_layout", "标题布局"), ("subtitle_layout", "字幕布局"),
+    ("subtitle_ready", "生成字幕"), ("video_rendered", "渲染成片"),
+    ("cover_rendered", "生成封面"), ("completed", "完成质检"),
+)
 
 app = FastAPI(title="AI-cutting Web")
 templates = Jinja2Templates(directory=str(ROOT / "web" / "templates"))
@@ -262,19 +284,39 @@ def index(request: Request) -> HTMLResponse:
 
 
 @app.get("/jobs", response_class=HTMLResponse)
-def jobs_page(request: Request, status: str = "", q: str = "") -> HTMLResponse:
+def jobs_page(request: Request, status: str = "", q: str = "", page: int = 1, archived: str = "") -> HTMLResponse:
     normalized_status = status if status in STAGES else ""
+    show_archived = archived == "1"
+    all_jobs = _recent_jobs(limit=None, status=normalized_status, query=q, archived=show_archived)
+    page_size = 20
+    total_pages = max(1, math.ceil(len(all_jobs) / page_size))
+    page = max(1, min(int(page), total_pages))
     return templates.TemplateResponse(
         request=request,
         name="jobs.html",
         context={
             "request": request,
-            "jobs": _recent_jobs(limit=None, status=normalized_status, query=q),
+            "jobs": all_jobs[(page - 1) * page_size : page * page_size],
             "active_status": normalized_status,
             "query": q.strip(),
             "status_labels": STAGES,
+            "page": page,
+            "total_pages": total_pages,
+            "show_archived": show_archived,
         },
     )
+
+
+@app.post("/jobs/{job_id}/archive")
+def archive_job(job_id: str) -> RedirectResponse:
+    _update_job(_job_path(job_id), archived=True, archived_at=_now())
+    return RedirectResponse("/jobs", status_code=303)
+
+
+@app.post("/jobs/{job_id}/restore")
+def restore_job(job_id: str) -> RedirectResponse:
+    _update_job(_job_path(job_id), archived=False, archived_at=None)
+    return RedirectResponse("/jobs?archived=1", status_code=303)
 
 
 @app.get("/evaluation", response_class=HTMLResponse)
@@ -292,6 +334,172 @@ def evaluation_page(request: Request) -> HTMLResponse:
         name="evaluation.html",
         context={"request": request, "report": report, "samples": eligible_samples},
     )
+
+
+@app.get("/ai-lab", response_class=HTMLResponse)
+def ai_lab_page(request: Request, job_id: str = "", item: str = "001") -> HTMLResponse:
+    samples = _ai_lab_samples()
+    selected_job_id = job_id if any(row["job_id"] == job_id and row["item_id"] == item for row in samples) else ""
+    if not selected_job_id and samples:
+        selected_job_id = samples[0]["job_id"]
+        item = samples[0]["item_id"]
+    return templates.TemplateResponse(
+        request=request,
+        name="ai_lab.html",
+        context={
+            "request": request,
+            "samples": samples,
+            "selected_job_id": selected_job_id,
+            "selected_item_id": item,
+            "prompt_version": PROMPT_VERSION,
+        },
+    )
+
+
+@app.get("/api/ai-lab/context")
+def api_ai_lab_context(job_id: str, item: str = "001") -> dict[str, Any]:
+    source = _load_ai_lab_source(job_id, item)
+    request_input, _ = build_markup_request(
+        source["tokens"],
+        layout=source["capacity"],
+        style=source["subtitle_style"],
+        width=source["width"],
+        height=source["height"],
+    )
+    settings = _load_settings()
+    return {
+        "ok": True,
+        "source": source["public"],
+        "prompt": HOLISTIC_PROMPT,
+        "prompt_version": PROMPT_VERSION,
+        "request_input": request_input,
+        "model": str(settings.get("llm_model") or ""),
+        "configured": bool(settings.get("llm_base_url") and settings.get("llm_model") and settings.get("llm_api_key")),
+    }
+
+
+@app.post("/api/ai-lab/run")
+async def api_ai_lab_run(request: Request) -> dict[str, Any]:
+    payload = await _read_json_object(request, source="AI 字幕实验室")
+    job_id = str(payload.get("job_id") or "").strip()
+    item_id = str(payload.get("item_id") or "001").strip()
+    prompt = str(payload.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="提示词不能为空")
+    if len(prompt) > 40000:
+        raise HTTPException(status_code=400, detail="提示词不能超过 40000 个字符")
+    source = _load_ai_lab_source(job_id, item_id)
+    settings = _load_settings()
+    if not (settings.get("llm_base_url") and settings.get("llm_model") and settings.get("llm_api_key")):
+        raise HTTPException(status_code=400, detail="DeepSeek 尚未完整配置，请先到设置页填写接口地址、模型和 API Key")
+    analysis = await asyncio.to_thread(
+        analyze_transcript,
+        source["tokens"],
+        base_url=str(settings.get("llm_base_url") or ""),
+        model=str(settings.get("llm_model") or ""),
+        api_key=str(settings.get("llm_api_key") or ""),
+        timeout=float(settings.get("llm_timeout") or 120.0),
+        cache_dir=None,
+        layout=source["capacity"],
+        style=source["subtitle_style"],
+        width=source["width"],
+        height=source["height"],
+        prompt_override=prompt,
+        max_attempts=3,
+        include_debug=True,
+    )
+    token_rows = source["tokens"]
+    if analysis.get("status") == "ok":
+        simulation_segment = TimingSegment(
+            start=float(token_rows[0].get("start", 0)),
+            end=float(token_rows[-1].get("end", 0)),
+            text="".join(str(token.get("text") or "") for token in token_rows),
+            tokens=tuple(token_rows),
+        )
+        _ai_removal_segments([simulation_segment], analysis, source["auto_edit_mode"])
+        production_gate = _build_automatic_quality_gate(analysis, [simulation_segment])
+    else:
+        production_gate = {
+            "passed": False,
+            "status": "blocked",
+            "blocking_reasons": [str(analysis.get("reason") or "语义分析没有成功完成")],
+            "warnings": [],
+        }
+    captions = []
+    for index, caption in enumerate(analysis.get("captions") or [], start=1):
+        indices = caption.get("source_indices") or []
+        if len(indices) != 2:
+            continue
+        start_i, end_i = int(indices[0]), int(indices[1])
+        captions.append({
+            "index": index,
+            "start_i": start_i,
+            "end_i": end_i,
+            "start": round(float(token_rows[start_i].get("start", 0)), 3),
+            "end": round(float(token_rows[end_i].get("end", 0)), 3),
+            "text": str(caption.get("display_text") or caption.get("text") or ""),
+            "width_px": caption.get("width_px"),
+        })
+    validation = analysis.get("validation") if isinstance(analysis.get("validation"), dict) else {}
+    reason = str(analysis.get("reason") or "")
+    applied_ids = {
+        str(token_id)
+        for row in analysis.get("applied_delete_ranges", [])
+        for token_id in row.get("token_ids", [])
+    }
+    skipped_by_ids = {
+        tuple(str(token_id) for token_id in row.get("token_ids", [])): row
+        for row in analysis.get("skipped_delete_ranges", [])
+    }
+
+    def enrich_decision(row: dict[str, Any], *, deletion: bool = False) -> dict[str, Any]:
+        indices = row.get("source_indices") or []
+        if len(indices) != 2:
+            return dict(row)
+        start_i, end_i = int(indices[0]), int(indices[1])
+        token_ids = tuple(str(token_id) for token_id in row.get("token_ids", []))
+        enriched = {
+            **row,
+            "start_i": start_i,
+            "end_i": end_i,
+            "start": round(float(token_rows[start_i].get("start", 0)), 3),
+            "end": round(float(token_rows[end_i].get("end", 0)), 3),
+            "source_text": "".join(str(token.get("text") or "") for token in token_rows[start_i : end_i + 1]),
+        }
+        if deletion:
+            skipped = skipped_by_ids.get(token_ids)
+            accepted = bool(token_ids) and all(token_id in applied_ids for token_id in token_ids)
+            enriched.update({
+                "accepted": accepted,
+                "decision_status": "accepted" if accepted else "rejected",
+                "safety_reason": str((skipped or {}).get("skip_reason") or ("verified" if accepted else "not_applied")),
+            })
+        return enriched
+
+    corrections = [enrich_decision(row) for row in analysis.get("corrections") or []]
+    deletions = [enrich_decision(row, deletion=True) for row in analysis.get("delete_ranges") or []]
+    gate_errors = list(production_gate.get("blocking_reasons") or [])
+    return {
+        "ok": analysis.get("status") == "ok" and bool(production_gate.get("passed")),
+        "analysis_ok": analysis.get("status") == "ok",
+        "status": analysis.get("status"),
+        "reason": reason,
+        "errors": gate_errors or list(validation.get("errors") or []) or ([reason] if reason else []),
+        "source": source["public"],
+        "model": analysis.get("model") or str(settings.get("llm_model") or ""),
+        "latency_ms": analysis.get("latency_ms", 0),
+        "attempt_count": int(analysis.get("attempt_count") or 0),
+        "retry_errors": list(analysis.get("retry_errors") or []),
+        "usage": analysis.get("usage") or {},
+        "request_input": analysis.get("debug_request") or {},
+        "raw_response": analysis.get("raw_response") or "",
+        "captions": captions,
+        "corrections": corrections,
+        "deletions": deletions,
+        "validation": validation,
+        "layout_decision": analysis.get("layout_decision") or {},
+        "production_gate": production_gate,
+    }
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -313,7 +521,7 @@ def settings_page(request: Request) -> HTMLResponse:
 async def save_settings(
     volc_app_id: str = Form(""),
     volc_access_token: str = Form(""),
-    subtitle_delay: float = Form(0.0),
+    subtitle_delay: float = Form(-0.12),
     detect_disfluency: str | None = Form(None),
     llm_enabled: str | None = Form(None),
     llm_base_url: str = Form(""),
@@ -357,8 +565,14 @@ async def api_test_llm() -> dict[str, Any]:
 @app.get("/style-presets", response_class=HTMLResponse)
 def style_presets_page(request: Request) -> HTMLResponse:
     presets = load_style_presets(STYLE_PRESETS_PATH)
+    is_draft = request.query_params.get("draft") == "1"
     selected_id = request.query_params.get("preset") or presets[0]["id"]
-    selected = get_style_preset(selected_id, STYLE_PRESETS_PATH)
+    if is_draft:
+        selected = get_style_preset("default-white", STYLE_PRESETS_PATH)
+        selected["id"] = _unique_preset_id(presets, "new-style")
+        selected["name"] = ""
+    else:
+        selected = get_style_preset(selected_id, STYLE_PRESETS_PATH)
     preview = request.query_params.get("preview") or ""
     active_style = request.query_params.get("active") or "subtitle"
     if active_style not in {"subtitle", "video", "cover"}:
@@ -377,6 +591,7 @@ def style_presets_page(request: Request) -> HTMLResponse:
             "preview_text": preview_text,
             "preview_aspect": preview_aspect,
             "saved": request.query_params.get("saved") == "1",
+            "is_draft": is_draft,
         },
     )
 @app.post("/style-presets")
@@ -392,16 +607,7 @@ async def save_style_preset(request: Request) -> RedirectResponse:
     preview_aspect = _preview_aspect(str(form.get("preview_aspect") or "9:16"))
 
     if action == "create":
-        new_id = _unique_preset_id(presets, "new-style")
-        new_preset = get_style_preset("default-white", STYLE_PRESETS_PATH)
-        new_preset["id"] = new_id
-        new_preset["name"] = "新建预设"
-        presets.append(new_preset)
-        save_style_presets(presets, STYLE_PRESETS_PATH)
-        return RedirectResponse(
-            _style_presets_url(new_id, saved=True, preview_path=preview_path, active="subtitle", text=preview_text, aspect=preview_aspect),
-            status_code=303,
-        )
+        return RedirectResponse("/style-presets?draft=1", status_code=303)
 
     if action == "delete":
         if len(presets) <= 1:
@@ -418,7 +624,15 @@ async def save_style_preset(request: Request) -> RedirectResponse:
         save_style_presets(presets, STYLE_PRESETS_PATH)
         return RedirectResponse(_style_presets_url(source["id"], saved=True, preview_path=preview_path, active=active_style, text=preview_text, aspect=preview_aspect), status_code=303)
 
+    raw_name = str(form.get("name") or "").strip()
+    if len(raw_name) < 2 or raw_name in {"新建预设", "用", "测试"}:
+        raise HTTPException(status_code=400, detail="请输入至少 2 个字、能够说明用途的预设名称")
     saved = _preset_from_form(form, preset_id)
+    width, height = _preview_dimensions(preview_aspect)
+    active_saved_style = saved["cover_title"] if active_style == "cover" else saved["video_title"] if active_style == "video" else saved["subtitle"]
+    wrapped_preview = wrap_title_text(preview_text, active_saved_style, width, height, {})
+    if any(text_overflows(line, active_saved_style, width, height) for line in wrapped_preview.splitlines()):
+        raise HTTPException(status_code=422, detail="当前文字在安全区内放不下，请减小字号、缩短文字或增加换行")
     if preset_id != original_preset_id and any(item["id"] == preset_id for item in presets):
         raise HTTPException(status_code=400, detail="预设 ID 已存在，请换一个 ID")
     replaced = False
@@ -514,6 +728,9 @@ async def api_render_preview(request: Request) -> JSONResponse:
     text = str(form.get("preview_text") or "默认文本")
     preview_aspect = _preview_aspect(str(form.get("preview_aspect") or "9:16"))
     width, height = _preview_dimensions(preview_aspect)
+    text = wrap_title_text(text, render_style, width, height, {})
+    if any(text_overflows(line, render_style, width, height) for line in text.splitlines()):
+        raise HTTPException(status_code=422, detail="文字超出当前画布安全区")
     token = uuid.uuid4().hex[:10]
     ass_path = PREVIEW_DIR / f"accurate_{token}.ass"
     output = PREVIEW_DIR / f"accurate_{token}.jpg"
@@ -582,47 +799,12 @@ async def api_title_wrap(request: Request) -> dict[str, Any]:
     ).hexdigest()
     if cache_key in TITLE_WRAP_CACHE:
         return TITLE_WRAP_CACHE[cache_key]
-    settings = _load_settings()
-    source_lines = [line.strip() for line in text.replace("\r", "").split("\n") if line.strip()]
-    tokens = [
-        token
-        for line_index, line in enumerate(source_lines or [text], start=1)
-        for token in tokens_from_text(line, 0.0, 1.0, prefix=f"title-{line_index}")
-    ]
-    analysis = await asyncio.to_thread(
-        analyze_transcript,
-        tokens,
-        base_url=str(settings.get("llm_base_url") or ""),
-        model=str(settings.get("llm_model") or ""),
-        api_key=str(settings.get("llm_api_key") or ""),
-        timeout=float(settings.get("llm_timeout") or 60.0),
-        cache_dir=LLM_CACHE_DIR,
-    )
-    wrapped_lines: list[str] = []
-    layout_audits: list[dict[str, Any]] = []
-    for line_index, line in enumerate(source_lines or [text], start=1):
-        line_tokens = tokens_from_text(line, 0.0, 1.0, prefix=f"title-{line_index}")
-        groups, layout_audit = await asyncio.to_thread(
-            layout_tokens_with_ai,
-            line_tokens,
-            style,
-            width,
-            height,
-            analysis,
-            base_url=str(settings.get("llm_base_url") or ""),
-            model=str(settings.get("llm_model") or ""),
-            api_key=str(settings.get("llm_api_key") or ""),
-            timeout=float(settings.get("llm_timeout") or 60.0),
-            cache_dir=LLM_CACHE_DIR,
-        )
-        wrapped_lines.extend("".join(str(token.get("text") or "") for token in group) for group in groups)
-        layout_audits.append(layout_audit)
     result = {
         "ok": True,
-        "text": "\n".join(wrapped_lines).strip() or wrap_title_text(text, style, width, height, analysis),
+        "text": wrap_title_text(text, style, width, height, {}),
         "style": style,
-        "analysis_status": analysis.get("status"),
-        "layout_status": "ai" if layout_audits and all(item.get("status") == "ai" for item in layout_audits) else "mixed",
+        "analysis_status": "local",
+        "layout_status": "local",
     }
     if len(TITLE_WRAP_CACHE) >= 128:
         TITLE_WRAP_CACHE.pop(next(iter(TITLE_WRAP_CACHE)))
@@ -638,7 +820,8 @@ async def parse_transcript_preview(file: UploadFile = File(...)) -> dict[str, An
 
 @app.post("/jobs")
 async def create_job(
-    video: list[UploadFile] = File(...),
+    video: list[UploadFile] = File([]),
+    local_video_paths: str = Form(""),
     title: str = Form(""),
     item_titles: list[str] = Form([]),
     content_title: str = Form(""),
@@ -652,6 +835,7 @@ async def create_job(
     export_subtitles: str | None = Form(None),
     export_asr_json: str | None = Form(None),
     export_report: str | None = Form(None),
+    output_profile: str = Form("platform"),
 ) -> RedirectResponse:
     settings = _load_settings()
     try:
@@ -660,6 +844,8 @@ async def create_job(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if preset not in PRESETS:
         raise HTTPException(status_code=400, detail="Unsupported preset")
+    if output_profile not in {"platform", "master"}:
+        raise HTTPException(status_code=400, detail="不支持的导出档位")
     runtime = _runtime_status(settings)
     if not runtime["ffmpeg_ready"]:
         detail = runtime.get("ffmpeg_error") or "本机未检测到 FFmpeg / FFprobe"
@@ -669,8 +855,19 @@ async def create_job(
     if not has_env_creds and not has_saved_creds:
         raise HTTPException(status_code=400, detail="火山引擎模式需要先在设置页填写 APP ID 和 Access Token")
     videos = [item for item in video if item and item.filename]
+    for raw_path in re.split(r"[\r\n]+", local_video_paths.strip()):
+        if not raw_path.strip():
+            continue
+        local_path = Path(raw_path.strip().strip('"')).expanduser().resolve()
+        if not local_path.is_file():
+            raise HTTPException(status_code=400, detail=f"本地视频不存在：{local_path}")
+        if local_path.suffix.lower() not in SUPPORTED_VIDEO_SUFFIXES:
+            raise HTTPException(status_code=400, detail=f"{local_path.name} 不是支持的视频格式")
+        if local_path.stat().st_size > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail=f"{local_path.name} 超过单文件 4 GB 限制")
+        videos.append(UploadFile(filename=local_path.name, file=local_path.open("rb")))
     if not videos:
-        raise HTTPException(status_code=400, detail="请至少上传一个视频")
+        raise HTTPException(status_code=400, detail="请选择视频，或填写本机视频完整路径")
     if len(videos) > MAX_VIDEOS_PER_JOB:
         raise HTTPException(status_code=400, detail=f"单次最多上传 {MAX_VIDEOS_PER_JOB} 个视频")
     for upload in videos:
@@ -799,7 +996,7 @@ async def create_job(
         "auto_edit_mode": PRESETS[preset]["auto_edit_mode"],
         "style_preset_id": style_preset["id"],
         "style_preset_name": style_preset["name"],
-        "subtitle_delay": float(settings.get("subtitle_delay", 0.0)),
+        "subtitle_delay": float(settings.get("subtitle_delay", -0.12)),
         "detect_disfluency": bool(settings.get("detect_disfluency", False)),
         "llm_enabled": bool(settings.get("llm_enabled", False)),
         "llm_base_url": str(settings.get("llm_base_url") or ""),
@@ -807,6 +1004,7 @@ async def create_job(
         "export_subtitles": bool(export_subtitles),
         "export_asr_json": bool(export_asr_json),
         "export_report": bool(export_report),
+        "output_profile": output_profile,
         "title": base_content_title or (items[0]["title"] if len(items) == 1 else f"批量任务 {len(items)} 个视频"),
         "output_dir": str(output_dir),
         "items": items,
@@ -819,6 +1017,7 @@ async def create_job(
             "status": "queued",
             "stage": "queued",
             "created_at": _now(),
+            "run_started_at": _now(),
             "updated_at": _now(),
             "params": params,
             "outputs": {},
@@ -841,6 +1040,7 @@ async def create_job(
 @app.get("/jobs/{job_id}", response_class=HTMLResponse)
 def job_page(request: Request, job_id: str) -> HTMLResponse:
     job = _read_job(job_id)
+    job["progress"] = _job_progress(job)
     return templates.TemplateResponse(
         request=request,
         name="job.html",
@@ -848,6 +1048,7 @@ def job_page(request: Request, job_id: str) -> HTMLResponse:
             "request": request,
             "job": job,
             "files": _output_files(job_id),
+            "file_groups": _output_file_groups(job_id),
             "stage_label": STAGES.get(job.get("status"), job.get("status")),
             "display_error": _friendly_job_error(job.get("error")),
         },
@@ -858,6 +1059,8 @@ def job_page(request: Request, job_id: str) -> HTMLResponse:
 def job_status(job_id: str) -> dict[str, Any]:
     job = _read_job(job_id)
     job["files"] = _output_files(job_id)
+    job["progress"] = _job_progress(job)
+    job["quality_status"] = job["progress"]["quality_status"]
     return job
 
 
@@ -924,6 +1127,7 @@ def resume_job(job_id: str) -> RedirectResponse:
             item["error"] = None
     job["status"] = "queued"
     job["stage"] = "queued"
+    job["run_started_at"] = _now()
     job.setdefault("log", []).append({"time": _now(), "message": "用户继续任务，将从最近检查点恢复"})
     _write_job(job_dir, job)
     threading.Thread(target=_run_job, args=(job_id,), daemon=True).start()
@@ -950,16 +1154,20 @@ def retry_job(job_id: str) -> RedirectResponse:
         if item.get("status") == "done" and item.get("outputs"):
             continue
         pending += 1
+        retry_error = str(item.get("error") or job.get("error") or "")
         item["status"] = "queued"
         item["error"] = None
         item["outputs"] = {}
-        for raw_path in (item.get("output_dir"), str(job_dir / "work" / str(item.get("id") or "001"))):
-            if not raw_path:
-                continue
-            target = Path(raw_path).resolve()
-            if target.is_relative_to(job_dir.resolve()):
-                shutil.rmtree(target, ignore_errors=True)
-                target.mkdir(parents=True, exist_ok=True)
+        raw_output = item.get("output_dir")
+        if raw_output:
+            output_target = Path(raw_output).resolve()
+            if output_target.is_relative_to(job_dir.resolve()):
+                shutil.rmtree(output_target, ignore_errors=True)
+                output_target.mkdir(parents=True, exist_ok=True)
+        work_target = (job_dir / "work" / str(item.get("id") or "001")).resolve()
+        if work_target.is_relative_to(job_dir.resolve()):
+            work_target.mkdir(parents=True, exist_ok=True)
+            _invalidate_failed_quality_checkpoints(work_target, retry_error)
     pack_only = pending == 0 and job.get("status") == "failed" and bool(job.get("params", {}).get("items"))
     if not pending and not pack_only:
         raise HTTPException(status_code=409, detail="这个任务没有需要重新处理的视频")
@@ -969,6 +1177,7 @@ def retry_job(job_id: str) -> RedirectResponse:
     job["status"] = "queued"
     job["stage"] = "queued"
     job["error"] = None
+    job["run_started_at"] = _now()
     job["updated_at"] = _now()
     retry_message = "用户重新执行输出打包" if pack_only else f"用户重新处理 {pending} 个未完成视频"
     job.setdefault("log", []).append({"time": _now(), "message": retry_message})
@@ -981,6 +1190,35 @@ def retry_job(job_id: str) -> RedirectResponse:
     }
     threading.Thread(target=_run_job, args=(job_id,), daemon=True).start()
     return RedirectResponse(f"/jobs/{job_id}", status_code=303)
+
+
+def _invalidate_failed_quality_checkpoints(work_dir: Path, error: str) -> None:
+    """Keep expensive verified stages while forcing unsafe quality stages to run again."""
+    checkpoint_dir = work_dir / "checkpoints"
+    if not checkpoint_dir.is_dir():
+        return
+    lowered = error.lower()
+    if "质量门" not in error and "quality" not in lowered and "layout" not in lowered and "布局" not in error:
+        return
+    for name in (
+        "subtitle_layout.json",
+        "stage_subtitle_layout.json",
+        "stage_subtitle_ready.json",
+        "stage_video_rendered.json",
+        "stage_cover_rendered.json",
+        "stage_completed.json",
+        "state.json",
+    ):
+        (checkpoint_dir / name).unlink(missing_ok=True)
+    analysis_failed = any(
+        marker in error
+        for marker in ("语义分析", "DeepSeek", "标注文案", "全文 token")
+    )
+    if analysis_failed:
+        for name in ("analysis.json", "stage_analysis.json"):
+            (checkpoint_dir / name).unlink(missing_ok=True)
+        (work_dir / "transcript_analysis.json").unlink(missing_ok=True)
+    (work_dir / "ai_decisions.json").unlink(missing_ok=True)
 
 
 @app.get("/jobs/{job_id}/edit", response_class=HTMLResponse)
@@ -1152,13 +1390,23 @@ async def api_reanalyze_subtitles(job_id: str, request: Request, item: str = "00
         project = _sanitize_edit_project({**existing, **payload}, existing) if payload else existing
         settings = _load_settings()
         tokens = [token for sentence in project.get("sentences", []) for token in sentence.get("tokens", [])]
+        source = Path(project.get("render_source_video") or project.get("current_video") or "")
+        width, height = video_size(source)
+        preset = get_style_preset(project.get("style_preset_id") or "default-white", STYLE_PRESETS_PATH)
+        subtitle_style = preset.get("subtitle") or {}
+        capacity = build_layout_capacity(subtitle_style, width, height)
         analysis = await asyncio.to_thread(
             analyze_transcript,
             tokens,
             base_url=str(settings.get("llm_base_url") or ""),
             model=str(settings.get("llm_model") or ""),
             api_key=str(settings.get("llm_api_key") or ""),
-            timeout=60.0,
+            timeout=120.0,
+            cache_dir=LLM_CACHE_DIR,
+            layout=capacity,
+            style=subtitle_style,
+            width=width,
+            height=height,
         )
         if analysis.get("status") != "ok":
             previous = project.get("analysis") if isinstance(project.get("analysis"), dict) else {}
@@ -1202,18 +1450,34 @@ async def api_reflow_subtitles(job_id: str, request: Request, item: str = "001")
         width, height = video_size(source)
         preset = get_style_preset(project.get("style_preset_id") or "default-white", STYLE_PRESETS_PATH)
         settings = _load_settings()
+        subtitle_style = preset.get("subtitle") or {}
+        if not any(sentence.get("edited") or sentence.get("timing_pending") for sentence in project.get("sentences", [])):
+            tokens = [token for sentence in project.get("sentences", []) for token in sentence.get("tokens", [])]
+            capacity = build_layout_capacity(subtitle_style, width, height)
+            analysis = await asyncio.to_thread(
+                analyze_transcript,
+                tokens,
+                base_url=str(settings.get("llm_base_url") or ""),
+                model=str(settings.get("llm_model") or ""),
+                api_key=str(settings.get("llm_api_key") or ""),
+                timeout=float(settings.get("llm_timeout") or 120.0),
+                cache_dir=LLM_CACHE_DIR,
+                layout=capacity,
+                style=subtitle_style,
+                width=width,
+                height=height,
+            )
+            if analysis.get("status") != "ok":
+                raise HTTPException(status_code=422, detail=f"完整文案断句失败：{analysis.get('reason') or 'unknown'}")
+            apply_high_confidence_corrections(tokens, analysis)
+            project["analysis"] = analysis
         project["sentences"] = await asyncio.to_thread(
             _reflow_project_sentences,
             project,
-            preset.get("subtitle") or {},
+            subtitle_style,
             width,
             height,
-            {
-                "base_url": str(settings.get("llm_base_url") or ""),
-                "model": str(settings.get("llm_model") or ""),
-                "api_key": str(settings.get("llm_api_key") or ""),
-                "timeout": float(settings.get("llm_timeout") or 60.0),
-            },
+            None,
         )
         _write_edit_project(job_dir, project)
         return {"ok": True, "project": project}
@@ -1424,6 +1688,8 @@ def _run_job(job_id: str) -> None:
                 str(job_dir / "work" / item["id"] / "checkpoints"),
                 "--auto-edit-mode",
                 params.get("auto_edit_mode") or "standard",
+                "--output-profile",
+                params.get("output_profile") or "legacy",
             ]
             if item.get("transcript_path"):
                 cmd.extend(["--script", item["transcript_path"]])
@@ -1813,7 +2079,9 @@ def _load_or_create_edit_project(job_dir: Path, job: dict[str, Any], item_id: st
     if project_path.exists():
         try:
             saved_project = _sanitize_edit_project(read_json_file(project_path), _blank_edit_project(job_dir, job, item))
-            if saved_project.get("sentences"):
+            source_segments_ready = bool(_load_editor_segments(job_dir, item))
+            stale_placeholder = source_segments_ready and _is_unedited_placeholder_project(saved_project, item, job)
+            if saved_project.get("sentences") and not stale_placeholder:
                 _annotate_sentence_break_sources(saved_project["sentences"], saved_project.get("analysis", {}))
                 return saved_project
         except RuntimeError:
@@ -1869,6 +2137,25 @@ def _load_or_create_edit_project(job_dir: Path, job: dict[str, Any], item_id: st
         sentence["review_flags"] = ["repeat_candidate"] if any(str(token.get("id")) in repeat_ids for token in sentence.get("tokens", [])) else []
     _write_edit_project(job_dir, project)
     return project
+
+
+def _is_unedited_placeholder_project(project: dict[str, Any], item: dict[str, Any], job: dict[str, Any]) -> bool:
+    sentences = project.get("sentences") or []
+    if len(sentences) != 1:
+        return False
+    sentence = sentences[0]
+    expected_title = str(item.get("title") or job.get("params", {}).get("title") or "未命名视频").strip()
+    tokens = sentence.get("tokens") or []
+    return bool(
+        expected_title
+        and str(sentence.get("original_text") or "").strip() == expected_title
+        and str(sentence.get("text") or "").strip() == expected_title
+        and sentence.get("edited") is not True
+        and sentence.get("remove_video") is not True
+        and sentence.get("enabled", True) is True
+        and tokens
+        and all(str(token.get("timing_source") or "") == "estimated" and token.get("edited") is not True for token in tokens)
+    )
 
 
 def _blank_edit_project(job_dir: Path, job: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
@@ -2090,26 +2377,28 @@ def _reflow_project_sentences(
     result: list[dict[str, Any]] = []
     run: list[dict[str, Any]] = []
     layout_chunks: list[dict[str, Any]] = []
+    analysis = project.get("analysis", {}) if isinstance(project.get("analysis"), dict) else {}
+    holistic_enabled = bool(
+        analysis.get("pipeline_version") == "holistic-transcript-v1"
+        and not any(
+            sentence.get("edited") or sentence.get("timing_pending") or sentence.get("remove_video") or sentence.get("gap")
+            for sentence in project.get("sentences", [])
+        )
+    )
 
     def flush() -> None:
         if not run:
             return
         tokens = [dict(token) for sentence in run for token in sentence.get("tokens", [])]
-        preferred, required, forbidden = analysis_break_sets(tokens, project.get("analysis", {}))
-        if llm and llm.get("api_key"):
-            groups, layout_audit = layout_tokens_with_ai(
-                tokens,
-                style,
-                width,
-                height,
-                project.get("analysis", {}),
-                base_url=str(llm.get("base_url") or ""),
-                model=str(llm.get("model") or ""),
-                api_key=str(llm.get("api_key") or ""),
-                timeout=float(llm.get("timeout") or 60.0),
-                cache_dir=LLM_CACHE_DIR,
-            )
-            layout_chunks.extend(layout_audit.get("chunks", []))
+        preferred, required, forbidden = analysis_break_sets(tokens, analysis)
+        if holistic_enabled:
+            token_by_id = {str(token.get("id") or ""): token for token in tokens}
+            groups = [
+                [token_by_id[str(token_id)] for token_id in caption.get("token_ids", []) if str(token_id) in token_by_id]
+                for caption in analysis.get("captions", [])
+            ]
+            groups = [group for group in groups if any(str(token.get("text") or "") for token in group)]
+            layout_chunks.append({"status": "ai", "source": "holistic_transcript", "sentences": analysis.get("captions", [])})
         else:
             groups = segment_tokens(tokens, style, width, height, preferred, required, forbidden)
         run_start = float(run[0].get("clip_start", run[0].get("start", 0)))
@@ -3409,6 +3698,7 @@ def _recent_jobs(
     limit: int | None = 8,
     status: str = "",
     query: str = "",
+    archived: bool = False,
 ) -> list[dict[str, Any]]:
     JOBS_DIR.mkdir(parents=True, exist_ok=True)
     jobs = []
@@ -3418,6 +3708,7 @@ def _recent_jobs(
         except RuntimeError:
             continue
     jobs.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+    jobs = [item for item in jobs if bool(item.get("archived")) is archived]
     if status:
         jobs = [item for item in jobs if item.get("status") == status]
     needle = query.strip().casefold()
@@ -3429,6 +3720,161 @@ def _recent_jobs(
             or needle in str(item.get("params", {}).get("title") or "").casefold()
         ]
     return jobs if limit is None else jobs[: max(0, limit)]
+
+
+def _ai_lab_samples() -> list[dict[str, str]]:
+    samples: list[dict[str, str]] = []
+    for job in _recent_jobs(limit=None, archived=False):
+        job_id = str(job.get("id") or "")
+        for item in job.get("params", {}).get("items", []) or []:
+            item_id = str(item.get("id") or "001")
+            work_dir = JOBS_DIR / job_id / "work" / item_id
+            if not any((work_dir / name).is_file() for name in (
+                "aligned_transcript_segments.json", "raw_transcript_segments.json", "volcengine_segments.json"
+            )):
+                continue
+            samples.append({
+                "job_id": job_id,
+                "item_id": item_id,
+                "source_name": str(item.get("source_name") or item.get("title") or "未命名视频"),
+                "label": f"{job_id} / {item_id} · {item.get('source_name') or item.get('title') or '未命名视频'}",
+            })
+    return samples
+
+
+def _load_ai_lab_source(job_id: str, item_id: str) -> dict[str, Any]:
+    if not job_id:
+        raise HTTPException(status_code=400, detail="请选择一个已有任务")
+    job = _read_job(job_id)
+    item = next(
+        (row for row in job.get("params", {}).get("items", []) if str(row.get("id") or "001") == item_id),
+        None,
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="任务中没有这个视频")
+    work_dir = _job_path(job_id) / "work" / item_id
+    transcript_path = next((
+        work_dir / name for name in (
+            "aligned_transcript_segments.json", "raw_transcript_segments.json", "volcengine_segments.json"
+        ) if (work_dir / name).is_file()
+    ), None)
+    if transcript_path is None:
+        raise HTTPException(status_code=422, detail="这个视频还没有可供调试的 ASR token")
+    try:
+        segments = json.loads(transcript_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=422, detail="逐字稿文件无法读取") from exc
+    if not isinstance(segments, list):
+        raise HTTPException(status_code=422, detail="逐字稿数据格式不正确")
+    tokens = [
+        token
+        for segment in segments if isinstance(segment, dict)
+        for token in segment.get("tokens", []) if isinstance(token, dict)
+    ]
+    if not tokens:
+        raise HTTPException(status_code=422, detail="逐字稿中没有逐字时间戳")
+    media = item.get("media") if isinstance(item.get("media"), dict) else {}
+    width = int(media.get("width") or 0)
+    height = int(media.get("height") or 0)
+    if not width or not height:
+        source_video = Path(str(item.get("video") or ""))
+        if not source_video.is_file():
+            raise HTTPException(status_code=422, detail="无法确定视频尺寸")
+        width, height = video_size(source_video)
+    preset_id = str(job.get("params", {}).get("style_preset_id") or "default-white")
+    preset = get_style_preset(preset_id, STYLE_PRESETS_PATH)
+    subtitle_style = dict(preset.get("subtitle") or {})
+    capacity = build_layout_capacity(subtitle_style, width, height)
+    duration = max(float(token.get("end", 0)) for token in tokens)
+    return {
+        "tokens": tokens,
+        "subtitle_style": subtitle_style,
+        "capacity": capacity,
+        "auto_edit_mode": str(job.get("params", {}).get("auto_edit_mode") or "standard"),
+        "width": width,
+        "height": height,
+        "public": {
+            "job_id": job_id,
+            "item_id": item_id,
+            "source_name": str(item.get("source_name") or item.get("title") or "未命名视频"),
+            "token_count": len(tokens),
+            "duration": round(duration, 3),
+            "width": width,
+            "height": height,
+            "preset_id": preset_id,
+            "preset_name": str(preset.get("name") or preset_id),
+            "transcript_file": transcript_path.name,
+            "hard_width_px": capacity.get("hard_width_px"),
+            "recommended_max_units": capacity.get("recommended_max_units"),
+            "absolute_max_units": capacity.get("absolute_max_units"),
+        },
+    }
+
+
+def _job_progress(job: dict[str, Any]) -> dict[str, Any]:
+    items = job.get("params", {}).get("items", []) or []
+    active_index = next(
+        (index for index, item in enumerate(items) if item.get("status") in {"running", "paused", "pausing"}),
+        next((index for index, item in enumerate(items) if item.get("status") != "done"), max(0, len(items) - 1)),
+    )
+    item = items[active_index] if items else {"id": "001", "status": job.get("status")}
+    checkpoint_dir = JOBS_DIR / str(job.get("id")) / "work" / str(item.get("id") or "001") / "checkpoints"
+    completed = [key for key, _ in PIPELINE_STEPS if (checkpoint_dir / f"stage_{key}.json").exists()]
+    completed_items = sum(1 for value in items if value.get("status") == "done")
+    step_fraction = len(completed) / max(1, len(PIPELINE_STEPS))
+    percent = round(100 * (completed_items + step_fraction) / max(1, len(items) or 1))
+    try:
+        created = datetime.fromisoformat(str(job.get("run_started_at") or job.get("created_at") or ""))
+        terminal = job.get("status") in {"done", "failed", "paused", "cancelled"}
+        end = datetime.fromisoformat(str(job.get("updated_at") or "")) if terminal else datetime.now()
+        elapsed = max(0, int((end - created).total_seconds()))
+    except ValueError:
+        elapsed = 0
+    eta = (
+        None
+        if job.get("status") in {"done", "failed", "paused", "cancelled"}
+        else (round(elapsed * (100 - percent) / percent) if 0 < percent < 100 else (0 if percent >= 100 else None))
+    )
+    current_key = completed[-1] if completed else str(job.get("stage") or "queued")
+    current_label = next((label for key, label in PIPELINE_STEPS if key == current_key), STAGES.get(current_key, current_key))
+    quality_status = "pending"
+    if job.get("status") == "failed" and "质量门" in str(job.get("error") or ""):
+        quality_status = "blocked"
+    elif job.get("status") == "done":
+        quality_status = "passed"
+    if quality_status == "blocked":
+        current_key, current_label = "quality_gate", "质量门阻止发布"
+    elif job.get("status") == "failed":
+        current_key, current_label = "failed", "处理失败"
+    return {
+        "stage": current_key,
+        "stage_label": current_label,
+        "completed_steps": len(completed),
+        "total_steps": len(PIPELINE_STEPS),
+        "steps": [{"key": key, "label": label, "done": key in completed} for key, label in PIPELINE_STEPS],
+        "item_index": active_index + 1 if items else 1,
+        "item_count": len(items) or 1,
+        "percent": min(100, max(0, percent)),
+        "elapsed_seconds": elapsed,
+        "eta_seconds": eta,
+        "pause_pending": job.get("status") == "pausing",
+        "quality_status": quality_status,
+    }
+
+
+def _output_file_groups(job_id: str) -> dict[str, Any]:
+    files = _output_files(job_id)
+    batch = [item for item in files if item["name"].endswith(".zip")]
+    groups: dict[str, dict[str, Any]] = {}
+    for item in files:
+        if item in batch:
+            continue
+        parts = item["name"].split("/", 1)
+        item_id = parts[0] if len(parts) > 1 else "其他"
+        group = groups.setdefault(item_id, {"id": item_id, "primary": [], "technical": []})
+        target = group["primary"] if Path(item["name"]).suffix.lower() in {".mp4", ".jpg"} else group["technical"]
+        target.append(item)
+    return {"batch": batch, "items": list(groups.values())}
 
 
 def _output_files(job_id: str) -> list[dict[str, str]]:
@@ -3444,7 +3890,8 @@ def _output_files(job_id: str) -> list[dict[str, str]]:
         if path.suffix.lower() not in {".mp4", ".jpg", ".srt", ".ass", ".json", ".zip"}:
             continue
         files.append(_output_file_item(job_dir, path, rel))
-    files.sort(key=lambda item: (0 if item["name"].endswith(".zip") else 1, item["name"]))
+    priority = {".zip": 0, ".mp4": 1, ".jpg": 2, ".srt": 3, ".ass": 4, ".json": 5}
+    files.sort(key=lambda item: (priority.get(Path(item["name"]).suffix.lower(), 9), item["name"]))
     return files
 
 
@@ -3631,7 +4078,7 @@ def _public_settings(settings: dict[str, Any]) -> dict[str, Any]:
     return {
         "volc_app_id": settings.get("volc_app_id", ""),
         "has_volc_access_token": bool(token),
-        "subtitle_delay": settings.get("subtitle_delay", 0.0),
+        "subtitle_delay": settings.get("subtitle_delay", -0.12),
         "detect_disfluency": bool(settings.get("detect_disfluency", False)),
         "llm_enabled": bool(settings.get("llm_enabled", False)),
         "llm_base_url": settings.get("llm_base_url", ""),

@@ -17,14 +17,13 @@
       <nav class="nav-links" aria-label="主要导航">
         <a class="nav-link is-active" href="/jobs">任务</a>
         <a class="nav-link" href="/style-presets">样式预设</a>
-        <a class="nav-link" href="/evaluation">质量</a>
         <a class="nav-link" href="/settings">设置</a>
       </nav>
     </header>
 
     <main class="workspace jobs-workspace">
       <div class="page-title">
-        <div><p class="section-kicker">Tasks</p><h1>全部任务</h1></div>
+        <div><p class="section-kicker">任务中心</p><h1>{{ '已归档任务' if show_archived else '全部任务' }}</h1></div>
         <a class="primary-action small" href="/">新建任务</a>
       </div>
 
@@ -44,13 +43,15 @@
             </select>
           </label>
           <button class="ghost-button" type="submit">筛选</button>
+          <a class="ghost-link" href="/jobs?archived={{ '0' if show_archived else '1' }}">{{ '查看当前任务' if show_archived else '查看归档' }}</a>
           {% if query or active_status %}<a class="ghost-link" href="/jobs">清除</a>{% endif %}
         </form>
 
         {% if jobs %}
         <div class="task-history-list">
           {% for job in jobs %}
-          <a class="task-history-row" href="/jobs/{{ job.id }}">
+          <div class="task-history-row">
+            <a class="task-history-main" href="/jobs/{{ job.id }}">
             <span class="queue-main">
               <strong>{{ job.params.title or '未命名任务' }}</strong>
               <small>{{ job.id }} · {{ job.created_at }}</small>
@@ -59,13 +60,20 @@
               <em class="{{ job.status }}">{{ status_labels.get(job.status, job.status) }}</em>
               <span aria-hidden="true">›</span>
             </span>
-          </a>
+            </a>
+            <form method="post" action="/jobs/{{ job.id }}/{{ 'restore' if show_archived else 'archive' }}"><button class="ghost-button small" type="submit">{{ '恢复' if show_archived else '归档' }}</button></form>
+          </div>
           {% endfor %}
         </div>
         {% else %}
         <div class="empty-state"><strong>没有匹配的任务</strong><p>调整搜索条件，或返回首页创建新任务。</p></div>
         {% endif %}
       </section>
+      {% if total_pages > 1 %}<nav class="pagination" aria-label="任务分页">
+        {% if page > 1 %}<a class="ghost-button" href="/jobs?page={{ page - 1 }}&status={{ active_status }}&q={{ query }}&archived={{ '1' if show_archived else '0' }}">上一页</a>{% endif %}
+        <span>第 {{ page }} / {{ total_pages }} 页</span>
+        {% if page < total_pages %}<a class="ghost-button" href="/jobs?page={{ page + 1 }}&status={{ active_status }}&q={{ query }}&archived={{ '1' if show_archived else '0' }}">下一页</a>{% endif %}
+      </nav>{% endif %}
     </main>
   </div>
 </body>

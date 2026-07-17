@@ -24,17 +24,17 @@
       <nav class="nav-links" aria-label="主要导航">
         <a class="nav-link" href="/">任务</a>
         <a class="nav-link is-active" href="/style-presets">样式预设</a>
-        <a class="nav-link" href="/evaluation">质量</a>
         <a class="nav-link" href="/settings">设置</a>
       </nav>
     </header>
 
     <main class="workspace inspector-workspace">
       <div class="inspector-layout">
+        {% if is_draft %}<p class="draft-notice" role="status"><strong>未保存草稿</strong> 调整不会写入预设列表，只有点击“保存预设”才会创建。</p>{% endif %}
         <aside class="surface preset-sidebar">
           <div class="surface-head">
             <div>
-              <p class="section-kicker">Styles</p>
+              <p class="section-kicker">样式</p>
               <h2>预设</h2>
             </div>
           </div>
@@ -48,7 +48,7 @@
             </a>
             {% endfor %}
           </div>
-          <form action="/style-presets" method="post" class="inline-actions">
+          <form action="/style-presets" method="post" class="inline-actions" {% if is_draft %}hidden{% endif %}>
             <input type="hidden" name="action" value="create">
             <input type="hidden" name="preview_path" value="{{ preview }}">
             <input type="hidden" name="active_text_style" value="{{ active_style }}">
@@ -70,7 +70,7 @@
         <section class="surface preview-panel">
           <div class="surface-head">
             <div>
-              <p class="section-kicker">Canvas</p>
+              <p class="section-kicker">画布</p>
               <h2>预览画布</h2>
             </div>
           </div>
@@ -196,8 +196,8 @@
                 </div>
                 <label class="capcut-switch"><span>等比缩放</span><input type="checkbox" name="uniform_scale" value="1" {{ 'checked' if selected.subtitle.uniform_scale else '' }}></label>
                 <div class="capcut-row two">
-                  <label>Scale X</label><input type="number" name="scale_x" value="{{ selected.subtitle.scale_x }}">
-                  <label>Scale Y</label><input type="number" name="scale_y" value="{{ selected.subtitle.scale_y }}">
+                  <label>水平缩放</label><input type="number" name="scale_x" value="{{ selected.subtitle.scale_x }}">
+                  <label>垂直缩放</label><input type="number" name="scale_y" value="{{ selected.subtitle.scale_y }}">
                 </div>
                 <div class="capcut-row two">
                   <label>X</label><input type="number" name="position_x" value="{{ selected.subtitle.position_x }}">
@@ -246,7 +246,7 @@
 
             <div class="form-actions sticky-actions">
               <button class="primary-button" type="submit" name="action" value="save">保存预设</button>
-              <button id="delete-preset-btn" class="danger-button" type="submit" name="action" value="delete">删除预设</button>
+              {% if not is_draft %}<button id="delete-preset-btn" class="danger-button" type="submit" name="action" value="delete">删除预设</button>{% endif %}
             </div>
           </form>
         </section>

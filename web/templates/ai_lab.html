@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 字幕实验室 · AI-cutting</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/style.css?v=ai-lab-1">
+</head>
+<body class="lab-body">
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="返回 AI-cutting 首页">
+        <span class="brand-mark" aria-hidden="true">AI</span>
+        <span><strong>AI-cutting</strong><small>字幕决策实验室</small></span>
+      </a>
+      <nav class="nav-links" aria-label="主要导航">
+        <a class="nav-link" href="/jobs">任务</a>
+        <a class="nav-link" href="/style-presets">样式预设</a>
+        <a class="nav-link is-active" href="/ai-lab">AI 实验室</a>
+        <a class="nav-link" href="/settings">设置</a>
+      </nav>
+    </header>
+
+    <main class="lab-workspace">
+      <header class="lab-heading">
+        <div>
+          <p class="section-kicker">开发与验收 · {{ prompt_version }}</p>
+          <h1>AI 字幕实验室</h1>
+          <p>使用真实 ASR 完整原文和预设宽度反复测试标记提示词；只模拟决策与校验，不剪视频，也不覆盖原任务。</p>
+        </div>
+        <div id="run-state" class="lab-run-state idle" role="status" aria-live="polite">等待运行</div>
+      </header>
+
+      {% if samples %}
+      <section class="lab-source-bar" aria-label="调试样本">
+        <label class="field lab-source-select">
+          <span>真实任务样本</span>
+          <select id="sample-select">
+            {% for sample in samples %}
+            <option value="{{ sample.job_id }}::{{ sample.item_id }}" {{ 'selected' if sample.job_id == selected_job_id and sample.item_id == selected_item_id else '' }}>{{ sample.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div id="source-facts" class="lab-source-facts" aria-live="polite"></div>
+      </section>
+
+      <div class="lab-grid">
+        <section class="lab-panel lab-prompt-panel" aria-labelledby="prompt-title">
+          <div class="lab-panel-head">
+            <div><span class="lab-step">01</span><h2 id="prompt-title">提示词</h2></div>
+            <div class="lab-head-actions">
+              <button id="reset-prompt" class="ghost-button small" type="button">恢复生产版</button>
+              <button id="copy-prompt" class="ghost-button small" type="button">复制</button>
+            </div>
+          </div>
+          <label class="sr-only" for="prompt-editor">DeepSeek 系统提示词</label>
+          <textarea id="prompt-editor" class="lab-prompt-editor" spellcheck="false"></textarea>
+          <div class="lab-prompt-foot">
+            <span id="prompt-count">0 字</span>
+            <span>Ctrl + Enter 运行</span>
+          </div>
+          <button id="run-lab" class="primary-button lab-run-button" type="button">模拟生成字幕</button>
+          <p class="lab-safety-note">使用设置页已保存的 API Key，密钥不会发送到浏览器。正常产生 1 次调用；确定性校验失败时会携带具体错误完整重试 1 次。</p>
+        </section>
+
+        <section class="lab-panel lab-result-panel" aria-labelledby="result-title">
+          <div class="lab-panel-head">
+            <div><span class="lab-step">02</span><h2 id="result-title">校验与字幕时间轴</h2></div>
+            <span id="result-badge" class="lab-result-badge neutral">尚未运行</span>
+          </div>
+          <div id="result-summary" class="lab-metrics" aria-live="polite">
+            <div><span>字幕</span><strong>—</strong></div>
+            <div><span>纠错</span><strong>—</strong></div>
+            <div><span>删除</span><strong>—</strong></div>
+            <div><span>耗时</span><strong>—</strong></div>
+          </div>
+          <div id="validation-errors" class="lab-errors" hidden></div>
+          <div id="decision-review" class="lab-decision-review" hidden></div>
+          <div class="lab-preview-area">
+            <div id="caption-stage" class="lab-caption-stage" aria-label="字幕模拟预览">
+              <span>点击运行后查看字幕</span>
+            </div>
+            <div id="caption-meta" class="lab-caption-meta">这里显示真实像素宽度，不代表视频已渲染。</div>
+          </div>
+          <div id="caption-list" class="lab-caption-list">
+            <div class="lab-empty"><strong>还没有模拟结果</strong><span>加载样本后修改提示词，再运行一次。</span></div>
+          </div>
+        </section>
+
+        <aside class="lab-panel lab-inspector" aria-labelledby="inspector-title">
+          <div class="lab-panel-head">
+            <div><span class="lab-step">03</span><h2 id="inspector-title">发送与返回</h2></div>
+          </div>
+          <div class="lab-tabs" role="tablist" aria-label="数据检查器">
+            <button class="lab-tab is-active" role="tab" aria-selected="true" aria-controls="request-pane" id="request-tab" type="button">发送给 AI</button>
+            <button class="lab-tab" role="tab" aria-selected="false" aria-controls="response-pane" id="response-tab" type="button">AI 原始返回</button>
+          </div>
+          <section id="request-pane" class="lab-code-pane" role="tabpanel" aria-labelledby="request-tab">
+            <p>这是生产运行时传给 DeepSeek 的完整原文和宽度约束，不包含 token 索引、时间戳或 API Key。</p>
+            <pre id="request-json">正在载入真实 token…</pre>
+          </section>
+          <section id="response-pane" class="lab-code-pane" role="tabpanel" aria-labelledby="response-tab" hidden>
+            <p>这里保留模型原样标注文案，便于检查字幕、删除和纠错标记。</p>
+            <pre id="response-json">尚未运行</pre>
+          </section>
+        </aside>
+      </div>
+      {% else %}
+      <section class="surface task-surface lab-no-samples">
+        <strong>还没有可调试的逐字稿</strong>
+        <p>先让任一视频至少完成 ASR，实验室就能读取它的真实 token 和时间戳。</p>
+        <a class="primary-button" href="/">创建任务</a>
+      </section>
+      {% endif %}
+    </main>
+  </div>
+
+  {% if samples %}
+  <script>
+    const sampleSelect = document.getElementById("sample-select");
+    const promptEditor = document.getElementById("prompt-editor");
+    const promptCount = document.getElementById("prompt-count");
+    const runButton = document.getElementById("run-lab");
+    const runState = document.getElementById("run-state");
+    const sourceFacts = document.getElementById("source-facts");
+    const requestJson = document.getElementById("request-json");
+    const responseJson = document.getElementById("response-json");
+    const resultBadge = document.getElementById("result-badge");
+    const resultSummary = document.getElementById("result-summary");
+    const validationErrors = document.getElementById("validation-errors");
+    const decisionReview = document.getElementById("decision-review");
+    const captionList = document.getElementById("caption-list");
+    const captionStage = document.getElementById("caption-stage");
+    const captionMeta = document.getElementById("caption-meta");
+    let productionPrompt = "";
+    let sourceContext = null;
+    const promptStorageKey = () => `ai-cutting-lab-prompt:${sourceContext?.prompt_version || "unknown"}`;
+
+    const selectedSource = () => {
+      const [jobId, itemId] = sampleSelect.value.split("::");
+      return {jobId, itemId};
+    };
+    const formatJson = (value) => JSON.stringify(value, null, 2);
+    const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
+    const deletionTypeLabel = (value) => ({stutter:"结巴",false_start:"假起始",exact_repeat:"精确重复",semantic_repeat:"语义重复",filler:"填充词",redundant:"赘词"}[value] || value || "删除");
+    const safetyReasonLabel = (value) => ({protected_content:"英文、数字或业务保护内容",policy_or_confidence:"类型或置信度未达标",non_contiguous_tokens:"删除范围不连续",overlapping_delete:"删除范围重叠",exact_repeat_not_found:"相邻位置没有完整重复",restart_prefix_not_found:"没有找到重新起句证据",deletion_budget_exceeded:"删除比例超过安全上限",redundancy_range_too_large:"赘词范围过大",orphaned_consequence:"删除后承接句失去前文",validated_redundancy:"高置信赘词且语义存活",verified:"本地证据验证通过",not_applied:"未执行"}[value] || value || "未执行");
+    const updatePromptCount = () => { promptCount.textContent = `${promptEditor.value.length} 字`; };
+    const setRunState = (text, kind) => {
+      runState.textContent = text;
+      runState.className = `lab-run-state ${kind}`;
+    };
+    const showFacts = (source, configured, model) => {
+      sourceFacts.innerHTML = [
+        `<span><strong>${source.token_count}</strong> tokens</span>`,
+        `<span><strong>${source.width}×${source.height}</strong> 画面</span>`,
+        `<span><strong>${source.preset_name}</strong> 预设</span>`,
+        `<span><strong>${Math.round(source.hard_width_px || 0)}px</strong> 硬宽度</span>`,
+        `<span class="${configured ? "is-ready" : "is-missing"}">${configured ? model + " 已配置" : "DeepSeek 未配置"}</span>`,
+      ].join("");
+    };
+    async function loadContext({keepPrompt = true} = {}) {
+      const {jobId, itemId} = selectedSource();
+      setRunState("载入真实输入", "running");
+      runButton.disabled = true;
+      try {
+        const response = await fetch(`/api/ai-lab/context?job_id=${encodeURIComponent(jobId)}&item=${encodeURIComponent(itemId)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "载入失败");
+        sourceContext = data;
+        productionPrompt = data.prompt;
+        if (!keepPrompt || !promptEditor.value) {
+          promptEditor.value = localStorage.getItem(promptStorageKey()) || productionPrompt;
+          updatePromptCount();
+        }
+        requestJson.textContent = formatJson(data.request_input);
+        showFacts(data.source, data.configured, data.model);
+        setRunState("真实输入已就绪", "idle");
+        const url = new URL(location.href);
+        url.searchParams.set("job_id", jobId);
+        url.searchParams.set("item", itemId);
+        history.replaceState(null, "", url);
+      } catch (error) {
+        setRunState(error.message || "载入失败", "failed");
+        requestJson.textContent = error.message || "载入失败";
+      } finally {
+        runButton.disabled = false;
+      }
+    }
+    function showCaption(caption, hardWidth) {
+      captionStage.innerHTML = `<strong>${escapeHtml(caption.text)}</strong>`;
+      captionMeta.textContent = `${caption.start.toFixed(2)}s – ${caption.end.toFixed(2)}s · token ${caption.start_i}–${caption.end_i} · ${caption.width_px ?? "—"}px / ${Math.round(hardWidth || 0)}px`;
+    }
+    function showDeletion(deletion) {
+      const accepted = deletion.accepted;
+      captionStage.innerHTML = `<strong class="lab-deleted-preview">${escapeHtml(deletion.source_text)}</strong>`;
+      captionMeta.textContent = `${deletion.start.toFixed(2)}s – ${deletion.end.toFixed(2)}s · token ${deletion.start_i}–${deletion.end_i} · ${accepted ? "正式安全门允许删除" : "正式安全门拒绝，成片会保留"}`;
+    }
+    function renderDecisions(corrections, deletions) {
+      if (!corrections.length && !deletions.length) {
+        decisionReview.hidden = true;
+        decisionReview.innerHTML = "";
+        return;
+      }
+      const deletionRows = deletions.map((row) => `<div class="lab-decision-row ${row.accepted ? "accepted" : "rejected"}">
+        <span>${row.accepted ? "将删除" : "安全门拒绝，原文已保留"}</span>
+        <strong>${escapeHtml(row.source_text)}</strong>
+        <small>token ${row.start_i}–${row.end_i} · ${escapeHtml(deletionTypeLabel(row.type))} · ${Math.round(Number(row.confidence || 0) * 100)}% · ${escapeHtml(safetyReasonLabel(row.safety_reason))}</small>
+      </div>`).join("");
+      const correctionRows = corrections.map((row) => `<div class="lab-decision-row corrected">
+        <span>纠错</span>
+        <strong><s>${escapeHtml(row.source_text)}</s> → ${escapeHtml(row.replacement)}</strong>
+        <small>token ${row.start_i}–${row.end_i} · ${Math.round(Number(row.confidence || 0) * 100)}% · ${escapeHtml(row.reason)}</small>
+      </div>`).join("");
+      decisionReview.hidden = false;
+      decisionReview.innerHTML = `<details open><summary>删除审查 <b>${deletions.length}</b></summary>${deletionRows || '<p class="lab-none">没有删除候选</p>'}</details>
+        <details ${corrections.length ? "open" : ""}><summary>纠错审查 <b>${corrections.length}</b></summary>${correctionRows || '<p class="lab-none">没有纠错</p>'}</details>`;
+    }
+    function renderCaptions(captions, deletions, hardWidth) {
+      if (!captions.length && !deletions.length) {
+        captionList.innerHTML = `<div class="lab-empty"><strong>没有生成合法字幕</strong><span>查看上方校验错误和 AI 原始返回。</span></div>`;
+        captionStage.innerHTML = "<span>没有可预览字幕</span>";
+        return;
+      }
+      const events = [
+        ...captions.map((row, index) => ({...row, eventType: "caption", sourceIndex: index})),
+        ...deletions.map((row, index) => ({...row, eventType: "deletion", sourceIndex: index})),
+      ].sort((left, right) => left.start_i - right.start_i || (left.eventType === "deletion" ? -1 : 1));
+      captionList.innerHTML = events.map((event, eventIndex) => {
+        if (event.eventType === "deletion") {
+          return `<button class="lab-caption-row lab-deletion-row ${event.accepted ? "accepted" : "rejected"}" type="button" data-event="${eventIndex}">
+            <span class="lab-caption-time">${event.start.toFixed(1)}–${event.end.toFixed(1)}s</span>
+            <strong><s>${escapeHtml(event.source_text)}</s> <em>${event.accepted ? "将删除" : "会保留"}</em></strong>
+            <span class="lab-width"></span>
+            <span class="lab-width-value">${event.accepted ? "删除" : "已保留"}</span>
+          </button>`;
+        }
+        const ratio = Math.min(100, Math.round((Number(event.width_px || 0) / Math.max(1, hardWidth)) * 100));
+        return `<button class="lab-caption-row" type="button" data-event="${eventIndex}">
+          <span class="lab-caption-time">${event.start.toFixed(1)}–${event.end.toFixed(1)}s</span>
+          <strong>${escapeHtml(event.text)}</strong>
+          <span class="lab-width"><i style="width:${ratio}%"></i></span>
+          <span class="lab-width-value">${event.width_px ?? "—"}px</span>
+        </button>`;
+      }).join("");
+      captionList.querySelectorAll(".lab-caption-row").forEach((button) => {
+        button.addEventListener("click", () => {
+          const event = events[Number(button.dataset.event)];
+          if (event.eventType === "deletion") showDeletion(event);
+          else showCaption(event, hardWidth);
+        });
+      });
+      const first = events[0];
+      if (first.eventType === "deletion") showDeletion(first);
+      else showCaption(first, hardWidth);
+    }
+    async function runLab() {
+      const {jobId, itemId} = selectedSource();
+      const prompt = promptEditor.value.trim();
+      if (!prompt) { promptEditor.focus(); return; }
+      localStorage.setItem(promptStorageKey(), prompt);
+      runButton.disabled = true;
+      runButton.textContent = "DeepSeek 分析中…";
+      setRunState("正在调用 DeepSeek；校验失败最多自动重试一次", "running");
+      resultBadge.textContent = "校验中";
+      resultBadge.className = "lab-result-badge neutral";
+      validationErrors.hidden = true;
+      try {
+        const response = await fetch("/api/ai-lab/run", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({job_id: jobId, item_id: itemId, prompt}),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "模拟失败");
+        requestJson.textContent = formatJson(data.request_input);
+        try { responseJson.textContent = formatJson(JSON.parse(data.raw_response)); }
+        catch (_) { responseJson.textContent = data.raw_response || "模型没有返回正文"; }
+        const passed = Boolean(data.ok);
+        resultBadge.textContent = passed ? "本地校验通过" : "本地校验未通过";
+        resultBadge.className = `lab-result-badge ${passed ? "passed" : "failed"}`;
+        setRunState(passed ? "这份结果可以进入生产执行" : "结果已拦截，原任务未受影响", passed ? "passed" : "failed");
+        resultSummary.innerHTML = `
+          <div><span>字幕</span><strong>${data.captions.length}</strong></div>
+          <div><span>纠错</span><strong>${data.corrections.length}</strong></div>
+          <div><span>删除</span><strong>${data.deletions.length}</strong></div>
+          <div><span>调用 / 末次耗时</span><strong>${data.attempt_count || 1}次 · ${(Number(data.latency_ms || 0) / 1000).toFixed(1)}s</strong></div>`;
+        const errors = data.errors || [];
+        validationErrors.hidden = errors.length === 0;
+        validationErrors.innerHTML = errors.length ? `<strong>为什么没通过</strong>${errors.map((error) => `<p>${error}</p>`).join("")}` : "";
+        renderDecisions(data.corrections, data.deletions);
+        renderCaptions(data.captions, data.deletions, data.source.hard_width_px);
+      } catch (error) {
+        resultBadge.textContent = "运行失败";
+        resultBadge.className = "lab-result-badge failed";
+        validationErrors.hidden = false;
+        validationErrors.innerHTML = `<strong>无法运行</strong><p>${error.message || "未知错误"}</p>`;
+        setRunState(error.message || "运行失败", "failed");
+      } finally {
+        runButton.disabled = false;
+        runButton.textContent = "模拟生成字幕";
+      }
+    }
+    document.getElementById("reset-prompt").addEventListener("click", () => {
+      promptEditor.value = productionPrompt;
+      localStorage.removeItem(promptStorageKey());
+      updatePromptCount();
+    });
+    document.getElementById("copy-prompt").addEventListener("click", async (event) => {
+      await navigator.clipboard.writeText(promptEditor.value);
+      event.currentTarget.textContent = "已复制";
+      setTimeout(() => { event.currentTarget.textContent = "复制"; }, 1200);
+    });
+    document.querySelectorAll(".lab-tab").forEach((tab) => tab.addEventListener("click", () => {
+      document.querySelectorAll(".lab-tab").forEach((row) => {
+        const active = row === tab;
+        row.classList.toggle("is-active", active);
+        row.setAttribute("aria-selected", String(active));
+        document.getElementById(row.getAttribute("aria-controls")).hidden = !active;
+      });
+    }));
+    promptEditor.addEventListener("input", updatePromptCount);
+    promptEditor.addEventListener("keydown", (event) => {
+      if (event.ctrlKey && event.key === "Enter") { event.preventDefault(); runLab(); }
+    });
+    sampleSelect.addEventListener("change", () => loadContext({keepPrompt: true}));
+    runButton.addEventListener("click", runLab);
+    loadContext({keepPrompt: false});
+  </script>
+  {% endif %}
+</body>
+</html>

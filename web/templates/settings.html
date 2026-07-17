@@ -24,7 +24,6 @@
       <nav class="nav-links" aria-label="主要导航">
         <a class="nav-link" href="/">任务</a>
         <a class="nav-link" href="/style-presets">样式预设</a>
-        <a class="nav-link" href="/evaluation">质量</a>
         <a class="nav-link is-active" href="/settings">设置</a>
       </nav>
     </header>
@@ -72,19 +71,19 @@
             </label>
             <div class="credential-grid">
               <label class="field">
-                <span>OpenAI-compatible Base URL</span>
+                <span>模型接口地址</span>
                 <input type="url" name="llm_base_url" value="{{ settings.llm_base_url }}" placeholder="https://api.example.com/v1" autocomplete="off">
               </label>
               <label class="field">
-                <span>Model</span>
+                <span>模型名称</span>
                 <input type="text" name="llm_model" value="{{ settings.llm_model }}" placeholder="模型名称" autocomplete="off">
               </label>
               <label class="field">
-                <span>API Key</span>
+                <span>API 密钥</span>
                 <input type="password" name="llm_api_key" placeholder="{{ '已保存，留空则不修改' if settings.has_llm_api_key else '粘贴 API Key' }}" autocomplete="off">
               </label>
             </div>
-            <p class="field-note">只发送带编号的字幕文本，不上传音频或视频。纠错可自动生效，重复内容只标记等待确认。</p>
+            <p class="field-note">只发送带编号的字幕文本，不上传音频或视频。纠错、删词和断句必须通过自动质量门才会进入成片。</p>
             <div class="submit-row compact-submit-row">
               <button id="test-llm-btn" class="secondary-action" type="button">测试已保存配置</button>
               <span id="test-llm-status" class="field-note" aria-live="polite"></span>
@@ -110,8 +109,9 @@
             <legend>字幕与剪辑微调</legend>
             <div class="credential-grid">
               <label class="field">
-                <span>字幕延迟（秒）</span>
-                <input type="number" name="subtitle_delay" step="0.1" value="{{ settings.subtitle_delay }}">
+                <span>字幕时间偏移（秒）</span>
+                <input type="number" name="subtitle_delay" step="0.01" value="{{ settings.subtitle_delay }}">
+                <small class="field-note">负数表示字幕提前出现；默认 -0.12 秒用于补偿语音识别时间戳的感知滞后。</small>
               </label>
               <label class="check block-check">
                 <input type="checkbox" name="detect_disfluency" value="1" {{ 'checked' if settings.detect_disfluency else '' }}>
@@ -125,6 +125,14 @@
           </div>
         </form>
       </section>
+      <details class="surface task-surface developer-settings">
+        <summary><strong>开发与验收</strong><small>固定样本、AI 决策记录和自动质量门</small></summary>
+        <p class="field-note">这是内部质量工具，不影响创作者日常任务导航。</p>
+        <div class="submit-row compact-submit-row">
+          <a class="secondary-action small" href="/ai-lab">打开 AI 字幕实验室</a>
+          <a class="secondary-action small" href="/evaluation">打开本地质量验收</a>
+        </div>
+      </details>
     </main>
   </div>
   <script>

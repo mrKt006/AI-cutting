@@ -3,9 +3,11 @@ from __future__ import annotations
 import re
 import shutil
 import tempfile
+import math
+from copy import deepcopy
 from pathlib import Path
 
-from ffmpeg_utils import run
+from ffmpeg_utils import media_duration, run
 from style_presets import DEFAULT_STYLE_PRESETS, hex_to_rgba
 
 
@@ -13,15 +15,61 @@ def make_cover(video: Path, title: str, output: Path, style: dict | None = None,
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         frame = Path(tmp) / "frame.jpg"
-        command = ["ffmpeg", "-y"]
+        render_style = deepcopy(style or DEFAULT_STYLE_PRESETS[0]["cover_title"])
         if frame_time > 0:
-            command.extend(["-ss", f"{float(frame_time):.3f}"])
-        command.extend(["-i", str(video), "-frames:v", "1", "-q:v", "2", str(frame)])
-        run(command)
+            _extract_frame(video, frame, frame_time)
+        else:
+            selected, placement = _select_cover_frame(video, Path(tmp))
+            shutil.copyfile(selected, frame)
+            if render_style.get("auto_position", True):
+                render_style["position_y"] = -520 if placement == "top" else 520
         try:
-            _draw_title(frame, title, output, style=style)
+            _draw_title(frame, title, output, style=render_style)
         except Exception:
             shutil.copyfile(frame, output)
+
+
+def _extract_frame(video: Path, output: Path, frame_time: float) -> None:
+    run(
+        [
+            "ffmpeg", "-y", "-ss", f"{max(0.0, float(frame_time)):.3f}", "-i", str(video),
+            "-frames:v", "1", "-q:v", "2", str(output),
+        ]
+    )
+
+
+def _select_cover_frame(video: Path, directory: Path, count: int = 12) -> tuple[Path, str]:
+    duration = max(0.1, media_duration(video))
+    candidates: list[tuple[float, Path, str]] = []
+    for index in range(count):
+        ratio = 0.10 + (0.60 * index / max(1, count - 1))
+        path = directory / f"candidate-{index:02d}.jpg"
+        _extract_frame(video, path, duration * ratio)
+        score, placement = _frame_score(path)
+        candidates.append((score, path, placement))
+    _, path, placement = max(candidates, key=lambda item: item[0])
+    return path, placement
+
+
+def _frame_score(path: Path) -> tuple[float, str]:
+    from PIL import Image, ImageFilter, ImageStat
+
+    image = Image.open(path).convert("L").resize((270, 480))
+    width, height = image.size
+    edges = image.filter(ImageFilter.FIND_EDGES)
+    sharpness = ImageStat.Stat(edges).var[0]
+    exposure = ImageStat.Stat(image).mean[0]
+    exposure_penalty = abs(exposure - 135) * 0.7
+    top = edges.crop((0, int(height * 0.10), width, int(height * 0.38)))
+    bottom = edges.crop((0, int(height * 0.62), width, int(height * 0.92)))
+    center = edges.crop((int(width * 0.275), int(height * 0.25), int(width * 0.725), int(height * 0.80)))
+    top_clutter = ImageStat.Stat(top).mean[0]
+    bottom_clutter = ImageStat.Stat(bottom).mean[0]
+    center_clutter = ImageStat.Stat(center).mean[0]
+    placement = "top" if top_clutter <= bottom_clutter else "bottom"
+    title_clutter = min(top_clutter, bottom_clutter)
+    score = math.log1p(sharpness) * 34 - exposure_penalty - title_clutter * 1.8 - center_clutter * 0.35
+    return score, placement
 
 
 def _draw_title(frame: Path, title: str, output: Path, style: dict | None = None) -> None:
@@ -46,7 +94,8 @@ def _draw_title(frame: Path, title: str, output: Path, style: dict | None = None
     if "position_x" in style or "position_y" in style:
         x = round(width / 2 + float(style.get("position_x", 0)) * width / 1080 - max_text_w / 2)
         y = round(height / 2 + float(style.get("position_y", -520)) * height / 1920 - total_h / 2)
-        x, y = max(pad, x), max(pad, y)
+        x = min(max(pad, x), max(pad, width - max_text_w - pad))
+        y = min(max(pad, y), max(pad, height - total_h - pad))
     else:
         x, y = _position_box(
             int(style.get("alignment", 8)),
@@ -58,6 +107,8 @@ def _draw_title(frame: Path, title: str, output: Path, style: dict | None = None
             round(float(style.get("margin_y", 260)) * height / 1920),
             pad,
         )
+        x = min(max(pad, x), max(pad, width - max_text_w - pad))
+        y = min(max(pad, y), max(pad, height - total_h - pad))
 
     if style.get("background_enabled", True):
         overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))

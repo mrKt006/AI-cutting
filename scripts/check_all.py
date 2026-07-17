@@ -58,6 +58,8 @@ def main() -> int:
         ("Transcript alignment", [py, "scripts/check_transcript_alignment.py"]),
         ("Pause checkpoints", [py, "scripts/check_pause_checkpoints.py"]),
         ("Pipeline resume", [py, "scripts/check_pipeline_resume.py"]),
+        ("Render profile compatibility", [py, "scripts/check_render_profiles.py"]),
+        ("Subtitle timing offset", [py, "scripts/check_subtitle_timing.py"]),
         ("Evaluation report", [py, "scripts/check_evaluation_report.py"]),
         ("Training export", [py, "scripts/check_training_export.py"]),
         ("Subtitle intelligence", [py, "scripts/check_subtitle_intelligence.py"]),

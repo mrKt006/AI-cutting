@@ -12,16 +12,15 @@ from datetime import datetime
 from pathlib import Path
 
 from cut_silence import Segment, build_keep_segments, cut_video, detect_silences
-from ai_layout import layout_tokens_with_ai
 from disfluency import detect_repeated_utterances
 from ffmpeg_utils import media_duration, require_tool, video_size
 from make_cover import make_cover
-from llm_analysis import analyze_transcript, apply_high_confidence_corrections
+from llm_analysis import PROMPT_VERSION, analyze_transcript, apply_high_confidence_corrections
 from make_subtitle import TimingSegment, make_cues_from_segmented_timings, write_ass, write_srt
 from render_video import burn_subtitles
 from safe_json import write_json_file
 from style_presets import get_style_preset
-from subtitle_layout import flatten_segment_tokens, tokens_from_text, wrap_title_text
+from subtitle_layout import build_layout_capacity, flatten_segment_tokens, segment_tokens, tokens_from_text, wrap_title_text
 from text_utils import read_text, strip_keyword_marks
 from transcript_alignment import align_transcript_tokens
 from volc_asr import convert_utterances, extract_wav, query_until_done, submit_audio
@@ -42,7 +41,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--noise", default="-30dB", help="silence threshold, e.g. -30dB")
     parser.add_argument("--min-silence", type=float, default=0.45, help="minimum silence duration in seconds")
     parser.add_argument("--padding", type=float, default=0.12, help="seconds kept around cut points")
-    parser.add_argument("--subtitle-delay", type=float, default=0.0, help="delay subtitles by N seconds")
+    parser.add_argument(
+        "--subtitle-delay",
+        type=float,
+        default=-0.12,
+        help="subtitle time offset in seconds; negative values show captions earlier",
+    )
     parser.add_argument("--style-preset", default=None, help="subtitle/title style preset id")
     parser.add_argument("--style-presets-file", default=None, help="style preset JSON path")
     parser.add_argument("--subtitle-source", choices=["volcengine"], default="volcengine", help="subtitle text source")
@@ -54,7 +58,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--llm-enabled", action="store_true", help="analyze transcript with an OpenAI-compatible model")
     parser.add_argument("--llm-base-url", default=None, help="OpenAI-compatible API base URL")
     parser.add_argument("--llm-model", default=None, help="OpenAI-compatible model name")
-    parser.add_argument("--llm-timeout", type=float, default=60.0, help="LLM request timeout")
+    parser.add_argument("--llm-timeout", type=float, default=120.0, help="LLM request timeout")
+    parser.add_argument("--output-profile", choices=("platform", "master", "legacy"), default="platform")
     parser.add_argument("--auto-edit-mode", choices=["conservative", "standard", "aggressive"], default="standard", help="automatic AI editing strength")
     parser.add_argument("--export-subtitles", action="store_true", help="keep subtitle.ass and subtitle.srt in output")
     parser.add_argument("--export-asr-json", action="store_true", help="keep Volcengine segment JSON in output")
@@ -106,6 +111,7 @@ def main() -> int:
             persistent_cut = artifact_dir / "cut_no_subtitles.mp4" if artifact_dir else None
             working_video = persistent_cut if persistent_cut and _valid_video_artifact(persistent_cut) else temporary_cut
             original_duration = media_duration(video)
+            source_width, source_height = video_size(video)
             asr_checkpoint = _load_checkpoint(checkpoint_dir, "asr")
             if asr_checkpoint:
                 raw_segments = _timing_segments_from_data(asr_checkpoint.get("segments"))
@@ -137,8 +143,22 @@ def main() -> int:
             _stage_checkpoint(args, "alignment")
 
             analysis = _load_checkpoint(checkpoint_dir, "analysis")
+            analysis_stale = bool(
+                args.llm_enabled
+                and analysis
+                and analysis.get("prompt_version") != PROMPT_VERSION
+            )
+            if analysis_stale:
+                analysis = {}
+                _invalidate_analysis_dependents(checkpoint_dir, artifact_dir)
             if not analysis:
-                analysis = _run_transcript_analysis(aligned_segments, args)
+                analysis = _run_transcript_analysis(
+                    aligned_segments,
+                    args,
+                    subtitle_style,
+                    source_width,
+                    source_height,
+                )
                 _save_checkpoint(checkpoint_dir, "analysis", analysis)
             analysis["transcript_alignment_status"] = transcript_alignment.get("status")
             _stage_checkpoint(args, "analysis")
@@ -248,6 +268,8 @@ def main() -> int:
                     {"segments": _timing_segments_data(external_segments), "layout_decision": analysis.get("layout_decision", {})},
                 )
             _stage_checkpoint(args, "subtitle_layout")
+            quality_gate = _build_automatic_quality_gate(analysis, external_segments)
+            analysis["quality_gate"] = quality_gate
             if args.editor_work_dir:
                 editor_work_dir = Path(args.editor_work_dir)
                 editor_work_dir.mkdir(parents=True, exist_ok=True)
@@ -264,7 +286,22 @@ def main() -> int:
                 (editor_work_dir / "ai_decisions.json").write_text(
                     json.dumps(
                         {
-                            "version": 1,
+                            "version": 2,
+                            "correction": analysis.get("corrections", []),
+                            "deletion_candidates": analysis.get("deletion_candidates", analysis.get("delete_ranges", [])),
+                            "verified_deletions": analysis.get("applied_delete_ranges", []),
+                            "semantic_spans": {
+                                "sentences": analysis.get("final_sentences", []),
+                                "protected": analysis.get("forbidden_breaks", []),
+                            },
+                            "layout": analysis.get("layout_decision", {}),
+                            "validation": analysis.get("validation", {}),
+                            "fallbacks": [
+                                chunk
+                                for chunk in analysis.get("layout_decision", {}).get("chunks", [])
+                                if chunk.get("status") not in {"ai", "validated_local"}
+                            ],
+                            "quality_gate": quality_gate,
                             "transcript_analysis": analysis.get("decision_traces", []),
                             "subtitle_layout": analysis.get("layout_decision", {}),
                             "content_title_analysis": content_title_analysis.get("decision_traces", []),
@@ -319,6 +356,8 @@ def main() -> int:
                     ),
                     encoding="utf-8",
                 )
+            if args.llm_enabled and not quality_gate["passed"]:
+                raise RuntimeError("自动质量门未通过：" + "；".join(quality_gate["blocking_reasons"][:6]))
             if args.export_asr_json:
                 _write_timing_segments(external_segments, output_dir / "volcengine_segments.json")
             cues = make_cues_from_segmented_timings(external_segments, subtitle_duration, delay=args.subtitle_delay)
@@ -349,7 +388,12 @@ def main() -> int:
             final_video = output_dir / f"{output_basename}.mp4"
             if not _valid_video_artifact(final_video):
                 temporary_final = Path(tmp) / "final.mp4"
-                burn_subtitles(working_video, subtitle_ass, temporary_final)
+                burn_subtitles(
+                    working_video,
+                    subtitle_ass,
+                    temporary_final,
+                    profile=args.output_profile,
+                )
                 _replace_artifact(temporary_final, final_video)
             final_duration = media_duration(final_video)
             _stage_checkpoint(args, "video_rendered")
@@ -409,6 +453,7 @@ def main() -> int:
                 "llm_enabled": bool(args.llm_enabled),
                 "llm_status": analysis.get("status"),
                 "auto_edit_mode": args.auto_edit_mode,
+                "output_profile": args.output_profile,
             },
             "disfluency": {
                 "repeat_candidates": disfluency_findings,
@@ -480,6 +525,31 @@ def _load_checkpoint(checkpoint_dir: Path | None, name: str) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
+def _invalidate_analysis_dependents(checkpoint_dir: Path | None, artifact_dir: Path | None) -> None:
+    if checkpoint_dir:
+        for name in (
+            "edit_plan",
+            "titles",
+            "subtitle_layout",
+            "stage_analysis",
+            "stage_edit_plan",
+            "stage_video_cut",
+            "stage_title_layout",
+            "stage_subtitle_layout",
+            "stage_subtitle_ready",
+            "stage_video_rendered",
+            "stage_cover_rendered",
+            "stage_completed",
+            "state",
+        ):
+            path = _checkpoint_path(checkpoint_dir, name)
+            if path:
+                path.unlink(missing_ok=True)
+    if artifact_dir:
+        for name in ("cut_no_subtitles.mp4", "subtitle.ass"):
+            (artifact_dir / name).unlink(missing_ok=True)
+
+
 def _require_file(path: Path, label: str) -> None:
     if not path.exists():
         raise FileNotFoundError(f"Missing {label}: {path}")
@@ -513,13 +583,13 @@ def _resolve_optional_text(value: str | None) -> str:
 
 
 def _analyze_title(title: str, args: argparse.Namespace, prefix: str) -> dict:
-    lines = [line.strip() for line in title.replace("\r", "").split("\n") if line.strip()]
-    tokens = [
-        token
-        for line_index, line in enumerate(lines or [title], start=1)
-        for token in tokens_from_text(line, 0.0, 1.0, prefix=f"{prefix}-{line_index}")
-    ]
-    return _run_transcript_analysis([TimingSegment(0.0, 1.0, title, tuple(tokens))], args)
+    return {
+        "status": "local",
+        "reason": "titles_use_local_wrap",
+        "prompt_version": PROMPT_VERSION,
+        "final_sentences": [],
+        "decision_traces": [],
+    }
 
 
 def _segment_dict(segment: Segment) -> dict[str, float]:
@@ -647,7 +717,7 @@ def _ai_removal_segments(
     token_index = {str(token.get("id")): index for index, token in enumerate(tokens)}
     policies = {
         "conservative": ({"stutter", "false_start", "exact_repeat"}, 0.9),
-        "standard": ({"stutter", "false_start", "exact_repeat", "semantic_repeat", "filler"}, 0.82),
+        "standard": ({"stutter", "false_start", "exact_repeat", "semantic_repeat", "filler", "redundant"}, 0.82),
         "aggressive": ({"stutter", "false_start", "exact_repeat", "semantic_repeat", "filler", "redundant"}, 0.72),
     }
     allowed_types, threshold = policies.get(mode, policies["standard"])
@@ -655,9 +725,9 @@ def _ai_removal_segments(
         "stutter": threshold,
         "false_start": max(threshold, 0.86),
         "exact_repeat": max(threshold, 0.88),
-        "semantic_repeat": 0.94 if mode == "standard" else threshold,
+        "semantic_repeat": 0.96 if mode == "standard" else threshold,
         "filler": max(threshold, 0.9),
-        "redundant": max(threshold, 0.9),
+        "redundant": 0.95 if mode == "standard" else max(threshold, 0.9),
     }
     protected_ids = _protected_delete_token_ids(tokens, analysis)
     removed_ids: set[str] = set()
@@ -668,6 +738,13 @@ def _ai_removal_segments(
         kind = str(operation.get("type") or "redundant")
         confidence = float(operation.get("confidence", 0))
         ids = [str(item) for item in operation.get("token_ids", []) if str(item) in token_index]
+        independent_review = operation.get("independent_review") or {}
+        if str(analysis.get("pipeline_version") or "").startswith("multistage-v") and not (
+            independent_review.get("approved") is True
+            and float(independent_review.get("confidence", 0)) >= 0.90
+        ):
+            skipped.append({**operation, "skip_reason": "independent_review_failed"})
+            continue
         if kind not in allowed_types or confidence < type_thresholds.get(kind, threshold) or not ids:
             skipped.append({**operation, "skip_reason": "policy_or_confidence"})
             continue
@@ -702,6 +779,16 @@ def _ai_removal_segments(
                 "start": round(start, 3),
                 "end": round(end, 3),
                 "validation": evidence["reason"],
+                "verification": {
+                    "status": "verified",
+                    "method": (
+                        "single_holistic_model_plus_deterministic_evidence"
+                        if str(analysis.get("pipeline_version") or "").startswith("holistic-")
+                        else "independent_model_review_plus_deterministic_evidence"
+                    ),
+                    "candidate_confidence": confidence,
+                    "review_confidence": float(independent_review.get("confidence", confidence)),
+                },
             }
         )
     analysis["auto_edit_mode"] = mode
@@ -726,7 +813,9 @@ def _protected_delete_token_ids(tokens: list[dict], analysis: dict) -> set[str]:
 
 def _delete_evidence(kind: str, indices: list[int], tokens: list[dict], mode: str) -> dict[str, object]:
     deleted = "".join(str(tokens[index].get("text") or "") for index in indices).strip()
+    left_tokens = tokens[max(0, indices[0] - max(6, len(indices) + 2)) : indices[0]]
     right_tokens = tokens[indices[-1] + 1 : indices[-1] + 1 + max(6, len(indices) + 2)]
+    left = "".join(str(token.get("text") or "") for token in left_tokens).strip()
     right = "".join(str(token.get("text") or "") for token in right_tokens).strip()
     if not deleted or not right and kind not in {"filler", "redundant"}:
         return {"accepted": False, "reason": "missing_adjacent_evidence"}
@@ -734,19 +823,33 @@ def _delete_evidence(kind: str, indices: list[int], tokens: list[dict], mode: st
         repeated = right.startswith(deleted) or right.startswith(deleted[-1])
         return {"accepted": repeated, "reason": "adjacent_stutter_match" if repeated else "stutter_not_repeated"}
     if kind == "exact_repeat":
-        repeated = right.startswith(deleted)
-        return {"accepted": repeated, "reason": "adjacent_exact_repeat" if repeated else "exact_repeat_not_found"}
+        repeated_right = right.startswith(deleted)
+        repeated_left = left.endswith(deleted)
+        repeated = repeated_right or repeated_left
+        reason = "adjacent_exact_repeat_right" if repeated_right else "adjacent_exact_repeat_left"
+        return {"accepted": repeated, "reason": reason if repeated else "exact_repeat_not_found"}
     if kind == "false_start":
         shared = _common_prefix_length(deleted, right)
-        accepted = shared >= min(2, len(deleted))
-        return {"accepted": accepted, "reason": "adjacent_restart_match" if accepted else "restart_prefix_not_found"}
+        search_window = right[: max(8, len(deleted) + 4)]
+        repeated_nearby = len(deleted) >= 2 and deleted in search_window
+        accepted = shared >= min(2, len(deleted)) or repeated_nearby
+        reason = "nearby_restart_match" if repeated_nearby and not shared else "adjacent_restart_match"
+        return {"accepted": accepted, "reason": reason if accepted else "restart_prefix_not_found"}
     if kind == "filler":
         accepted = deleted in {"嗯", "啊", "呃", "额", "那个", "这个", "就是"}
         return {"accepted": accepted, "reason": "known_filler" if accepted else "unknown_filler"}
     if kind == "semantic_repeat":
         return {"accepted": mode in {"standard", "aggressive"}, "reason": "high_confidence_semantic_repeat"}
     if kind == "redundant":
-        return {"accepted": mode == "aggressive", "reason": "aggressive_redundancy" if mode == "aggressive" else "redundancy_requires_aggressive"}
+        if mode not in {"standard", "aggressive"}:
+            return {"accepted": False, "reason": "redundancy_requires_standard"}
+        if len(indices) > 24:
+            return {"accepted": False, "reason": "redundancy_range_too_large"}
+        condition_markers = ("如果", "假如", "要是", "只要", "倘若")
+        consequence_markers = ("那", "那么", "所以", "因此")
+        if right.startswith(consequence_markers) and any(marker in deleted for marker in condition_markers):
+            return {"accepted": False, "reason": "orphaned_consequence"}
+        return {"accepted": True, "reason": "validated_redundancy"}
     return {"accepted": False, "reason": "unsupported_delete_type"}
 
 
@@ -978,9 +1081,16 @@ def _transcribe_cut_video_with_volcengine(
     return segments, result
 
 
-def _run_transcript_analysis(segments: list[TimingSegment], args: argparse.Namespace) -> dict:
+def _run_transcript_analysis(
+    segments: list[TimingSegment],
+    args: argparse.Namespace,
+    style: dict,
+    width: int,
+    height: int,
+) -> dict:
     if not args.llm_enabled:
         return {"status": "skipped", "reason": "disabled", "corrections": [], "break_hints": [], "allowed_breaks": [], "forbidden_breaks": [], "protected_spans": [], "repeat_candidates": [], "delete_ranges": [], "final_sentences": []}
+    capacity = build_layout_capacity(style, width, height)
     return analyze_transcript(
         flatten_segment_tokens(segments),
         base_url=str(args.llm_base_url or os.environ.get("AI_CUTTING_LLM_BASE_URL") or ""),
@@ -988,6 +1098,10 @@ def _run_transcript_analysis(segments: list[TimingSegment], args: argparse.Names
         api_key=str(os.environ.get("AI_CUTTING_LLM_API_KEY") or ""),
         timeout=float(args.llm_timeout),
         cache_dir=LLM_CACHE_DIR,
+        layout=capacity,
+        style=style,
+        width=width,
+        height=height,
     )
 
 
@@ -1001,19 +1115,19 @@ def _intelligent_segments(
 ) -> list[TimingSegment]:
     tokens = flatten_segment_tokens(segments)
     apply_high_confidence_corrections(tokens, analysis)
-    groups, layout_audit = layout_tokens_with_ai(
-        tokens,
-        style,
-        width,
-        height,
-        analysis,
-        base_url=str(args.llm_base_url or os.environ.get("AI_CUTTING_LLM_BASE_URL") or ""),
-        model=str(args.llm_model or os.environ.get("AI_CUTTING_LLM_MODEL") or ""),
-        api_key=str(os.environ.get("AI_CUTTING_LLM_API_KEY") or ""),
-        timeout=float(args.llm_timeout),
-        cache_dir=LLM_CACHE_DIR,
-    )
-    analysis["layout_decision"] = layout_audit
+    token_by_id = {str(token.get("id") or ""): token for token in tokens}
+    groups: list[list[dict]] = []
+    for caption in analysis.get("captions", analysis.get("final_sentences", [])):
+        group = [token_by_id[str(token_id)] for token_id in caption.get("token_ids", []) if str(token_id) in token_by_id]
+        if any(str(token.get("text") or "") for token in group):
+            groups.append(group)
+    if not groups:
+        groups = segment_tokens(tokens, style, width, height)
+        analysis["layout_decision"] = {
+            "status": "fallback",
+            "reason": "legacy_analysis_without_captions",
+            "chunks": [{"status": "fallback", "reason": "legacy_analysis_without_captions"}],
+        }
     result: list[TimingSegment] = []
     for group in groups:
         visible = [token for token in group if str(token.get("text") or "")]
@@ -1030,6 +1144,91 @@ def _intelligent_segments(
     return result or segments
 
 
+def _build_automatic_quality_gate(
+    analysis: dict[str, Any], segments: list[TimingSegment]
+) -> dict[str, Any]:
+    reasons: list[str] = []
+    warnings: list[str] = []
+    validation = analysis.get("validation") or {}
+    if analysis.get("status") != "ok":
+        root_reason = str(analysis.get("reason") or "未知错误")
+        return {
+            "version": 1,
+            "passed": False,
+            "status": "blocked",
+            "blocking_reasons": [f"语义分析失败：{root_reason}"],
+            "warnings": [],
+            "metrics": {
+                "corrections": 0,
+                "deletion_candidates": 0,
+                "verified_deletions": 0,
+                "layout_fallbacks": 0,
+                "api_calls": int(analysis.get("api_calls", 0)),
+                "caption_coverage": 0.0,
+                "pixel_overflows": 0,
+                "layout_capacity": analysis.get("layout_capacity", {}),
+            },
+        }
+    if validation and not validation.get("valid", False):
+        reasons.extend(str(item) for item in validation.get("errors", [])[:4])
+    if str(analysis.get("pipeline_version") or "").startswith("holistic-"):
+        if float(validation.get("caption_coverage", 0)) != 1.0:
+            reasons.append("字幕没有完整覆盖全文 token")
+        if int(validation.get("pixel_overflows", 0)):
+            reasons.append(f"存在 {int(validation.get('pixel_overflows', 0))} 条像素超宽字幕")
+    layout = analysis.get("layout_decision") or {}
+    fallback_chunks = [
+        chunk for chunk in layout.get("chunks", [])
+        if chunk.get("status") not in {"ai", "validated_local"}
+    ]
+    if layout.get("status") not in {"ai", "validated_local"} or fallback_chunks:
+        reasons.append(f"存在 {len(fallback_chunks)} 个未验证的字幕布局回退")
+    unverified = [
+        item
+        for item in analysis.get("applied_delete_ranges", [])
+        if item.get("verification", {}).get("status") != "verified"
+    ]
+    if unverified:
+        reasons.append(f"存在 {len(unverified)} 个未经双重验证的删除")
+    if str(analysis.get("pipeline_version") or "").startswith("holistic-") and analysis.get("skipped_delete_ranges"):
+        skipped_count = len(analysis.get("skipped_delete_ranges", []))
+        if validation.get("caption_coverage_basis") == "all_source_tokens_before_verified_deletion":
+            warnings.append(f"有 {skipped_count} 个 AI 删除建议未通过本地安全门，已自动保留原文")
+        else:
+            reasons.append(f"存在 {skipped_count} 个未通过本地安全门的 AI 删除，字幕覆盖无法确认")
+    for index, segment in enumerate(segments[1:], start=2):
+        text = str(segment.text or "").strip()
+        previous_text = str(segments[index - 2].text or "").strip()
+        bad_continuation = (
+            text.startswith("的")
+            or (text.startswith("了") and not text.startswith("了解"))
+            or (text.startswith("系") and previous_text.endswith("体"))
+            or (text.startswith("品") and previous_text.endswith("产"))
+            or (text.startswith("角") and previous_text.endswith(("上", "下")))
+        )
+        if len(text) <= 8 and bad_continuation:
+            reasons.append(f"第 {index} 条字幕以承接字“{text[:1]}”开头")
+    if not analysis.get("corrections"):
+        warnings.append("本次没有产生自动纠错，请确保 ASR 原文无需修正")
+    return {
+        "version": 1,
+        "passed": not reasons,
+        "status": "passed" if not reasons else "blocked",
+        "blocking_reasons": reasons,
+        "warnings": warnings,
+        "metrics": {
+            "corrections": len(analysis.get("corrections", [])),
+            "deletion_candidates": len(analysis.get("deletion_candidates", analysis.get("delete_ranges", []))),
+            "verified_deletions": len(analysis.get("applied_delete_ranges", [])),
+            "layout_fallbacks": len(fallback_chunks),
+            "api_calls": int(analysis.get("api_calls", 0)),
+            "caption_coverage": float(validation.get("caption_coverage", 0)),
+            "pixel_overflows": int(validation.get("pixel_overflows", 0)),
+            "layout_capacity": analysis.get("layout_capacity", {}),
+        },
+    }
+
+
 def _intelligent_title(
     title: str,
     style: dict,
@@ -1038,26 +1237,8 @@ def _intelligent_title(
     analysis: dict,
     args: argparse.Namespace,
 ) -> tuple[str, dict]:
-    lines: list[str] = []
-    audits: list[dict] = []
-    source_lines = [line.strip() for line in str(title or "").replace("\r", "").split("\n") if line.strip()]
-    for line_index, line in enumerate(source_lines or [str(title or "")], start=1):
-        tokens = tokens_from_text(line, 0.0, 1.0, prefix=f"title-{line_index}")
-        groups, audit = layout_tokens_with_ai(
-            tokens,
-            style,
-            width,
-            height,
-            analysis,
-            base_url=str(args.llm_base_url or os.environ.get("AI_CUTTING_LLM_BASE_URL") or ""),
-            model=str(args.llm_model or os.environ.get("AI_CUTTING_LLM_MODEL") or ""),
-            api_key=str(os.environ.get("AI_CUTTING_LLM_API_KEY") or ""),
-            timeout=float(args.llm_timeout),
-            cache_dir=LLM_CACHE_DIR,
-        )
-        lines.extend("".join(str(token.get("text") or "") for token in group) for group in groups)
-        audits.append(audit)
-    return "\n".join(lines).strip() or wrap_title_text(title, style, width, height, analysis), {"status": "ai", "chunks": audits}
+    wrapped = wrap_title_text(title, style, width, height, analysis)
+    return wrapped, {"status": "local", "source": "shared_title_wrap", "chunks": []}
 
 
 if __name__ == "__main__":

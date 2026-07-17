@@ -1,7 +1,7 @@
 {
   "volc_app_id": "",
   "volc_access_token": "",
-  "subtitle_delay": 0.0,
+  "subtitle_delay": -0.12,
   "detect_disfluency": false,
   "llm_enabled": false,
   "llm_base_url": "",

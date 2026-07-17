@@ -36,9 +36,9 @@
         <button id="render-btn" class="primary-action" type="button" {% if project.preview_source != "clean-no-subtitles" %}disabled title="当前任务没有无字幕精修源，请重新处理后再导出"{% endif %}>导出精修版</button>
       </div>
     </header>
-    <div id="shortcut-panel" class="shortcut-panel" hidden>
+    <dialog id="shortcut-panel" class="shortcut-panel" aria-labelledby="shortcut-panel-title">
       <div class="shortcut-panel-head">
-        <strong>快捷键</strong>
+        <strong id="shortcut-panel-title">快捷键</strong>
         <button id="shortcut-close-btn" class="tool-button" type="button">关闭</button>
       </div>
       <div class="shortcut-grid">
@@ -62,7 +62,7 @@
         <span>隐藏字幕</span><kbd>H</kbd>
         <span>插入空隙</span><kbd>G</kbd>
       </div>
-    </div>
+    </dialog>
 
     <main class="edit-workspace roadmap-editor">
       <aside id="sentence-panel" class="sentence-panel">
@@ -629,7 +629,8 @@
     }
 
     function setShortcutPanel(open) {
-      shortcutPanel.hidden = !open;
+      if (open && !shortcutPanel.open) shortcutPanel.showModal();
+      if (!open && shortcutPanel.open) shortcutPanel.close();
       shortcutHelpBtn.setAttribute("aria-expanded", open ? "true" : "false");
     }
 
@@ -3907,7 +3908,7 @@
     document.getElementById("reflow-btn").addEventListener("click", reflowTranscript);
     shortcutHelpBtn.addEventListener("click", (event) => {
       event.stopPropagation();
-      setShortcutPanel(shortcutPanel.hidden);
+      setShortcutPanel(!shortcutPanel.open);
     });
     shortcutCloseBtn.addEventListener("click", () => setShortcutPanel(false));
     document.getElementById("split-playhead-btn").addEventListener("click", splitAtPlayhead);
@@ -4055,7 +4056,7 @@
       hideContextMenu();
     });
     document.addEventListener("click", (event) => {
-      if (shortcutPanel.hidden) return;
+      if (!shortcutPanel.open) return;
       if (event.target.closest("#shortcut-panel") || event.target.closest("#shortcut-help-btn")) return;
       setShortcutPanel(false);
     });

@@ -62,6 +62,31 @@ def measure_text(text: str, context: LayoutContext) -> float:
     return width + spacing + context.outline * 2 + context.effect_extent + context.background_padding * 2
 
 
+def build_layout_capacity(style: dict[str, Any], width: int, height: int) -> dict[str, Any]:
+    """Return a conservative character-unit budget for semantic caption planning."""
+    context = build_layout_context(style, width, height)
+    fixed_effects = context.outline * 2 + context.effect_extent + context.background_padding * 2
+    glyph_samples = "国赢黑霸器警MMWW88AI"
+    glyph_width = max(
+        1.0,
+        max(measure_text(char, context) - fixed_effects for char in glyph_samples),
+    )
+    usable_comfort = max(glyph_width, context.comfort_width - fixed_effects)
+    usable_hard = max(glyph_width, context.hard_width - fixed_effects)
+    return {
+        "recommended_max_units": max(1, int(usable_comfort // glyph_width)),
+        "absolute_max_units": max(1, int(usable_hard // glyph_width)),
+        "hard_width_px": round(context.hard_width, 1),
+        "comfortable_width_px": round(context.comfort_width, 1),
+        "reference_unit_px": round(glyph_width, 2),
+        "width": int(width),
+        "height": int(height),
+        "font_family": str(style.get("font_family") or "Microsoft YaHei"),
+        "font_size": int(context.font_size),
+        "unit_rule": "中文=1，英文/数字按实际字体通常小于1；absolute_max_units为保险上限，最终仍以hard_width_px实测为准",
+    }
+
+
 def text_overflows(text: str, style: dict[str, Any], width: int, height: int) -> bool:
     context = build_layout_context(style, width, height)
     return measure_text(text, context) > context.hard_width
@@ -252,7 +277,10 @@ def analysis_break_sets(
     for sentence in analysis.get("final_sentences", []):
         ids = [str(item) for item in sentence.get("token_ids", []) if str(item) in token_ids]
         if _valid_semantic_span(ids, str(sentence.get("text") or ""), token_by_id, token_position):
-            required.add(ids[-1])
+            # Model-proposed sentence boundaries are strong hints, not immutable
+            # walls. The layout planner may merge across a poor first-pass
+            # boundary when the complete context yields a better subtitle.
+            preferred.add(ids[-1])
     for token in tokens:
         token_id = str(token.get("id") or "")
         if token.get("manual_break_after") or token.get("script_sentence_break_after"):

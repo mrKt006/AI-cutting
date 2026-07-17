@@ -17,7 +17,6 @@
       <nav class="nav-links" aria-label="主要导航">
         <a class="nav-link" href="/">任务</a>
         <a class="nav-link" href="/style-presets">样式预设</a>
-        <a class="nav-link" href="/evaluation">质量</a>
         <a class="nav-link" href="/settings">设置</a>
       </nav>
     </header>
@@ -48,6 +47,17 @@
 
       <div class="job-layout">
         <section class="surface task-surface">
+          <section class="job-progress" aria-labelledby="progress-title">
+            <div class="surface-head">
+              <div><h2 id="progress-title">{{ job.progress.stage_label }}</h2><small id="progress-detail">第 {{ job.progress.item_index }}/{{ job.progress.item_count }} 条 · 已用时 {{ job.progress.elapsed_seconds }} 秒{% if job.progress.eta_seconds %} · 预计剩余约 {{ job.progress.eta_seconds }} 秒{% endif %}</small></div>
+              <strong id="progress-percent">{{ job.progress.percent }}%</strong>
+            </div>
+            <progress id="job-progress-bar" max="100" value="{{ job.progress.percent }}">{{ job.progress.percent }}%</progress>
+            <ol id="job-progress-steps" class="progress-steps">
+              {% for step in job.progress.steps %}<li class="{{ 'is-done' if step.done else '' }}">{{ step.label }}</li>{% endfor %}
+            </ol>
+            {% if job.progress.pause_pending %}<p class="field-note">暂停请求已收到，将在当前阶段结束后安全暂停。</p>{% endif %}
+          </section>
           {% if job.error %}
           <div class="toast error"><strong>处理失败</strong><span>{{ display_error }}</span></div>
           <form method="post" action="/jobs/{{ job.id }}/retry" class="job-retry-form">
@@ -83,12 +93,19 @@
 
           <div class="surface-block">
             <div class="surface-head"><div><p class="section-kicker">输出</p><h2>输出文件</h2></div></div>
-            {% if files %}
-            <div class="downloads">
-              {% for file in files %}
+            {% if file_groups["batch"] or file_groups["items"] %}
+            {% if file_groups.batch %}<div class="downloads batch-downloads">{% for file in file_groups.batch %}
               <a href="/jobs/{{ job.id }}/download/{{ file.name }}" class="download-card">
                 <span><strong>{{ file.description }}</strong><small>{{ file.name }}</small></span><em>{{ file.size }}</em>
               </a>
+            {% endfor %}</div>{% endif %}
+            <div class="output-groups">
+              {% for group in file_groups["items"] %}
+              <section class="output-group">
+                <h3>视频 {{ group.id }}</h3>
+                <div class="downloads">{% for file in group.primary %}<a href="/jobs/{{ job.id }}/download/{{ file.name }}" class="download-card"><span><strong>{{ file.description }}</strong><small>{{ file.display_name }}</small></span><em>{{ file.size }}</em></a>{% endfor %}</div>
+                {% if group.technical %}<details><summary>字幕与技术文件（{{ group.technical|length }}）</summary><div class="downloads technical-downloads">{% for file in group.technical %}<a href="/jobs/{{ job.id }}/download/{{ file.name }}" class="download-card"><span><strong>{{ file.description }}</strong><small>{{ file.display_name }}</small></span><em>{{ file.size }}</em></a>{% endfor %}</div></details>{% endif %}
+              </section>
               {% endfor %}
             </div>
             {% else %}
@@ -118,6 +135,32 @@
         status.textContent = statusLabels[data.status] || data.status;
         status.className = `status ${data.status}`;
         document.getElementById("job-updated-at").textContent = data.updated_at || "";
+        const progress = data.progress || {};
+        const bar = document.getElementById("job-progress-bar");
+        if (bar) {
+          const nextPercent = Number(progress.percent || 0);
+          bar.value = nextPercent;
+          bar.setAttribute("value", String(nextPercent));
+          bar.textContent = `${nextPercent}%`;
+        }
+        const percent = document.getElementById("progress-percent");
+        if (percent) percent.textContent = `${Number(progress.percent || 0)}%`;
+        const progressTitle = document.getElementById("progress-title");
+        if (progressTitle) progressTitle.textContent = progress.stage_label || "准备处理";
+        const progressDetail = document.getElementById("progress-detail");
+        if (progressDetail) {
+          const eta = Number(progress.eta_seconds || 0);
+          progressDetail.textContent = `第 ${Number(progress.item_index || 0)}/${Number(progress.item_count || 0)} 条 · 已用时 ${Number(progress.elapsed_seconds || 0)} 秒${eta ? ` · 预计剩余约 ${eta} 秒` : ""}`;
+        }
+        const steps = document.getElementById("job-progress-steps");
+        if (steps && Array.isArray(progress.steps)) {
+          steps.replaceChildren(...progress.steps.map((step) => {
+            const item = document.createElement("li");
+            item.className = step.done ? "is-done" : "";
+            item.textContent = step.label || "";
+            return item;
+          }));
+        }
         (data.params?.items || []).forEach((item) => {
           const row = document.querySelector(`[data-job-item="${CSS.escape(item.id)}"]`);
           const badge = row?.querySelector("[data-item-status]");

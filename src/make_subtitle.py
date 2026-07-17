@@ -56,7 +56,6 @@ def make_cues_from_timings(script: str, timings: list[TimingSegment], duration: 
     if not chunks or not timings or duration <= 0:
         return make_cues(script, duration, delay=delay)
 
-    delay = max(0.0, delay)
     if len(chunks) > len(timings):
         return _make_cues_across_speech_window(chunks, timings, duration, delay)
 
